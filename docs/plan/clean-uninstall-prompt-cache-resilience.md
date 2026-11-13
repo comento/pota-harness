@@ -8,7 +8,7 @@
 
 ## Goal
 
-Pota이 소유한 설치 흔적을 안전하게 clean uninstall하고, 필수 정책 유실 없이 정적 prompt prefix와 지연 로딩 참조를 사용하며, 관련 회귀를 자동 검증합니다.
+Pota가 소유한 설치 흔적을 안전하게 clean uninstall하고, 필수 정책 유실 없이 정적 prompt prefix와 지연 로딩 참조를 사용하며, 관련 회귀를 자동 검증합니다.
 
 - Goal ID: `goal-clean-uninstall-prompt-cache-resilience`
 - Plan ID: `plan-clean-uninstall-prompt-cache-resilience`
@@ -97,7 +97,7 @@ Pota이 소유한 설치 흔적을 안전하게 clean uninstall하고, 필수 �
   - `verifyAndRecord`가 active 또는 completed task에만 tool-bound evidence를 기록하게 하되 task 상태/identity/fingerprint 검사를 유지합니다.
   - task transition graph는 `completed`에서 다시 열지 않습니다.
   - uninstall transaction의 `finishTransaction()` 성공 뒤 rollback catch 바깥에서 managed child scaffold를 bottom-up empty-only prune합니다. commit 뒤 cleanup 오류는 이미 삭제된 backup/journal로 rollback하지 않고 별도 실패로 전파합니다.
-  - nonce 소유 lock을 실제로 해제한 경우에만 `afterRelease`에서 `.pota`과 marketplace root를 empty-only prune합니다. nonce가 바뀌면 post-release prune을 금지합니다.
+  - nonce 소유 lock을 실제로 해제한 경우에만 `afterRelease`에서 `.pota`와 marketplace root를 empty-only prune합니다. nonce가 바뀌면 post-release prune을 금지합니다.
   - 다음 lifecycle이 pruning과 경합해 lock parent `ENOENT`를 만나면 parent를 재생성하고 재시도합니다.
   - rollback/operation 실패 시 post-commit prune하지 않고 unmanaged child는 모든 scaffold 단계에서 보존합니다.
 - Files: `scripts/pota-goal.mjs`, `scripts/pota-lifecycle.mjs`, `test/goal-state.test.mjs`, `test/lifecycle.test.mjs`, `test/lifecycle-transaction.test.mjs`, `commands/pota-uninstall.md`, `README*.md`.

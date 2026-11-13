@@ -8,7 +8,7 @@
 
 ## 목표
 
-Pota이 문제 없이 복귀·검증·완료되는 fail-closed 특성을 유지하면서, 에이전트가 매 턴 읽고 생성하고 반복하는 컨텍스트와 불필요한 검증을 줄이는 실행 방법론을 정의하고 하네스에 반영합니다.
+Pota가 문제 없이 복귀·검증·완료되는 fail-closed 특성을 유지하면서, 에이전트가 매 턴 읽고 생성하고 반복하는 컨텍스트와 불필요한 검증을 줄이는 실행 방법론을 정의하고 하네스에 반영합니다.
 
 - Goal ID: `goal-token-efficient-reliable-harness`
 - Plan ID: `plan-token-efficient-reliable-harness`

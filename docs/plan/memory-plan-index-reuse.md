@@ -8,7 +8,7 @@
 
 ## Goal
 
-Pota이 저장소 메모리와 완료 계획을 실제로 재활용하도록 만든다. 사용자가 지정한 4개 항목을 모두 수정한다.
+Pota가 저장소 메모리와 완료 계획을 실제로 재활용하도록 만든다. 사용자가 지정한 4개 항목을 모두 수정한다.
 
 1. `MEMORY.md`는 `docs/memory/*.md`의 위치를 알려주는 인덱스이고, 실제 지식은 `docs/memory`에 들어가며, Pota 실행 시 hook 프롬프트로 어떤 메모리가 있는지 에이전트에게 인지시킨다.
 2. `PLAN.md`도 같은 방식이다. 루트는 `docs/plan/*.md` 위치를 알려주는 짧은 인덱스이고, hook 프롬프트로 존재를 알린다.
@@ -179,7 +179,7 @@ Pota이 저장소 메모리와 완료 계획을 실제로 재활용하도록 만
 
 설계 task(`fable`, effort `high`, 읽기 전용) 결과다. 아래 내용이 위 Module Tasks의 write scope·의존·테스트 계약과 다르면 이 절이 우선한다.
 
-보고 모델 ID: `claude-fable-5-2`. 읽기 전용으로 수행했고 파일·git·`~/.pota`은 건드리지 않았다. 실행한 것은 `scripts/pota-state-context.mjs`의 순수 함수 호출과 문자열 길이·바이트 계산뿐이다.
+보고 모델 ID: `claude-fable-5-2`. 읽기 전용으로 수행했고 파일·git·`~/.pota`는 건드리지 않았다. 실행한 것은 `scripts/pota-state-context.mjs`의 순수 함수 호출과 문자열 길이·바이트 계산뿐이다.
 
 #### 0. 계획 전제를 바꾸는 사실 6가지
 
@@ -233,7 +233,7 @@ Pota이 저장소 메모리와 완료 계획을 실제로 재활용하도록 만
 
 1. 새 항목 줄 삽입.
 2. memory에서 노트의 `Summary:`와 인덱스 문구가 다를 때 그 한 줄을 정규 형식으로 교체.
-3. Pota이 만든 placeholder 줄을 정확히 일치할 때만 제거. 대상은 `- Link detailed notes under \`docs/memory/\`.`, `- Link detailed plans under \`docs/plan/\`.`, `- Move completed topics here with evidence links.`와 그 ko 판 3개(`pota-state-init.mjs:11,33,55,59,89,93`).
+3. Pota가 만든 placeholder 줄을 정확히 일치할 때만 제거. 대상은 `- Link detailed notes under \`docs/memory/\`.`, `- Link detailed plans under \`docs/plan/\`.`, `- Move completed topics here with evidence links.`와 그 ko 판 3개(`pota-state-init.mjs:11,33,55,59,89,93`).
 4. `--archive`를 준 경우에만 줄·섹션을 `docs/plan/ARCHIVE.md`로 원문 이동.
 
 죽은 링크는 지우지 않고 오류로 보고한다. EOL은 기존 파일의 것을 따르고, 쓰기는 `safeWriteFile` 임시 파일 + `rename`으로 한다.
@@ -759,7 +759,7 @@ task 간 겹침은 없다. `scripts/pota.mjs`는 `index-core` → `audit-residua
 
 수용 기준: `memory check --strict`와 `plan check --strict`가 exit 0이다.
 
-표면 확인: `POTA_HOME=<scratchpad 임시 경로> node scripts/pota-state.mjs session-start`에 `{"cwd":"<repo>","session_id":"dogfood"}`를 stdin으로 준다. 설치본 0.5.0 hook은 새 블록을 내지 않으므로 반드시 source checkout 스크립트로 확인해야 하고, 임시 `POTA_HOME`을 쓰면 실제 `~/.pota`을 건드리지 않는다.
+표면 확인: `POTA_HOME=<scratchpad 임시 경로> node scripts/pota-state.mjs session-start`에 `{"cwd":"<repo>","session_id":"dogfood"}`를 stdin으로 준다. 설치본 0.5.0 hook은 새 블록을 내지 않으므로 반드시 source checkout 스크립트로 확인해야 하고, 임시 `POTA_HOME`을 쓰면 실제 `~/.pota`를 건드리지 않는다.
 
 #### 3. `dogfood` 노트 제안(6개)
 
@@ -848,7 +848,7 @@ task 간 겹침은 없다. `scripts/pota.mjs`는 `index-core` → `audit-residua
   - M2: `plan index --archive`가 loose list 항목의 첫 줄만 옮긴다.
   - M3: 저장소 텍스트의 제어문자·줄 구분자가 SessionStart 캡슐에 그대로 들어간다(프롬프트 주입 표면).
   - L1: `ARCHIVE.md`의 임의 상대 링크가 plan 항목으로 인식된다. L2: `## Legacy Planning Rules` 아래 제목 중복. L5: 노트 사실 오류 2건.
-  - 수정하지 않고 잔여 위험으로 남기는 것: L3(이력 재기록이 `schemaVersion` 1이 아닌 줄을 버린다. 현재 버전은 1뿐이라 영향 없음), L4(`cleanup --yes`의 재판정과 삭제 사이 경쟁 창. 현재 Pota은 `<repo>/.pota/state.lock`을 쓰지 않아 예전 버전과 동시에 돌 때만 해당).
+  - 수정하지 않고 잔여 위험으로 남기는 것: L3(이력 재기록이 `schemaVersion` 1이 아닌 줄을 버린다. 현재 버전은 1뿐이라 영향 없음), L4(`cleanup --yes`의 재판정과 삭제 사이 경쟁 창. 현재 Pota는 `<repo>/.pota/state.lock`을 쓰지 않아 예전 버전과 동시에 돌 때만 해당).
   - 리뷰가 문제 없다고 확인한 것: 노트·계획 없는 저장소의 hook 출력이 HEAD와 동일(120건), 무작위 20000건에서 예산 초과 없음, foreign 캡슐에 plan 이름 없음, `PLAN.md` 재구성에서 누락·중복 없음, 테스트 약화 없음.
 - `review-fixes`: Requested/Effective model `opus (claude-opus-5-5)`, effort `high`(host option).
   - Tests: `node --test test/index.test.mjs test/index-context.test.mjs test/repo-index.test.mjs test/token-efficiency.test.mjs test/lifecycle.test.mjs test/installed-plugin.test.mjs` 통과(exit 0). worker의 전체 `node --test`는 302개 통과.

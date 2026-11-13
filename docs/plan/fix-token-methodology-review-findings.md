@@ -122,7 +122,7 @@
 - `GOAL_STATE_VERSION`을 2로 올리고 v1을 읽을 때 기존 evidence record를 `declared`, goal policy를 `tool-bound`로 호환 마이그레이션합니다. 완료된 과거 goal은 읽을 수 있고, 미완료 goal은 필요한 검증을 실제 도구로 다시 통과해야 합니다.
 - 새 `goal verify` 명령은 `--` 뒤 argv를 shell 없이 실행합니다. 성공하면 exact argv, exit code 0, bounded summary/output digest, timestamp, watch paths와 workspace fingerprint를 한 번에 기록합니다. 실패하면 증거를 기록하지 않고 bounded failure output과 non-zero exit를 반환합니다.
 - 새 goal의 required evidence는 기본적으로 `tool-bound`입니다. 기존 `goal receipt` 명령과 `receipts` state field는 호환성을 위해 유지하되, declared evidence는 tool-bound goal의 완료 게이트를 통과하지 못합니다.
-- fingerprint는 `--watch`가 있으면 해당 경로, 없으면 git tracked/untracked workspace 전체를 대상으로 파일 path·content를 SHA-256으로 계산하며 `.git`과 `.pota`은 제외합니다. 완료 게이트에서 재계산 결과가 다르면 `stale evidence`로 거부합니다.
+- fingerprint는 `--watch`가 있으면 해당 경로, 없으면 git tracked/untracked workspace 전체를 대상으로 파일 path·content를 SHA-256으로 계산하며 `.git`과 `.pota`는 제외합니다. 완료 게이트에서 재계산 결과가 다르면 `stale evidence`로 거부합니다.
 - `goal status`는 `--quiet`가 붙어도 상태를 출력하고, 성공 mutation과 `goal verify --quiet`만 stdout을 억제합니다.
 
 ### CLI 파서 계약

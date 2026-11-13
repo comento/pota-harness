@@ -184,7 +184,7 @@ test("CLI messages and state initialization run without a POSIX shell", async ()
     const plan = await readFile(join(temp, "PLAN.md"), "utf8");
 
     const outputKo = await runState("manual", { root: tempKo, locale: "ko-KR" });
-    assert.equal(outputKo, "Pota이 MEMORY.md, PLAN.md, docs/memory, docs/plan을 초기화했습니다.");
+    assert.equal(outputKo, "Pota가 MEMORY.md, PLAN.md, docs/memory, docs/plan을 초기화했습니다.");
     const memoryKo = await readFile(join(tempKo, "MEMORY.md"), "utf8");
     const planKo = await readFile(join(tempKo, "PLAN.md"), "utf8");
     assert.match(memoryKo, /문서, 계획, 메모리 산출물/);
@@ -739,7 +739,7 @@ test("promptHosts asks in English and Korean and accepts numbers, comma lists, a
   const ko = await ask("2\n", true);
   assert.deepEqual(ko.hosts, ["claude"]);
   assert.ok(ko.written.startsWith([
-    "Pota을 설치할 호스트를 선택하세요.",
+    "Pota를 설치할 호스트를 선택하세요.",
     "  1) 전체 — Codex, Claude Code, Antigravity (기본)",
     "  2) Claude Code만",
     "  3) Codex만",

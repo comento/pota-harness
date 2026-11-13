@@ -42,7 +42,7 @@ export function hostLabels(hosts) {
 
 function promptText(ko) {
   return ko ? [
-    "Pota을 설치할 호스트를 선택하세요.",
+    "Pota를 설치할 호스트를 선택하세요.",
     "  1) 전체 — Codex, Claude Code, Antigravity (기본)",
     "  2) Claude Code만",
     "  3) Codex만",
