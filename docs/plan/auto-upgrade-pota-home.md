@@ -8,7 +8,7 @@
 
 ## Goal
 
-npm으로 한 번 설치하면 이후 Claude Code·Codex 세션에서 Pota이 스스로 최신 버전으로 올라가고, `pota upgrade`가 호스트 캐시까지 빠짐없이 갱신하며, 최초 `pota install`에서 설치할 호스트를 고를 수 있다.
+npm으로 한 번 설치하면 이후 Claude Code·Codex 세션에서 Pota가 스스로 최신 버전으로 올라가고, `pota upgrade`가 호스트 캐시까지 빠짐없이 갱신하며, 최초 `pota install`에서 설치할 호스트를 고를 수 있다.
 
 - Goal ID: `goal-08e920e6-a4e2-42f4-8668-718751c2081f`
 - Plan ID: `docs/plan/auto-upgrade-pota-home.md`
@@ -20,7 +20,7 @@ npm으로 한 번 설치하면 이후 Claude Code·Codex 세션에서 Pota이 �
 ## Whole Work
 
 - Outcome (사용자 결정, 2026-11-12):
-  1. 설치 루트를 `~/.pota`으로 옮긴다. 기존 `$CODEX_HOME/plugins/cache/pota` 설치는 upgrade가 이전한다.
+  1. 설치 루트를 `~/.pota`로 옮긴다. 기존 `$CODEX_HOME/plugins/cache/pota` 설치는 upgrade가 이전한다.
   2. `pota upgrade`가 Claude Code 플러그인 캐시까지 갱신한다.
   3. 자동 업그레이드는 기본 켜짐이고 major·minor 구분 없이 자동 적용한다. 끄는 설정을 둔다.
   4. 열린 세션의 hook이 깨지지 않도록 이전 versioned runtime을 유예한다.
@@ -38,7 +38,7 @@ npm으로 한 번 설치하면 이후 Claude Code·Codex 세션에서 Pota이 �
 - upgrade는 manifest 버전이 다르면 `previous-codex-runtime`을 cleanup 단계에서 제거한다. 이전 runtime이 즉시 사라진다. `scripts/pota-lifecycle-commands.mjs:44-53`.
 - Claude 등록 `register()`는 이미 설치된 경우 아무것도 하지 않는다. Claude는 `~/.claude/plugins/cache/pota/pota/<version>/` 사본을 로드하므로 upgrade 뒤에도 이전 hook 경로를 쓴다. `ownsMarketplace`는 등록된 디렉터리 경로가 `marketplaceRoot`와 같을 때만 소유로 본다. 루트를 옮기면 기존 등록은 "foreign"으로 판정된다. `scripts/pota-lifecycle-claude.mjs:101-128`.
 - `claude plugin update <plugin>`이 CLI에 있다(`restart required to apply`).
-- Codex `config.toml`의 `[marketplaces.pota]`은 `source_type = "local"`, `source = <marketplaceRoot>`다. 루트를 옮기면 projection 경로가 바뀐다. `scripts/pota-lifecycle-config.mjs`, `updateConfig`의 `marketplacePath`.
+- Codex `config.toml`의 `[marketplaces.pota]`는 `source_type = "local"`, `source = <marketplaceRoot>`다. 루트를 옮기면 projection 경로가 바뀐다. `scripts/pota-lifecycle-config.mjs`, `updateConfig`의 `marketplacePath`.
 - 필수 소유 대상은 호스트 구분 없이 고정 목록이다(`requiredOwnershipTargets`). 호스트를 빼려면 목록이 선택에 따라 달라져야 한다. `scripts/pota-lifecycle-integrity.mjs:115-124`.
 - lifecycle 명령은 인자를 받지 않는다(`install --help`도 exit 1). 호스트 선택 옵션은 이 규약을 바꾼다. `scripts/pota-lifecycle.mjs:91-96`.
 - 설치 cache의 CLI로는 install·upgrade를 거부한다. 자동 업그레이드는 패키지 소스에서 실행해야 한다. `scripts/pota-lifecycle-commands.mjs:31-34`.
@@ -204,8 +204,8 @@ npm으로 한 번 설치하면 이후 Claude Code·Codex 세션에서 Pota이 �
 
 ### 0. 계획 전제에서 달라지는 점 (먼저 읽을 것)
 
-1. **Codex versioned runtime은 `~/.pota`으로 옮길 수 없다.** `$CODEX_HOME/plugins/cache/pota/pota/<version>`은 Pota의 임의 경로가 아니라 Codex 자신의 플러그인 캐시 경로다. 이 디렉터리가 없으면 Codex가 `pota@pota`을 설치된 것으로 보지 않는다. 근거: `docs/plan/harness-reliability-remediation.md:59`(A/B smoke 결정), `test/lifecycle-transaction.test.mjs:689-704` "Codex A/B gate proves the versioned custom cache is required". 따라서 "설치 루트 이전"은 **Pota 소유 상태(manifest·journal·lock), canonical runtime, Codex marketplace source, Claude marketplace**를 옮기는 것이고, Codex 캐시는 Claude 캐시(`~/.claude/plugins/cache/pota/pota/<version>`)와 같은 "호스트 캐시"로 `CODEX_HOME`에 남는다.
-2. **`~/.pota`은 이미 쓰이고 있다.** `potaHome()`이 `POTA_HOME ?? ~/.pota`을 돌려주고 goal 상태가 `projects/` 아래에 있다(`scripts/pota-paths.mjs:9-24`). 실제 머신의 `~/.pota`에도 `projects`만 있다. 새 env를 만들지 않고 `POTA_HOME`을 재사용한다.
+1. **Codex versioned runtime은 `~/.pota`로 옮길 수 없다.** `$CODEX_HOME/plugins/cache/pota/pota/<version>`은 Pota의 임의 경로가 아니라 Codex 자신의 플러그인 캐시 경로다. 이 디렉터리가 없으면 Codex가 `pota@pota`를 설치된 것으로 보지 않는다. 근거: `docs/plan/harness-reliability-remediation.md:59`(A/B smoke 결정), `test/lifecycle-transaction.test.mjs:689-704` "Codex A/B gate proves the versioned custom cache is required". 따라서 "설치 루트 이전"은 **Pota 소유 상태(manifest·journal·lock), canonical runtime, Codex marketplace source, Claude marketplace**를 옮기는 것이고, Codex 캐시는 Claude 캐시(`~/.claude/plugins/cache/pota/pota/<version>`)와 같은 "호스트 캐시"로 `CODEX_HOME`에 남는다.
+2. **`~/.pota`는 이미 쓰이고 있다.** `potaHome()`이 `POTA_HOME ?? ~/.pota`를 돌려주고 goal 상태가 `projects/` 아래에 있다(`scripts/pota-paths.mjs:9-24`). 실제 머신의 `~/.pota`에도 `projects`만 있다. 새 env를 만들지 않고 `POTA_HOME`을 재사용한다.
 3. **manifest schema는 한 번만 올린다(1 → 2).** `hosts`, `origin`, `retained` 필드를 `pota-home-root`에서 한꺼번에 정의하고, 뒤 task가 동작을 채운다.
 4. **task 경계 제안**: `pota-home-root`를 `pota-home-layout`(새 레이아웃·schema 2·신규 설치)과 `pota-home-migration`(legacy 이전·재등록)으로 나눈다. 이유와 대안은 4절.
 
@@ -238,7 +238,7 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex 호스트 캐시 (codex �
 ```
 
 - override: `POTA_HOME` 하나. `CODEX_HOME`·`CLAUDE_HOME`·`ANTIGRAVITY_HOME`·`ANTIGRAVITY_CLI_HOME`·`CODEX_CONFIG_PATH`는 그대로이고 `POTA_HOME`과 독립이다.
-- 심볼릭 링크 검사: `assertLifecycleMutationPaths`의 기준 루트를 `[potaHomeRoot, <install 하위 경로>]`로 바꾸고, Codex 캐시는 `[codexHome, codexCacheRoot]`로 유지한다. `doctor`의 lock 경로 검사(`scripts/pota-lifecycle.mjs:79`)도 `potaHomeRoot` 기준으로 바꾼다. goal 상태가 이미 symlink된 `~/.pota`을 거부하므로(`scripts/pota-goal-state.mjs:120-137`, `scripts/pota-safe-fs.mjs:26-45`) 정책이 일치한다.
+- 심볼릭 링크 검사: `assertLifecycleMutationPaths`의 기준 루트를 `[potaHomeRoot, <install 하위 경로>]`로 바꾸고, Codex 캐시는 `[codexHome, codexCacheRoot]`로 유지한다. `doctor`의 lock 경로 검사(`scripts/pota-lifecycle.mjs:79`)도 `potaHomeRoot` 기준으로 바꾼다. goal 상태가 이미 symlink된 `~/.pota`를 거부하므로(`scripts/pota-goal-state.mjs:120-137`, `scripts/pota-safe-fs.mjs:26-45`) 정책이 일치한다.
 - "설치 cache에서 실행 거부"(`scripts/pota-lifecycle-commands.mjs:32-34`)는 "`pluginRoot`가 `installRoot` 안이거나 `$CODEX_HOME/plugins/cache/pota` 안"으로 일반화한다. `update/stage/`는 `install/` 밖이라 자동 업그레이드의 패키지 소스로 쓸 수 있다.
 - 경로 상수는 새 모듈 `scripts/pota-lifecycle-layout.mjs`의 `createLayout({ env, releaseVersion })`가 `current`와 `legacy`(0.6.0 상수 그대로) 두 벌을 돌려준다. 지금은 `scripts/pota-lifecycle.mjs:30-56`에 한 벌만 있다.
 
@@ -254,7 +254,7 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex 호스트 캐시 (codex �
 확정안:
 
 - **두 스택**: `createIntegrity`·`createTransactionManager`·`createCommands`는 모두 context 주입형이다(`scripts/pota-lifecycle.mjs:57-70`). `layout.legacy`로 legacy 스택을 하나 더 만든다. legacy 스택은 0.6.0과 동일하게 동작한다.
-- **lock**: 새 lock(`install/lifecycle.lock`)을 항상 먼저 잡고, legacy 디렉터리 `$CODEX_HOME/plugins/cache/pota/.pota`이 있으면 legacy lock을 이어서 잡는다(순서 고정: new → legacy). 0.6.0 이하 프로세스는 legacy lock만 잡으므로 동시 실행이 직렬화된다. lock 구현은 경로만 받는다(`scripts/pota-lifecycle-lock.mjs:8`).
+- **lock**: 새 lock(`install/lifecycle.lock`)을 항상 먼저 잡고, legacy 디렉터리 `$CODEX_HOME/plugins/cache/pota/.pota`가 있으면 legacy lock을 이어서 잡는다(순서 고정: new → legacy). 0.6.0 이하 프로세스는 legacy lock만 잡으므로 동시 실행이 직렬화된다. lock 구현은 경로만 받는다(`scripts/pota-lifecycle-lock.mjs:8`).
 - **순서(install/upgrade, 두 lock 안)**:
   1. legacy journal이 있으면 legacy 스택으로 복구 → 새 journal 복구(`recoverInterruptedTransaction`).
   2. manifest 읽기: 새 경로 우선, 없으면 legacy 경로. 둘 다 있으면 `Both legacy and current ownership manifests exist`로 거부.
@@ -269,7 +269,7 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex 호스트 캐시 (codex �
 - **doctor**: current 스택만 본다. legacy manifest만 있으면 `FAIL ownership manifest`와 함께 `Legacy installation found at <path>; run pota upgrade to migrate` 한 줄을 낸다.
 - **이전 upgrade에서는 runtime 유예를 하지 않는다**: legacy runtime은 Codex 캐시 경로에 있어 남기면 Codex 캐시에 두 버전이 생긴다(결정 5 G2). 0.6.0에는 자동 업그레이드가 없으므로 이 upgrade는 사용자가 직접 실행하는 1회이고, 열린 세션 재시작이 필요한 것은 지금까지의 모든 upgrade와 같다.
 
-근거: 위 파일·줄. EXDEV는 지금도 거부한다(`scripts/pota-lifecycle-transaction-targets.mjs:71-87`). `CODEX_HOME`이 `~/.pota`과 다른 볼륨이면 이전이 `Cross-device replacement is not supported safely`로 깨끗이 rollback된다(지금 `CLAUDE_HOME`이 다른 볼륨일 때와 같은 한계).
+근거: 위 파일·줄. EXDEV는 지금도 거부한다(`scripts/pota-lifecycle-transaction-targets.mjs:71-87`). `CODEX_HOME`이 `~/.pota`와 다른 볼륨이면 이전이 `Cross-device replacement is not supported safely`로 깨끗이 rollback된다(지금 `CLAUDE_HOME`이 다른 볼륨일 때와 같은 한계).
 
 거부한 대안: 옛 트리를 복사한 뒤 별도 단계에서 삭제(두 설치가 공존하는 창이 생기고 journal 하나로 되돌릴 수 없다). legacy uninstall을 "upgrade 먼저" 안내로 거부(문서화된 uninstall 경로가 두 단계가 된다).
 
@@ -281,7 +281,7 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex 호스트 캐시 (codex �
   1. `ownedLegacy`면 `plugin uninstall pota@pota --scope user`(설치돼 있을 때) → `plugin marketplace remove pota`.
   2. 미등록이면 `plugin marketplace add <install/claude> --scope user` → `plugin install pota@pota --scope user`. install이 새 버전을 Claude 캐시에 복사하므로 캐시도 함께 갱신된다.
   3. 실패하면 파일은 그대로 두고 수동 명령을 출력하고 exit 1(지금의 `reportClaudeRegistration` 철학, `scripts/pota-lifecycle-commands.mjs:90-105`).
-- **Codex**: `updateConfig`의 `marketplacePath` 기본값을 `install/codex`로 바꾼다(`scripts/pota-lifecycle.mjs:161`, `scripts/pota-lifecycle-config.mjs:9`). `[plugins."pota@pota"]`과 hook trust 항목은 그대로다.
+- **Codex**: `updateConfig`의 `marketplacePath` 기본값을 `install/codex`로 바꾼다(`scripts/pota-lifecycle.mjs:161`, `scripts/pota-lifecycle-config.mjs:9`). `[plugins."pota@pota"]`와 hook trust 항목은 그대로다.
 - **hook trust hash 영향 없음**: `hookHash`는 `hooks/hooks.json`의 literal command(`node "${PLUGIN_ROOT}/scripts/pota-state.mjs" …`)·timeout·statusMessage·matcher만 해시한다(`scripts/pota-lifecycle-config.mjs:118-138`). 설치 경로가 들어가지 않고 key(`pota@pota:hooks/hooks.json:<event>:<g>:<h>`)도 같다. `hooks/hooks.json`은 이번 작업에서 수정하지 않는다.
 - config는 mutable merge surface라 projection digest가 바뀌어도 거부 대상이 아니다(`docs/plan/upgrade-shared-config-ownership.md:67-68`).
 
@@ -299,7 +299,7 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex 호스트 캐시 (codex �
 4. `claude` CLI가 없으면 지금처럼 안내만 하고 exit 0. 단 `upgrade --auto`(결정 7)에서는 Claude가 선택된 호스트인데 캐시 갱신을 확인하지 못하면 exit 1로 한다(자동 업그레이드 runner가 "수동 조치 필요"를 판정하는 유일한 신호).
 5. `doctor`에 `Claude plugin cache version` 검사를 추가한다.
 
-근거: `scripts/pota-lifecycle-claude.mjs:119-129`(등록돼 있으면 no-op). 실제 등록 형태: `known_marketplaces.json`의 pota은 `source: directory`이고 `installLocation`이 같은 디렉터리(사본 없음), `installed_plugins.json`은 `installPath: ~/.claude/plugins/cache/pota/pota/0.6.0`, `version: "0.6.0"`. marketplace의 `lastUpdated`(11-05)보다 플러그인 `lastUpdated`(11-11)가 뒤라 `plugin update`만으로도 갱신된 것으로 보이지만, `marketplace update`는 무해하므로 먼저 호출한다. help 확인: `claude plugin marketplace update [name] [--json]`, `claude plugin update <plugin> [-s scope] [--json]`.
+근거: `scripts/pota-lifecycle-claude.mjs:119-129`(등록돼 있으면 no-op). 실제 등록 형태: `known_marketplaces.json`의 pota는 `source: directory`이고 `installLocation`이 같은 디렉터리(사본 없음), `installed_plugins.json`은 `installPath: ~/.claude/plugins/cache/pota/pota/0.6.0`, `version: "0.6.0"`. marketplace의 `lastUpdated`(11-05)보다 플러그인 `lastUpdated`(11-11)가 뒤라 `plugin update`만으로도 갱신된 것으로 보이지만, `marketplace update`는 무해하므로 먼저 호출한다. help 확인: `claude plugin marketplace update [name] [--json]`, `claude plugin update <plugin> [-s scope] [--json]`.
 
 가정 A3: `claude plugin list --json` 항목에 `version`이 있다(on-disk 형식과 기존 대역 근거). 없으면(`undefined`) 갱신을 항상 호출하고 버전 검증은 건너뛴다. 가정 A4: 최신 상태에서 `plugin update`의 exit code를 모른다 → 버전이 다를 때만 호출해 의존하지 않는다. `-y`는 넘기지 않는다(marketplace-declared command 자동 수락을 피한다).
 
@@ -342,7 +342,7 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex 호스트 캐시 (codex �
 - **prompt 문구**(ko / en, `localeFamily()` `scripts/pota-lifecycle.mjs:170`):
 
 ```
-Pota을 설치할 호스트를 선택하세요.
+Pota를 설치할 호스트를 선택하세요.
   1) 전체 — Codex, Claude Code, Antigravity (기본)
   2) Claude Code만
   3) Codex만
@@ -491,7 +491,7 @@ schema 2 (`<potaHome>/install/lifecycle.json`):
 - 대역 확장(`fake-claude.mjs`): `plugin install`·`plugin update`가 실제처럼 `<CLAUDE_CONFIG_DIR>/plugins/cache/<marketplace>/<plugin>/<version>`에 사본을 만들고 `version`·`installPath`를 기록한다. `plugin update <id>`(미설치면 실패, 같은 버전이면 exit 0), `plugin marketplace update [name]` 추가. 실패 주입 env `FAKE_CLAUDE_FAIL="<명령 접두>"`, `FAKE_CLAUDE_UPDATE_NOOP=1`(exit 0인데 버전이 그대로). 0.6.0 lifecycle이 쓰는 명령과는 호환을 유지한다(Task 3b가 published 0.6.0 트리를 이 대역으로 돌린다).
 - 계약 변경 기록: 기존 테스트의 `state.plugins[0].installPath === join(pluginMarketplace, "pota")` 단언을 캐시 경로로 바꾼다. 사유: 실제 Claude는 캐시 사본에 설치한다(`installed_plugins.json` 실측). 대역의 충실도를 올리는 변경이고 제품 계약을 약화하지 않는다.
 - 먼저 쓸 실패 테스트:
-  1. `upgrade refreshes a stale Claude Code plugin cache to the installed version` — 설치 뒤 대역 state의 플러그인 `version`을 `0.5.0`으로 바꾸고 upgrade. exit 0, 로그에 `plugin marketplace update pota`과 `plugin update pota@pota --scope user`가 순서대로, state `version`이 현재 버전.
+  1. `upgrade refreshes a stale Claude Code plugin cache to the installed version` — 설치 뒤 대역 state의 플러그인 `version`을 `0.5.0`으로 바꾸고 upgrade. exit 0, 로그에 `plugin marketplace update pota`와 `plugin update pota@pota --scope user`가 순서대로, state `version`이 현재 버전.
   2. `upgrade does not call claude plugin update when the cache already matches` — 같은 버전 재실행 로그에 `plugin update`·`marketplace update`·`marketplace add`·`plugin install`이 추가되지 않는다.
   3. `a failed Claude cache refresh keeps the upgrade committed, exits 1, and prints the manual command` — `FAKE_CLAUDE_FAIL="plugin update"`. exit 1, stdout에 `Claude Code plugin cache refresh failed:`와 `claude plugin marketplace update pota && claude plugin update pota@pota --scope user`, manifest·runtime은 새 상태 그대로.
   4. `a refresh that leaves the old cached version is reported as failed` — `FAKE_CLAUDE_UPDATE_NOOP=1`. exit 1, `still at 0.5.0`.
@@ -616,9 +616,9 @@ schema 2 (`<potaHome>/install/lifecycle.json`):
 
 #### Task 7 `docs-memory`
 
-- 파일: `README.md`와 `README.{ko,ja,zh,es,fr,de,pt}.md`, `docs/memory/lifecycle-install.md`, `docs/memory/hook-context.md`, `docs/memory/release-process.md`(로컬 업그레이드 절차 한 줄), `MEMORY.md`. **write scope 추가 필요**: `commands/pota-{install,upgrade,doctor,uninstall}.md`와 `.agents/workflows/pota-{install,upgrade,doctor,uninstall}.md`. `commands/pota-uninstall.md:16`이 `~/.codex/plugins/cache/pota`을, `commands/pota-install.md:15-22`가 옛 구조를 적고 있다(`docs/memory/policy-surfaces.md` 표면 지도).
+- 파일: `README.md`와 `README.{ko,ja,zh,es,fr,de,pt}.md`, `docs/memory/lifecycle-install.md`, `docs/memory/hook-context.md`, `docs/memory/release-process.md`(로컬 업그레이드 절차 한 줄), `MEMORY.md`. **write scope 추가 필요**: `commands/pota-{install,upgrade,doctor,uninstall}.md`와 `.agents/workflows/pota-{install,upgrade,doctor,uninstall}.md`. `commands/pota-uninstall.md:16`이 `~/.codex/plugins/cache/pota`를, `commands/pota-install.md:15-22`가 옛 구조를 적고 있다(`docs/memory/policy-surfaces.md` 표면 지도).
 - 내용: 새 레이아웃과 `POTA_HOME`, 이전(1회, 열린 세션 재시작), 호스트 선택과 `--hosts`, 유예 규칙, 자동 업그레이드(주기·끄는 법·알림·`pota auto-upgrade`), Claude 캐시 갱신과 수동 명령, runner ↔ lifecycle 버전 간 계약, CLI exit 규약 표(lifecycle 인자, `auto-upgrade`), 알림 예산, G1·G2 결과.
-- 검사 대상 문장: README 8개가 `--hosts`, `auto-upgrade`, `POTA_AUTO_UPGRADE`, `~/.pota`을 담는지 `test/docs-package-hardening.test.mjs`에 케이스를 추가한다(기존 README 필수 문구 검사 패턴 `:89-115`).
+- 검사 대상 문장: README 8개가 `--hosts`, `auto-upgrade`, `POTA_AUTO_UPGRADE`, `~/.pota`를 담는지 `test/docs-package-hardening.test.mjs`에 케이스를 추가한다(기존 README 필수 문구 검사 패턴 `:89-115`).
 - 수용 기준: `node scripts/pota.mjs memory check --root .` 오류 없음, `Summary:`를 바꿨다면 `pota memory index` 실행.
 - focused: `node scripts/pota.mjs memory check --root .` / surface: `node --test test/contract-parity.test.mjs test/docs-package-hardening.test.mjs test/token-efficiency.test.mjs`
 
@@ -658,7 +658,7 @@ schema 2 (`<potaHome>/install/lifecycle.json`):
 - **PATH**: GUI에서 뜬 호스트의 hook 환경에 `claude`·`npm`이 없을 수 있다. `claude`가 없으면 `manual` 알림, `npm`이 없으면 조용한 backoff다.
 - **수동 다운그레이드**: 자동으로 0.9.0이 된 뒤 오래된 전역 `pota`(0.7.0)으로 `pota upgrade`를 치면 0.7.0으로 내려가고 다음 날 다시 올라간다. 막으려면 lifecycle이 `ownership.version > releaseVersion`일 때 `--allow-downgrade` 없이는 거부하면 된다(질문 2).
 - **유예 runtime과 goal 상태 schema**: 옛 runtime의 hook이 새 버전이 쓴 `~/.pota/projects` 상태를 읽는다. 지금까지는 옛 세션이 통째로 깨져서 드러나지 않던 조합이다. goal 상태 schema를 바꾸는 릴리스는 이 점을 검토해야 한다.
-- **교차 볼륨**: `CODEX_HOME`이 `~/.pota`과 다른 파일시스템이면 설치·이전이 EXDEV로 거부된다.
+- **교차 볼륨**: `CODEX_HOME`이 `~/.pota`와 다른 파일시스템이면 설치·이전이 EXDEV로 거부된다.
 - **공급망**: 9절 참조. 자동 적용의 내재 위험이다.
 - **의존성 0 전제**: `@comento/pota-harness`에 의존성이 생기면 결정 9의 6번 검사와 fake npm을 함께 고쳐야 한다.
 
@@ -668,7 +668,7 @@ schema 2 (`<potaHome>/install/lifecycle.json`):
 
 1. **게시 후 대기 시간**: 새 버전이 npm에 올라오면 다음 확인 때 바로 적용한다(설계 기본값). 잘못 게시된 버전은 되돌릴 수 없으므로(`docs/memory/release-process.md` Policy) "게시 후 24시간이 지난 버전만 자동 적용"을 둘 수 있다. 두려면 `npm view @comento/pota-harness time --json` 조회 한 번이 추가된다.
 2. **수동 다운그레이드 방지**: 설치본보다 낮은 버전의 CLI로 `install`·`upgrade`를 실행하면 거부하고 `--allow-downgrade`를 요구할지. 설계 기본값은 지금 동작 유지(내려감)이고, 5절에 위험으로 적었다.
-3. **`~/.pota/install/` 하위 디렉터리**: lifecycle 관리 파일을 `~/.pota` 바로 아래가 아니라 `~/.pota/install/`에 둔다(goal 상태 `projects/`·설정·업데이트 상태와 분리). "`~/.pota`으로 옮긴다"는 결정을 이렇게 해석해도 되는지.
+3. **`~/.pota/install/` 하위 디렉터리**: lifecycle 관리 파일을 `~/.pota` 바로 아래가 아니라 `~/.pota/install/`에 둔다(goal 상태 `projects/`·설정·업데이트 상태와 분리). "`~/.pota`로 옮긴다"는 결정을 이렇게 해석해도 되는지.
 
 ---
 

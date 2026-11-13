@@ -7,7 +7,7 @@
 
 ## Goal
 
-공용 `~/.codex/config.toml`에서 Pota이 소유하지 않은 설정 앞의 공백·주석을 Pota section에 잘못 귀속해 `pota upgrade`가 `Managed artifact was modified`로 중단되지 않도록 section ownership 경계를 수정하고 0.2.5 hotfix를 준비합니다.
+공용 `~/.codex/config.toml`에서 Pota가 소유하지 않은 설정 앞의 공백·주석을 Pota section에 잘못 귀속해 `pota upgrade`가 `Managed artifact was modified`로 중단되지 않도록 section ownership 경계를 수정하고 0.2.5 hotfix를 준비합니다.
 
 - Plan ID: `docs/plan/upgrade-shared-config-ownership.md`
 - Completion criteria: 격리 재현, Pota-owned section만 검증·교체, 외부 설정 보존, rollback 회귀 통과, 전체 package 검증, 독립 리뷰.

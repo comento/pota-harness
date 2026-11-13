@@ -1,6 +1,6 @@
-# Pota
+# Pota Harness
 
-Pota est un plugin de harness multi-agent économe en tokens pour Codex, Claude Code et Antigravity.
+Pota Harness est un plugin de harness multi-agent économe en tokens pour Codex, Claude Code et Antigravity.
 
 [English](README.md)
 

@@ -1,6 +1,6 @@
-# Pota
+# Pota Harness
 
-Pota は Codex、Claude Code、Antigravity のためのトークン効率の高いマルチエージェント harness plugin です。
+Pota Harness は Codex、Claude Code、Antigravity のためのトークン効率の高いマルチエージェント harness plugin です。
 
 [English](README.md)
 

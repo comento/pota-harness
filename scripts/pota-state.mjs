@@ -44,7 +44,7 @@ export async function runStateResult(event = "manual", {
     return {
       status: 0,
       message: ko
-        ? "Pota이 MEMORY.md, PLAN.md, docs/memory, docs/plan을 초기화했습니다."
+        ? "Pota가 MEMORY.md, PLAN.md, docs/memory, docs/plan을 초기화했습니다."
         : "Pota initialized MEMORY.md, PLAN.md, docs/memory, and docs/plan.",
     };
   }
