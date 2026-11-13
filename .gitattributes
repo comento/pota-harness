@@ -1,0 +1,2 @@
+# Keep LF in every checkout: byte budgets and template equality tests compare file bytes.
+* text=auto eol=lf

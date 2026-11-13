@@ -1,0 +1,33 @@
+{
+  "name": "pota",
+  "version": "1.0.0",
+  "description": "Token-efficient agent harness with tool readiness for Codex, Claude Code, and Antigravity.",
+  "author": {
+    "name": "WkNam"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Pota Harness",
+    "shortDescription": "Memory, planning, tool readiness, and two-gate verification harness for agent teams.",
+    "longDescription": "Pota Harness brings a memory, planning, and verification flow to Codex, Claude Code, and Antigravity while reducing token use through repository-local MEMORY.md, PLAN.md, domain notes, tool readiness checks, module-task execution, and two-gate verification.",
+    "developerName": "WkNam",
+    "category": "Productivity",
+    "capabilities": [
+      "Hooks",
+      "Skills",
+      "Agent Workflow",
+      "Context Management",
+      "Planning",
+      "Tool Readiness"
+    ],
+    "defaultPrompt": [
+      "Use Pota's repository-local PLAN.md and persisted goal state as the recovery spine; read root MEMORY.md first when it exists (it indexes docs/memory notes; PLAN.md indexes docs/plan plans — open only the entries the task needs), and continue without repository memory when it does not.",
+      "For non-trivial work, load the phase skill (pota-plan, pota-work, or pota-review), then restore the active plan and current-task references before acting.",
+      "After compaction, restart, handoff, or delegation, restore optional MEMORY.md → phase skill → active plan → current task references; do not rely on conversation recall.",
+      "A missing MEMORY.md never blocks work; fail closed only when active state, its skill, plan, or a required task reference is missing, unreadable, or inconsistent.",
+      "Missing, failed, skipped, stale, or placeholder evidence never completes work; advance UI state only after bound repository evidence passes.",
+      "Before external-state changes, run dry-run/check and bind the resulting evidence to the current task.",
+      "Answer side questions briefly, then resume the current task unless asked to pause, stop, or switch."
+    ]
+  }
+}

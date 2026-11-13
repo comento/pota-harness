@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node-version: [18, current]
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Version lineage: uses: actions/checkout@v4; execution is pinned below.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - run: npm run check
+        env:
+          npm_config_cache: ${{ runner.temp }}/npm-cache
+      - run: node scripts/pota.mjs
+        env:
+          npm_config_cache: ${{ runner.temp }}/npm-cache
+      - run: node scripts/pota.mjs toolcheck --json
+        env:
+          npm_config_cache: ${{ runner.temp }}/npm-cache
+      # prepack is npm run check (content-neutral) and already ran above.
+      - run: npm pack --dry-run --ignore-scripts
+        env:
+          npm_config_cache: ${{ runner.temp }}/npm-cache
+  # Branch protection requires a single "check" context; matrix jobs report "check (<os>, <node>)".
+  # This summary job reports "check" and succeeds only when every matrix job succeeded.
+  check-summary:
+    name: check
+    if: always()
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: test "$MATRIX_RESULT" = "success"
+        env:
+          MATRIX_RESULT: ${{ needs.check.result }}

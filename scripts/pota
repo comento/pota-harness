@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+script_path="$0"
+link_target="$(readlink "$script_path" 2>/dev/null || true)"
+if [ -n "$link_target" ]; then
+  case "$link_target" in
+    /*) script_path="$link_target" ;;
+    *) script_path="$(dirname "$script_path")/$link_target" ;;
+  esac
+fi
+script_dir="$(cd "$(dirname "$script_path")" && pwd)"
+
+exec node "$script_dir/pota.mjs" "$@"

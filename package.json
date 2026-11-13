@@ -1,0 +1,49 @@
+{
+  "name": "@comento/pota-harness",
+  "version": "1.0.0",
+  "description": "Token-efficient agent harness with tool readiness for Codex, Claude Code, and Antigravity",
+  "license": "MIT",
+  "author": {
+    "name": "WkNam"
+  },
+  "homepage": "https://github.com/comento/pota-harness",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/comento/pota-harness.git"
+  },
+  "keywords": [
+    "codex",
+    "claude-code",
+    "antigravity",
+    "agent",
+    "harness",
+    "plugin",
+    "workflow"
+  ],
+  "bin": {
+    "pota": "scripts/pota.mjs"
+  },
+  "files": [
+    ".agents/",
+    ".claude/",
+    ".codex-plugin/",
+    "agents/",
+    "commands/",
+    "docs/model-guidance/",
+    "hooks/",
+    "scripts/pota",
+    "scripts/*.mjs",
+    "skills/",
+    "templates/",
+    "README.md",
+    "README.*.md"
+  ],
+  "scripts": {
+    "check": "node --check scripts/pota.mjs && node --check scripts/pota-paths.mjs && node --check scripts/pota-safe-fs.mjs && node --check scripts/pota-goal.mjs && node --check scripts/pota-state.mjs && node --check scripts/pota-cleanup.mjs && node --check scripts/pota-lifecycle.mjs && node --check scripts/pota-lifecycle-layout.mjs && node --check scripts/pota-lifecycle-hosts.mjs && node --check scripts/pota-update-state.mjs && node --check scripts/pota-auto-upgrade.mjs && node --check scripts/pota-toolcheck.mjs && node -e \"JSON.parse(require('node:fs').readFileSync('package.json','utf8')); JSON.parse(require('node:fs').readFileSync('.codex-plugin/plugin.json','utf8')); JSON.parse(require('node:fs').readFileSync('hooks/hooks.json','utf8'))\" && npm test",
+    "test": "node --test",
+    "prepack": "npm run check"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

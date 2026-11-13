@@ -1,0 +1,65 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/pota-state.mjs\" session-start",
+            "timeout": 10,
+            "statusMessage": "Pota: loading read-only repository context"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/pota-state.mjs\" user-prompt-submit",
+            "timeout": 10,
+            "statusMessage": "Pota: loading read-only work context"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(apply_patch|write|Write|edit|Edit|multi_edit|multiedit|MultiEdit)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/pota-state.mjs\" post-tool-use",
+            "timeout": 10,
+            "statusMessage": "Pota: reminding current goal evidence requirements"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/pota-state.mjs\" stop",
+            "timeout": 10,
+            "statusMessage": "Pota: checking the active goal task"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/pota-state.mjs\" subagent-stop",
+            "timeout": 10,
+            "statusMessage": "Pota: checking this subagent's assigned task"
+          }
+        ]
+      }
+    ]
+  }
+}
