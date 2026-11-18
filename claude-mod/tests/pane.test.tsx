@@ -36,19 +36,52 @@ const goal = (tasks: ReturnType<typeof task>[]) => JSON.stringify({
 });
 const PLAN = goal([task("a", [], "completed"), task("b", ["a"], "active"), task("c", ["b"], "pending")]);
 const REPLAN = goal([task("a", [], "completed"), task("b", ["a"], "active"), task("c", ["b"], "pending"), task("d", ["c"], "pending")]);
+/** Another goal of the same shape, as a second worktree holds it. */
+const retitle = (json: string, id: string, title: string): string => {
+  const value = JSON.parse(json) as { goal: { id: string; title: string } };
+  return JSON.stringify({ ...value, goal: { ...value.goal, id, title } });
+};
 
-/** The engine beneath the plugin: a runtime locator, `goal status` answering `status()`, panes kept in memory. */
-function engine(on: On, status: () => string) {
-  const world = { opens: 0, isOpen: false, runs: 0 };
+type EngineOptions = {
+  /** The session's project root, asked at each call. */
+  root?: () => string;
+  /** What `$.session.cwd()` answers; unanswered when absent. */
+  cwd?: () => string;
+  /** Whether a path exists; a `goal status` whose cwd does not exist fails. */
+  exists?: (path: string) => boolean;
+  /** What `goal stats --history` prints for a root. */
+  stats?: (root: string) => string;
+  /** Held before each `fs.exists` answer. */
+  wait?: () => Promise<void>;
+};
+
+/** The engine beneath the plugin: a runtime locator, `goal status` answering `status(root)`, panes kept in memory. */
+function engine(on: On, status: (root: string) => string, options: EngineOptions = {}) {
+  const world = { opens: 0, isOpen: false, runs: 0, calls: [] as { argv: readonly string[]; cwd: string | undefined }[] };
   const clock = mock.clock(on, { now: NOW });
+  const exists = options.exists ?? (() => true);
   mock.env(on, { LANG: "en_US.UTF-8" });
   on("fs.read", () => ({ value: JSON.stringify({ entrypoints: { cli: "/pota/scripts/pota.mjs" } }) }));
-  on("fs.exists", () => ({ value: true }));
-  on("session.root", () => ({ value: "/repo" }));
+  on("fs.exists", async (_, e) => {
+    await options.wait?.();
+    return { value: exists(e.path) };
+  });
+  on("session.root", () => ({ value: options.root?.() ?? "/repo" }));
+  if (options.cwd !== undefined) {
+    const cwd = options.cwd;
+    on("session.cwd", () => ({ value: cwd() }));
+  }
   on("agent.list", () => ({ value: [] }));
   on("process.run", (_, e) => {
     world.runs += 1;
-    const stdout = e.argv.includes("stats") ? '{"recent":[]}' : status();
+    const cwd = e.init?.cwd;
+    world.calls.push({ argv: e.argv, cwd });
+    const at = e.argv.indexOf("--root");
+    const root = (at >= 0 ? e.argv[at + 1] : undefined) ?? cwd ?? "/repo";
+    if (cwd !== undefined && !exists(cwd)) {
+      return { value: { exitCode: 1, stdout: "", stderr: `no such directory: ${cwd}`, isStdoutTruncated: false, isStderrTruncated: false } };
+    }
+    const stdout = e.argv.includes("stats") ? options.stats?.(root) ?? '{"recent":[]}' : status(root);
     return { value: { exitCode: 0, stdout, stderr: "", isStdoutTruncated: false, isStderrTruncated: false } };
   });
   on("command.register", () => ({ value: { command: "dag" } }));
@@ -79,7 +112,25 @@ async function runGoal($: Engine, clock: MockClock, sub: string) {
   await clock.settle();
 }
 
-test("the pane draws an Svg on desktop and text rows on the terminal", async ($, on) => {
+/** A Bash call as the main loop, or as subagent `agentId`, and the refresh it may ask for. */
+async function bash($: Engine, clock: MockClock, command: string, agentId?: string) {
+  await $.tool.call({ tool: "Bash", command, ...(agentId === undefined ? {} : { agentId }) });
+  await clock.settle();
+  await clock.advance(1_500);
+  await clock.settle();
+}
+
+/** One 30-second poll and the refresh it schedules. */
+async function poll(clock: MockClock) {
+  await clock.advance(30_000);
+  await clock.advance(1_500);
+  await clock.settle();
+}
+
+const statusRoots = (calls: { argv: readonly string[]; cwd: string | undefined }[]) =>
+  calls.filter(call => call.argv.includes("status")).map(call => call.argv[call.argv.indexOf("--root") + 1]);
+
+test("the pane draws an Svg on desktop and a box graph on the terminal", async ($, on) => {
   const { clock } = engine(on, () => PLAN);
   await $.session.start({ cwd: "/repo", surface: "desktop", isInteractive: true });
   await runGoal($, clock, "start");
@@ -94,9 +145,18 @@ test("the pane draws an Svg on desktop and text rows on the terminal", async ($,
 
   const terminal = await $.ui.mount({ ...PANE, surface: "terminal" });
   expect(await terminal.find({ type: "Svg" })).toBeUndefined();
-  expect(await terminal.find({ type: "Text", text: /^Wave 2 · 0\/1 done · 1 running/ })).toBeDefined();
-  expect(await terminal.find({ type: "Text", text: /● b/ })).toBeDefined();
+  await terminal.drawn();
+  for (const text of [/╭─+╮/, /Wave 2 · 0\/1 done · 1 running/, /^b +$/, /^│ Task b +│$/, /● running/]) {
+    expect(await terminal.find({ type: "Text", text })).toBeDefined();
+  }
   await terminal.unmount();
+
+  // Too narrow for a box: the text rows as before.
+  const narrow = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 20 }, surface: "terminal" });
+  // The list cuts its rows to the width, so only the header's start is left at 20 columns.
+  expect(await narrow.find({ type: "Text", text: /^Wave 2 · 0\/1 done/ })).toBeDefined();
+  expect(await narrow.find({ type: "Text", text: /● b/ })).toBeDefined();
+  await narrow.unmount();
 });
 
 test("goal start opens the pane once; the same plan again does not, a replan does", async ($, on) => {
@@ -159,4 +219,190 @@ test("observing hooks hand on what the engine answered", async ($, on) => {
   expect(ran.result).toEqual({ stdout: "ok" });
   const done = await $.turn.complete({ answer: "hi", durationMs: 1, isAborted: false, turnId: "t1", reason: "answer" });
   expect(done.text).toBe("engine: hi");
+});
+
+test("goal status is read with --root and that root as cwd", async ($, on) => {
+  const { world, clock } = engine(on, () => PLAN);
+  await $.session.start({ cwd: "/repo", surface: "desktop", isInteractive: true });
+  await runGoal($, clock, "start");
+  const status = world.calls.find(call => call.argv.includes("status"));
+  expect(status?.argv).toContain("--root");
+  expect(status?.argv[status.argv.indexOf("--root") + 1]).toBe("/repo");
+  expect(status?.cwd).toBe("/repo");
+});
+
+test("a session moved into a worktree reads that worktree's goal at the next poll (W1)", async ($, on) => {
+  let root = "/repo";
+  const { clock } = engine(on, at => at === "/repo" ? retitle(PLAN, "goal-main", "Main goal") : retitle(PLAN, "goal-wt", "Worktree goal"), { root: () => root });
+  await $.session.start({ cwd: "/repo", surface: "terminal", isInteractive: true });
+  await runGoal($, clock, "start");
+  const terminal = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await terminal.find({ type: "Text", text: "Main goal" })).toBeDefined();
+
+  root = "/repo/.claude/worktrees/x";
+  await poll(clock);
+  expect(await terminal.find({ type: "Text", text: "Worktree goal" })).toBeDefined();
+  expect(await terminal.find({ type: "Text", text: "Main goal" })).toBeUndefined();
+  expect(await terminal.find({ type: "Text", text: /ended/ })).toBeUndefined();
+  await terminal.unmount();
+});
+
+test("a main-loop goal command follows its directory's root and comes back without one (W2, W4, W7)", async ($, on) => {
+  const { world, clock } = engine(on, () => PLAN, { cwd: () => "/repo" });
+  await $.session.start({ cwd: "/repo", surface: "terminal", isInteractive: true });
+  await bash($, clock, "cd /wt/b && node /pota/scripts/pota.mjs goal start --plan p");
+  expect(statusRoots(world.calls).at(-1)).toBe("/wt/b");
+  expect(world.calls.at(-1)?.cwd).toBe("/wt/b");
+  expect(world.opens).toBe(1);
+  const terminal = await $.ui.mount({ ...PANE, surface: "terminal" });
+  // rootLabel keeps a path of two segments whole.
+  expect(await terminal.find({ type: "Text", text: /Reading another root: \/wt\/b$/ })).toBeDefined();
+
+  await bash($, clock, "node /pota/scripts/pota.mjs goal task --task b --status active");
+  expect(statusRoots(world.calls).at(-1)).toBe("/repo");
+  expect(await terminal.find({ type: "Text", text: /Reading another root/ })).toBeUndefined();
+  await terminal.unmount();
+});
+
+test("a relative --root resolves against the hook's cwd (W4)", async ($, on) => {
+  const { world, clock } = engine(on, () => PLAN, { cwd: () => "/repo/main" });
+  await $.session.start({ cwd: "/repo", surface: "desktop", isInteractive: true });
+  await bash($, clock, "node /pota/scripts/pota.mjs goal task --root ../other --task a --status completed");
+  expect(statusRoots(world.calls).at(-1)).toBe("/repo/other");
+});
+
+test("a subagent's goal command at another root neither moves nor opens the pane; at the shown root it opens (W5)", async ($, on) => {
+  let cwd = "/wt/agent";
+  const { world, clock } = engine(on, () => PLAN, { cwd: () => cwd });
+  await $.session.start({ cwd: "/repo", surface: "desktop", isInteractive: true });
+  await bash($, clock, "node /pota/scripts/pota.mjs goal start --plan p", "a1");
+  expect(world.opens).toBe(0);
+  expect(world.calls.some(call => call.cwd === "/wt/agent" || call.argv.includes("/wt/agent"))).toBe(false);
+
+  cwd = "/repo";
+  await bash($, clock, "node /pota/scripts/pota.mjs goal start --plan p", "a1");
+  expect(world.opens).toBe(1);
+});
+
+test("a followed worktree that was removed falls back to home (W3)", async ($, on) => {
+  let removed = false;
+  const { world, clock } = engine(on, () => PLAN, { cwd: () => "/repo", exists: path => !(removed && path.startsWith("/wt/b")) });
+  await $.session.start({ cwd: "/repo", surface: "terminal", isInteractive: true });
+  await bash($, clock, "cd /wt/b && node /pota/scripts/pota.mjs goal start --plan p");
+  expect(statusRoots(world.calls).at(-1)).toBe("/wt/b");
+
+  removed = true;
+  await $.command.run(dagCommand("refresh"));
+  await clock.advance(1_500);
+  await clock.settle();
+  expect(statusRoots(world.calls).at(-1)).toBe("/repo");
+  const terminal = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await terminal.find({ type: "Text", text: /Refresh failed/ })).toBeUndefined();
+  await terminal.unmount();
+});
+
+test("a new root without a goal shows no goal, not the old one ended (W6)", async ($, on) => {
+  let root = "/repo";
+  const { clock } = engine(on, at => at === "/repo" ? PLAN : "null", { root: () => root });
+  await $.session.start({ cwd: "/repo", surface: "terminal", isInteractive: true });
+  await runGoal($, clock, "start");
+
+  root = "/empty";
+  await poll(clock);
+  const terminal = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await terminal.find({ type: "Text", text: /No active Pota goal/ })).toBeDefined();
+  expect(await terminal.find({ type: "Text", text: /ended/ })).toBeUndefined();
+  await terminal.unmount();
+});
+
+test("an ended goal's pane still follows the session to a root with a live goal (W8)", async ($, on) => {
+  let root = "/repo";
+  let main = PLAN;
+  const { clock } = engine(on, at => at === "/repo" ? main : retitle(PLAN, "goal-next", "Next goal"), {
+    root: () => root,
+    stats: () => JSON.stringify({ recent: [{ goalId: "goal-test", status: "completed", endedAt: NOW }] }),
+  });
+  await $.session.start({ cwd: "/repo", surface: "terminal", isInteractive: true });
+  await runGoal($, clock, "start");
+  main = "null";
+  await $.command.run(dagCommand("refresh"));
+  await clock.advance(1_500);
+  await clock.settle();
+  const terminal = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await terminal.find({ type: "Text", text: /ended · completed/ })).toBeDefined();
+
+  root = "/repo2";
+  await poll(clock);
+  expect(await terminal.find({ type: "Text", text: "Next goal" })).toBeDefined();
+  expect(await terminal.find({ type: "Text", text: /ended/ })).toBeUndefined();
+  await terminal.unmount();
+});
+
+test("a goal command whose directory is unknown does not hold the pane where the session left (R1)", async ($, on) => {
+  let root = "/repo";
+  const { world, clock } = engine(on, () => PLAN, { root: () => root, cwd: () => "/repo" });
+  await $.session.start({ cwd: "/repo", surface: "terminal", isInteractive: true });
+  await bash($, clock, "cd /wt/b && node /pota/scripts/pota.mjs goal start --plan p");
+  expect(statusRoots(world.calls).at(-1)).toBe("/wt/b");
+
+  root = "/repo2";
+  await bash($, clock, 'cd "$WT" && node /pota/scripts/pota.mjs goal task --task b --status active');
+  expect(statusRoots(world.calls).at(-1)).toBe("/repo2");
+});
+
+test("a followed root's ended goal stays shown until home holds a live goal (R7)", async ($, on) => {
+  let atWt = PLAN;
+  let atHome = "null";
+  const { world, clock } = engine(on, at => at === "/wt/b" ? atWt : atHome, {
+    cwd: () => "/repo",
+    stats: () => JSON.stringify({ recent: [{ goalId: "goal-test", status: "completed", endedAt: NOW }] }),
+  });
+  const refresh = async () => {
+    await $.command.run(dagCommand("refresh"));
+    await clock.advance(1_500);
+    await clock.settle();
+  };
+  await $.session.start({ cwd: "/repo", surface: "terminal", isInteractive: true });
+  await bash($, clock, "cd /wt/b && node /pota/scripts/pota.mjs goal start --plan p");
+  atWt = "null";
+  await refresh();
+  const terminal = await $.ui.mount({ ...PANE, surface: "terminal" });
+  expect(await terminal.find({ type: "Text", text: /ended · completed/ })).toBeDefined();
+
+  await refresh();
+  expect(statusRoots(world.calls).slice(-2)).toEqual(["/repo", "/wt/b"]);
+  expect(await terminal.find({ type: "Text", text: /ended · completed/ })).toBeDefined();
+  expect(await terminal.find({ type: "Text", text: /Reading another root: \/wt\/b$/ })).toBeDefined();
+
+  atHome = retitle(PLAN, "goal-home", "Home goal");
+  await refresh();
+  expect(statusRoots(world.calls).at(-1)).toBe("/repo");
+  expect(await terminal.find({ type: "Text", text: "Home goal" })).toBeDefined();
+  expect(await terminal.find({ type: "Text", text: /ended/ })).toBeUndefined();
+  expect(await terminal.find({ type: "Text", text: /Reading another root/ })).toBeUndefined();
+  await terminal.unmount();
+});
+
+test("a goal command's answer is handed on unchanged, before its root is looked up (R8)", async ($, on) => {
+  let release = (): void => undefined;
+  const held = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const { world, clock } = engine(on, () => PLAN, { cwd: () => "/repo", wait: () => held });
+  await $.session.start({ cwd: "/repo", surface: "terminal", isInteractive: true });
+  let answered = false;
+  const call = $.tool.call({ tool: "Bash", command: "node /pota/scripts/pota.mjs goal task --task b --status active" }).then(ran => {
+    answered = true;
+    return ran;
+  });
+  await clock.settle();
+  expect(answered).toBe(true);
+  release();
+  const ran = await call;
+  expect(ran.result).toEqual({ stdout: "ok" });
+  expect(ran.text).toBe("ok");
+  await clock.settle();
+  await clock.advance(1_500);
+  await clock.settle();
+  expect(statusRoots(world.calls).at(-1)).toBe("/repo");
 });
