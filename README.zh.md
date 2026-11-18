@@ -31,7 +31,7 @@ pota toolcheck --root .
 pota toolcheck --install --yes --root .
 ```
 
-- `toolcheck` 报告 detected stacks 和 missing tools。
+- `toolcheck` 报告 detected stacks 和 missing tools。它会为每个 missing tool 输出建议的安装命令或无法自动安装的原因，agent 会询问一次是否安装；如果被拒绝或处于非交互运行，则记录为 blocker。
 - `toolcheck --install` 要求明确批准和 `--yes`；不受支持的 installer 不会执行，并返回 canonical `installer-unavailable`。
 - Pota plans 会记录 detected stack、required tools、install commands 和 blockers。
 - 缺少 LSP server 不能作为跳过 precise codebase exploration 的理由，除非已尝试 installation 或等价的 symbol-aware fallback。

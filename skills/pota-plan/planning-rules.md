@@ -62,9 +62,11 @@ Light Path flow: main-agent orchestration -> bounded `worker` implementation whe
 Do not silently skip LSP, typecheck, lint, dry-run, or verification because the tool is missing. Tool installation is a separate external-state change and requires explicit user approval.
 
 - Detect the codebase stack from repository files before choosing tools.
+- When `toolcheck` reports missing tools, the main agent asks the user once whether to install them, in one message that lists every missing tool with its proposed install command or the reason no automatic installer exists (the report's `install:`, `suggested command`, and `install unavailable:` lines; `installCommand`, `install.suggestedCommand`, and `install.unavailableReason` in `--json`). Use the host's question tool when it has one. A subagent never asks: it reports the missing tools to the orchestrator, which asks.
+- While the question is open, continue work that does not need the missing tools, do not start work that depends on them, and do not ask again about the same tools in this session. The question is once per session: a blocker an earlier session recorded (declined or not asked) does not suppress it, so a new session that still finds the tools missing asks once again.
 - Prefer repository-local installation through the existing package manager and lockfile; use ephemeral runners only when project-local installation is not appropriate.
 - After approval, use the runtime's `toolcheck --install --yes --root "<repoRoot>"` only for pinned/supported installers, or the approved repository-native command. Run the tool after installation and record the result.
-- If installation was not approved or is impossible, record the proposed or attempted command, failure summary, and blocker in `docs/plan/<topic>.md`.
+- If the user declines, installation is impossible, or the run cannot ask the user (non-interactive or headless execution, CI, a scheduled run), do not ask; record the proposed or attempted command, failure summary, and blocker in `docs/plan/<topic>.md`.
 - Treat "LSP server not installed" as an unresolved blocker until installation or an equivalent symbol-aware fallback has been attempted.
 
 ## Dry-Run Policy

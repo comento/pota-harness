@@ -65,7 +65,9 @@ The decision line is required; the note is optional. When nothing qualifies, do 
 ## Tool Readiness Policy
 
 - Run the tool readiness command recorded in the plan before implementation; if none is recorded, run the runtime's `toolcheck --root "<repoRoot>"`.
-- Missing LSP, typecheck, lint, dry-run, or verification tools must be reported with an install proposal. Installation requires explicit user approval and a pinned/supported installer (`toolcheck --install --yes`) or an approved repository-native command.
+- When LSP, typecheck, lint, dry-run, or verification tools are missing, the main agent asks the user once whether to install them, listing each missing tool with the proposed install command or the reason no automatic installer exists (both come from the `toolcheck` report). A subagent reports them to the orchestrator instead of asking. While the question is open, continue work that does not need those tools and do not ask again in this session. The question is once per session: a blocker an earlier session recorded (declined or not asked) does not suppress it, so a new session that still finds the tools missing asks once again.
+- Installation requires that explicit approval and a pinned/supported installer (`toolcheck --install --yes`) or the approved repository-native command.
+- If the user declines, or the run cannot ask the user (non-interactive or headless execution, CI, a scheduled run), do not ask; record the proposed command and the blocker in the plan.
 - After installation, rerun the exact tool command and record evidence. If installation fails, stop the task and record the blocker rather than silently falling back to less precise exploration.
 
 ## Dry-Run Policy
