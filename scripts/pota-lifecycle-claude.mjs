@@ -1,12 +1,16 @@
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { quoteShellArg, renderMirrorFile, writeLocator } from "./pota-lifecycle-mirror.mjs";
+
+// The DAG pane hooks module that the thin plugin's hooks/hooks.json lists under `modules`.
+export const CLAUDE_MOD_ENTRY = "register.tsx";
+export const CLAUDE_MOD_TYPES = "./types/index.d.ts";
 
 // Claude Code loads a plugin's default hooks/hooks.json and merges any manifest hooks, and it only expands
 // ${CLAUDE_PLUGIN_ROOT}. The shared package hooks use Codex's ${PLUGIN_ROOT}, so Claude gets a separate thin
 // plugin whose hooks call the installed canonical runtime by absolute path. Commands and agents stay in the
-// existing ~/.claude mirrors so they are not listed twice.
+// existing ~/.claude mirrors so they are not listed twice. The plugin also carries the claude-mod DAG pane.
 export async function stageClaudePlugin({
   stageRoot, runtimeStage, destinationRoot, runtimeRoot, marketplaceName, pluginName,
   releaseVersion, skillNames, platform = process.platform,
@@ -15,6 +19,9 @@ export async function stageClaudePlugin({
   const pluginDir = join(staged, pluginName);
   const packageJson = JSON.parse(await readFile(join(runtimeStage, "package.json"), "utf8"));
   const description = packageJson.description ?? "Pota agent harness";
+  // The mod's $.state refs name their owning plugin literally, so the mod only works under this plugin name.
+  const modManifest = JSON.parse(await readFile(join(runtimeStage, "claude-mod", ".claude-plugin", "plugin.json"), "utf8"));
+  if (modManifest.name !== pluginName) throw new Error("Claude mod manifest name must match the plugin name");
 
   await writeJson(join(staged, ".claude-plugin", "marketplace.json"), {
     name: marketplaceName,
@@ -29,8 +36,10 @@ export async function stageClaudePlugin({
     author: { name: packageJson.author?.name ?? "Pota" },
     ...(packageJson.homepage ? { homepage: packageJson.homepage } : {}),
     ...(packageJson.license ? { license: packageJson.license } : {}),
+    types: CLAUDE_MOD_TYPES,
   });
   await writeJson(join(pluginDir, "hooks", "hooks.json"), await claudeHooks(runtimeStage, runtimeRoot, platform));
+  await stageClaudeMod(runtimeStage, pluginDir, runtimeRoot);
 
   for (const name of skillNames) {
     const skillStage = join(pluginDir, "skills", name);
@@ -58,7 +67,21 @@ async function claudeHooks(runtimeStage, runtimeRoot, platform) {
       }),
     }));
   }
-  return { hooks };
+  const { modules } = JSON.parse(await readFile(join(runtimeStage, "claude-mod", "hooks", "hooks.json"), "utf8"));
+  return { hooks, modules };
+}
+
+// The mod's hooks folder minus its dev hooks.json (the plugin's hooks.json above lists the module), its state
+// contract, and a runtime locator the module reads to find the installed CLI.
+async function stageClaudeMod(runtimeStage, pluginDir, runtimeRoot) {
+  const modRoot = join(runtimeStage, "claude-mod");
+  // Copied entry by entry: the path form a `cp` filter receives differs on Windows Node 18.
+  for (const entry of (await readdir(join(modRoot, "hooks"))).sort()) {
+    if (entry !== "hooks.json") await cp(join(modRoot, "hooks", entry), join(pluginDir, "hooks", entry), { recursive: true });
+  }
+  await mkdir(join(pluginDir, "types"), { recursive: true });
+  await cp(join(modRoot, "types", "index.d.ts"), join(pluginDir, "types", "index.d.ts"));
+  await writeLocator(join(pluginDir, "pota-runtime.json"), runtimeRoot);
 }
 
 async function writeJson(path, value) {

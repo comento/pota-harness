@@ -146,6 +146,14 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   copie dans le Codex plugin cach
 - Désactiver : `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0` (ou `false`, `off`, `no`) ou `"autoUpgrade": false` dans `~/.pota/config.json`. Un `config.json` illisible le désactive aussi. L'état et le log de la dernière exécution se trouvent dans `~/.pota/update/`.
 - Vérification des commentaires : après une édition réussie (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` et outils d'édition), le hook PostToolUse exécute [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) sur le texte modifié et, s'il signale des commentaires inutiles, renvoie `decision: "block"` pour que l'agent les retire ou explique pourquoi ils sont nécessaires. Aucune dépendance npm n'est ajoutée : `pota install` et `pota upgrade` (mise à jour automatique comprise) téléchargent, après la validation de l'installation, la release figée v0.8.2 pour la plateforme courante (darwin/linux x64 et arm64, windows x64), vérifient son SHA256 figé, l'extraient avec le `tar` du système dans `~/.pota/tools/comment-checker/` et affichent le résultat sur une ligne. Un échec laisse l'installation et son exit code inchangés, et `SessionStart` depuis le runtime installé réessaie dans un processus détaché avec backoff. Tant qu'aucun téléchargement n'a réussi, les éditions passent sans vérification ; une erreur du vérificateur ou une vérification de plus de 7 secondes passe aussi. `pota doctor` affiche son état sur une ligne, `pota uninstall` le supprime, et `POTA_COMMENT_CHECKER=0` (ou `false`, `off`, `no`) ou `"commentChecker": false` dans `~/.pota/config.json` désactive la vérification et le téléchargement.
 
+## Claude Code DAG Panel
+
+Claude Code Desktop affiche le goal Pota courant sous forme de panneau DAG, une colonne par wave. Il est propre à Claude Code ; Codex et Antigravity ne l'ont pas. Il faut un Claude Code avec prise en charge des mods (écrit pour l'API de mods de Claude Code 2.1.325) ; sur une surface sans graphique, comme le terminal, une liste texte est affichée à la place.
+
+- `/dag [previous|current|next|all|refresh|close]` ouvre le panneau. Les vues sont précédent, courant, suivant et tout. Un lien terminé est un trait plein ; un lien en cours est en pointillés avec un point qui se déplace.
+- Il s'ouvre une fois automatiquement après `pota goal start` et `pota goal replan`. Si vous le fermez, il ne se rouvre pas pour le même goal.
+- Il relit l'état du goal à chaque exécution d'une commande goal et toutes les 30 secondes.
+
 ## Antigravity Compatibility
 
 Antigravity prend en charge les Agent Skills et Workflows basés sur `SKILL.md`, invoqués comme `/workflow-name`. Pota installe ces paths pour cette surface.
