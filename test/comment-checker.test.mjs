@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { startGoal } from "../scripts/pota-goal.mjs";
 import {
   checkPostToolUse, commentCheckerPaths, commentCheckerStatusLine, extractCheckRequests, fetchAfterInstall, fetchCommentChecker,
@@ -25,7 +25,7 @@ test("Claude Code and Codex edit payloads map to checker tool inputs", () => {
     { toolName: "Write", filePath: "/repo/a.js", toolInput: { file_path: "/repo/a.js", content: "x" } },
   ]);
   assert.deepEqual(requests("edit", { filePath: "src/b.js", oldString: "a", newString: "b" }), [
-    { toolName: "Edit", filePath: "/repo/src/b.js", toolInput: { file_path: "/repo/src/b.js", old_string: "a", new_string: "b" } },
+    { toolName: "Edit", filePath: resolve(cwd, "src/b.js"), toolInput: { file_path: resolve(cwd, "src/b.js"), old_string: "a", new_string: "b" } },
   ]);
   assert.deepEqual(requests("MultiEdit", { file_path: "/repo/c.js", edits: [{ old_string: "a", new_string: "b" }, { bad: true }] }), [
     { toolName: "MultiEdit", filePath: "/repo/c.js", toolInput: { file_path: "/repo/c.js", edits: [{ old_string: "a", new_string: "b" }] } },
@@ -38,7 +38,7 @@ test("Claude Code and Codex edit payloads map to checker tool inputs", () => {
 
   const patch = "*** Begin Patch\n*** Add File: new.js\n+// added\n+const a = 1;\n*** End Patch";
   assert.deepEqual(requests("apply_patch", { command: patch }), [
-    { toolName: "Write", filePath: "/repo/new.js", toolInput: { file_path: "/repo/new.js", content: "// added\nconst a = 1;" } },
+    { toolName: "Write", filePath: resolve(cwd, "new.js"), toolInput: { file_path: resolve(cwd, "new.js"), content: "// added\nconst a = 1;" } },
   ]);
 });
 

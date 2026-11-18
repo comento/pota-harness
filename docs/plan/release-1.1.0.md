@@ -30,6 +30,9 @@
 
 ## Evidence
 
+- `release-commit`: 버전 1.1.0 커밋 `74d385c`(`dev`). `plan index`가 체크박스가 모두 체크된 새 계획을 Completed에 넣어 Active로 옮기고 미완료 체크박스를 추가했다. `goal verify -- npm run check` exit 0. `origin/dev` 신규 생성, head가 로컬 HEAD와 같음을 기록.
+- `main-pr`: https://github.com/comento/pota-harness/pull/2 (head `74d385c`). CI run `44218789440`: macOS·ubuntu 4개 통과, Windows 2개(Node 18·current) 실패. 둘 다 `test/comment-checker.test.mjs` "Claude Code and Codex edit payloads map to checker tool inputs" 하나였다. 상대 경로 기대값을 `/repo/src/b.js`로 고정해, Windows에서 `path.resolve`가 `D:\repo\src\b.js`를 내는 것과 달랐다. 제품 코드는 맞고 테스트 기대값만 `resolve(cwd, …)`로 바꿨다.
+
 ## Status
 
 - [x] Planned
