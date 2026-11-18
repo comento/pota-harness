@@ -46,6 +46,9 @@ const MESSAGES = {
     waveDone: "완료",
     waveRunning: "실행 중",
     waveBlocked: "막힘",
+    summaryModels: (count) => `모델 ${count}개`,
+    waveShown: (count) => `${count}개만 표시`,
+    otherRoot: (label) => `다른 root를 보는 중: ${label}`,
     altCounts: (summary) => `${summary.done}/${summary.total} 완료, ${summary.running} 실행 중`,
     altRunning: "실행 중: ",
     elapsed: { under: "1분 미만", minutes: (m) => `${m}분`, hours: (h, m) => (m ? `${h}시간 ${m}분` : `${h}시간`) },
@@ -82,6 +85,9 @@ const MESSAGES = {
     waveDone: "done",
     waveRunning: "running",
     waveBlocked: "blocked",
+    summaryModels: (count) => `${count} ${count === 1 ? "model" : "models"}`,
+    waveShown: (count) => `showing ${count}`,
+    otherRoot: (label) => `Reading another root: ${label}`,
     altCounts: (summary) => `${summary.done}/${summary.total} done, ${summary.running} running`,
     altRunning: "Running: ",
     elapsed: { under: "<1m", minutes: (m) => `${m}m`, hours: (h, m) => (m ? `${h}h ${m}m` : `${h}h`) },
@@ -124,21 +130,25 @@ export function formatElapsed(ms, locale) {
  */
 export function formatSummary(summary, ctx) {
   const words = messages(ctx.locale);
-  const parts = [`wave ${summary.waveCurrent}/${summary.waveTotal}`, `${summary.done}/${summary.total} done`, `${summary.running} running`];
-  if (summary.blocked > 0) parts.push(`${summary.blocked} blocked`);
-  if (summary.models.length > 0) parts.push(`${summary.models.length} ${summary.models.length === 1 ? "model" : "models"}`);
+  const parts = [`wave ${summary.waveCurrent}/${summary.waveTotal}`, `${summary.done}/${summary.total} ${words.waveDone}`, `${summary.running} ${words.waveRunning}`];
+  if (summary.blocked > 0) parts.push(`${summary.blocked} ${words.waveBlocked}`);
+  if (summary.models.length > 0) parts.push(words.summaryModels(summary.models.length));
   const started = ctx.snapshot?.createdAt ?? 0;
   if (started > 0 && ctx.minute > 0) parts.push(formatElapsed(ctx.minute - started, ctx.locale));
   if (summary.allDone && ctx.snapshot?.status !== "completed") parts.push(words.awaitingFinish);
   return parts.join(" · ");
 }
 
-/** @param {DagWave} wave @param {Locale} locale */
-export function waveHeader(wave, locale) {
+/**
+ * Counts are the whole wave's; `shown`, when fewer than the wave has, says how many nodes are drawn.
+ * @param {DagWave} wave @param {Locale} locale @param {number} [shown]
+ */
+export function waveHeader(wave, locale, shown) {
   const words = messages(locale);
   const parts = [`Wave ${wave.index + 1}`, `${wave.completed}/${wave.total} ${words.waveDone}`];
   if (wave.active > 0) parts.push(`${wave.active} ${words.waveRunning}`);
   if (wave.blocked > 0) parts.push(`${wave.blocked} ${words.waveBlocked}`);
+  if (shown !== undefined && shown < wave.total) parts.push(words.waveShown(shown));
   return parts.join(" · ");
 }
 
@@ -299,8 +309,8 @@ export function truncateCells(text, columns) {
   return `${kept}…`;
 }
 
-const GLYPH = { completed: "✓", active: "●", ready: "○", waiting: "·", blocked: "!" };
-const TONE = { completed: "ok", active: "run", ready: "ready", waiting: "dim", blocked: "bad" };
+export const STATE_GLYPH = { completed: "✓", active: "●", ready: "○", waiting: "·", blocked: "!" };
+export const STATE_TONE = { completed: "ok", active: "run", ready: "ready", waiting: "dim", blocked: "bad" };
 
 /**
  * The graph as text rows, for surfaces that draw no Svg.
@@ -318,14 +328,15 @@ export function textRows(model, ctx, columns) {
   const parentsOf = new Map();
   for (const edge of model.edges) parentsOf.set(edge.to, [...(parentsOf.get(edge.to) ?? []), edge.from]);
   for (const wave of model.waves) {
-    rows.push({ text: waveHeader(wave, ctx.locale), tone: "dim", bold: true });
-    for (const node of model.nodes.filter((item) => item.wave === wave.index)) {
-      const parts = [`  ${GLYPH[node.state]} ${node.id}`, node.task.title];
+    const shown = model.nodes.filter((item) => item.wave === wave.index);
+    rows.push({ text: waveHeader(wave, ctx.locale, shown.length), tone: "dim", bold: true });
+    for (const node of shown) {
+      const parts = [`  ${STATE_GLYPH[node.state]} ${node.id}`, node.task.title];
       const role = roleLine(node.task, "·");
       if (role) parts.push(role);
       const parents = parentsOf.get(node.id);
       if (parents) parts.push(`← ${parents.join(", ")}`);
-      rows.push({ text: parts.join("  "), tone: node.role === "context" ? "dim" : TONE[node.state] });
+      rows.push({ text: parts.join("  "), tone: node.role === "context" ? "dim" : STATE_TONE[node.state] });
     }
   }
   if (model.hiddenAfter > 0) rows.push({ text: words.hiddenAfter(model.hiddenAfter), tone: "dim" });

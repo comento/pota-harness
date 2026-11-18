@@ -27,7 +27,7 @@ import {
 } from "../claude-mod/hooks/dag-events.mjs";
 
 const modRoot = resolve("claude-mod");
-const pureModules = ["dag-model.mjs", "dag-layout.mjs", "dag-text.mjs", "dag-svg.mjs", "dag-events.mjs"];
+const pureModules = ["dag-model.mjs", "dag-layout.mjs", "dag-text.mjs", "dag-svg.mjs", "dag-events.mjs", "dag-term.mjs"];
 
 const task = (id, dependsOn = [], status = "pending", extra = {}) => ({
   id,
@@ -274,17 +274,19 @@ test("9. summarize and formatSummary", () => {
   const summary = summarize(snap);
   assert.deepEqual(summary, { waveCurrent: 3, waveTotal: 5, done: 2, total: 6, running: 1, blocked: 0, ready: 0, models: ["opus", "fable"], allDone: false });
   assert.equal(formatSummary(summary, ctxOf(snap, { minute: 1_000 + 23 * 60_000 })), "wave 3/5 · 2/6 done · 1 running · 2 models · 23m");
-  assert.equal(formatSummary(summary, ctxOf(snap, { locale: "ko", minute: 1_000 + 83 * 60_000 })), "wave 3/5 · 2/6 done · 1 running · 2 models · 1시간 23분");
+  assert.equal(formatSummary(summary, ctxOf(snap, { locale: "ko", minute: 1_000 + 83 * 60_000 })), "wave 3/5 · 2/6 완료 · 1 실행 중 · 모델 2개 · 1시간 23분");
 
   const plain = summarize(snapshot(planTasks({ "triage-plan": "completed", "heavy-design": "blocked" })));
   assert.equal(formatSummary(plain, ctxOf(null)), "wave 2/5 · 1/6 done · 0 running · 1 blocked");
+  assert.equal(formatSummary(plain, ctxOf(null, { locale: "ko" })), "wave 2/5 · 1/6 완료 · 0 실행 중 · 1 막힘");
+  assert.match(formatSummary(summarize(snapshot([task("only", [], "pending", { model: "opus" })])), ctxOf(null, { locale: "ko" })), /모델 1개/);
   const fresh = summarize(snapshot(planTasks()));
   assert.equal(formatSummary(fresh, ctxOf(null)), "wave 1/5 · 0/6 done · 0 running");
   const done = summarize(snapshot(planTasks(allStatus("completed"))));
   assert.equal(done.allDone, true);
   assert.equal(done.waveCurrent, 5);
   assert.equal(formatSummary(done, ctxOf(null)), "wave 5/5 · 6/6 done · 0 running · awaiting goal finish");
-  assert.equal(formatSummary(done, ctxOf(null, { locale: "ko" })), "wave 5/5 · 6/6 done · 0 running · goal finish 대기");
+  assert.equal(formatSummary(done, ctxOf(null, { locale: "ko" })), "wave 5/5 · 6/6 완료 · 0 실행 중 · goal finish 대기");
   assert.equal(summarize(snapshot([task("only")])).waveTotal, 1);
 });
 

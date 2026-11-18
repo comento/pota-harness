@@ -37,6 +37,9 @@ export type Messages = {
   waveDone: string;
   waveRunning: string;
   waveBlocked: string;
+  summaryModels: (count: number) => string;
+  waveShown: (count: number) => string;
+  otherRoot: (label: string) => string;
   altCounts: (summary: DagSummary) => string;
   altRunning: string;
   elapsed: { under: string; minutes: (m: number) => string; hours: (h: number, m: number) => string };
@@ -51,7 +54,7 @@ export declare function messages(locale: Locale): Messages;
 export declare function pickLocale(values: readonly (string | undefined)[]): Locale;
 export declare function formatElapsed(ms: number, locale: Locale): string;
 export declare function formatSummary(summary: DagSummary, ctx: TextContext): string;
-export declare function waveHeader(wave: DagWave, locale: Locale): string;
+export declare function waveHeader(wave: DagWave, locale: Locale, shown?: number): string;
 export declare function roleLine(task: DagTask, separator: string): string;
 export declare function cardLines(node: DagNode, ctx: TextContext): { title: string; status: string; meta: string; progress: string; tooltip: string };
 export type DetailSections = {
@@ -65,4 +68,6 @@ export declare function detailSections(snapshot: DagSnapshot, agentTask: Record<
 export declare function runningRows(snapshot: DagSnapshot, agentTask: Record<string, string>, agents: readonly DagAgent[], ctx: TextContext): Row[];
 export declare function cellWidth(text: string): number;
 export declare function truncateCells(text: string, columns: number): string;
+export declare const STATE_GLYPH: Record<TaskState, string>;
+export declare const STATE_TONE: Record<TaskState, Tone>;
 export declare function textRows(model: DagModel, ctx: TextContext, columns: number): Row[];

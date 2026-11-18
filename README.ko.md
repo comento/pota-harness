@@ -166,11 +166,12 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex 플러그인 캐시 사�
 
 ## Claude Code DAG Panel
 
-Claude Code 데스크탑은 현재 Pota goal을 wave별 열로 나눈 DAG 패널로 보여 줍니다. Claude Code 전용이며 Codex와 Antigravity에는 없습니다. mod 기능이 있는 Claude Code가 필요하고(Claude Code 2.1.325의 mod API 기준으로 작성), 터미널처럼 그래프가 없는 surface에서는 글자 목록으로 표시합니다.
+Claude Code 데스크탑은 현재 Pota goal을 wave별 열로 나눈 DAG 패널로 보여 줍니다. Claude Code 전용이며 Codex와 Antigravity에는 없습니다. mod 기능이 있는 Claude Code가 필요하고(Claude Code 2.1.325의 mod API 기준으로 작성), 터미널에는 그래픽이 없어서 wave를 위에서 아래로 박스 문자 박스로 그리며 움직이는 점은 없습니다. pane 폭이 24칸보다 좁으면 글자 목록으로 표시합니다.
 
 - `/dag [previous|current|next|all|refresh|close]`로 패널을 엽니다. 보기는 이전, 현재, 다음, 전체입니다. 완료된 연결은 실선, 진행 중인 연결은 점선과 이동하는 점입니다.
 - `pota goal start`와 `pota goal replan` 뒤에 자동으로 한 번 열립니다. 닫으면 같은 goal에서는 다시 열지 않습니다.
 - goal 명령이 실행될 때와 30초마다 goal 상태를 다시 읽어 갱신합니다.
+- 세션 root의 goal을 읽습니다. goal 명령이 다른 worktree에서 실행되면 패널이 그 worktree를 따라가고 제목 아래에 그 사실을 표시합니다. 세션이 옮겨지거나, 그 goal이 끝나고 세션 root에 goal이 있으면 돌아옵니다.
 
 ## Antigravity Compatibility
 

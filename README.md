@@ -174,11 +174,12 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (only w
 
 ## Claude Code DAG Panel
 
-Claude Code desktop shows the current Pota goal as a DAG panel, one column per wave. It is Claude Code only; Codex and Antigravity do not have it. It needs a Claude Code with mod support (written against the Claude Code 2.1.325 mod API); a surface without graphics, such as the terminal, shows a text list instead.
+Claude Code desktop shows the current Pota goal as a DAG panel, one column per wave. It is Claude Code only; Codex and Antigravity do not have it. It needs a Claude Code with mod support (written against the Claude Code 2.1.325 mod API); the terminal has no graphics, so there it draws the waves top to bottom as boxes made of box-drawing characters, without the moving dot, and falls back to a text list when the pane is narrower than 24 columns.
 
 - `/dag [previous|current|next|all|refresh|close]` opens the panel. The views are previous, current, next, and all. A finished link is a solid line; a link in progress is dashed with a moving dot.
 - It opens once automatically after `pota goal start` and `pota goal replan`. If you close it, it does not open again for the same goal.
 - It re-reads the goal state whenever a goal command runs and every 30 seconds.
+- It reads the goal of the session's root. When a goal command runs in another worktree, the panel follows that worktree and says so under the title, and returns when the session moves or that goal ends while the session's root has one.
 
 ## Antigravity Compatibility
 

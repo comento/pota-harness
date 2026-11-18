@@ -15,7 +15,7 @@ function run(script, args, options = {}) {
   return spawnSync(process.execPath, [script, ...args], {
     cwd: options.cwd ?? resolve("."),
     encoding: "utf8",
-    env: options.env ?? process.env,
+    env: options.env ?? { ...process.env, LC_ALL: "en_US.UTF-8" },
     timeout: 5_000,
   });
 }
