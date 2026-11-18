@@ -33,10 +33,16 @@
 
 ## Evidence
 
-- pending.
+- `release-commit`: 기능 커밋 `6a07fce`, 버전 1.3.0 커밋 `3d04ede`(`feat/dag-terminal-graph`). `goal verify -- npm run check` exit 0, `claude plugin validate claude-mod` exit 0.
+- `dev-pr`: https://github.com/comento/pota-harness/pull/7. CI 7개 통과 후 head `3d04ede` 고정으로 병합, merge commit `9f5e73a`.
+- `main-pr`: https://github.com/comento/pota-harness/pull/8 (head `9f5e73a`). CI 통과 후 head 고정 병합, merge commit `2e8e33c`.
+- `npm-publish`: `2e8e33c`의 clean detached worktree에서 pack 1회(prepack의 `npm run check` 448개 중 445 통과·0 실패·3 skip). tarball `comento-pota-harness-1.3.0.tgz`, 252,910 bytes, 116 files, sha1 `76598c6d632a22fac769a0a2e3b2efb7ba3cca59`, integrity `sha512-A+kkYggNcC86G2dMw5Z4/hyCQp9m6I5TQ6NQR9Vb2UT6ZryeLpSJBlTQIY3C+/E6oCG0IvP3yN0yNtzKzuSh0w==`. 같은 tarball로 `npm publish --dry-run` exit 0 뒤 사용자가 터미널에서 게시했다. registry 조회는 처음 몇 분간 404였고, 이후 `dist.shasum`·`dist.integrity`가 tarball과 일치하고 `latest`가 1.3.0이다.
+- `release-verify`: 격리된 prefix·cache·HOME·`POTA_HOME`·호스트 env(`POTA_CLAUDE_CLI=none`, `POTA_AUTO_UPGRADE=0`)에 registry 1.3.0을 설치했다. `pota --version` → `pota 1.3.0`, `pota install --hosts claude` exit 0. 얇은 Claude 플러그인과 runtime에 `hooks/dag-term.mjs`가 있다. doctor는 `OK ownership digests`, `OK Claude runtime locator`, `OK Claude plugin files`이고, `FAIL Claude plugin registered`는 Claude CLI를 끈 격리 환경이라 나온다.
+- `release-record`: `main` merge commit `2e8e33c`에서 만든 브랜치 `chore/release-1.3.0-record`에 이 기록을 커밋해 `dev` PR로 되돌린다. 로컬 설치본 업그레이드는 요청 범위가 아니라 하지 않았다.
+- Memory promotion: 없음. 절차는 `docs/memory/release-process.md`대로였고 새로 드러난 사실이 없다.
 
 ## Status
 
 - [x] Planned
-- [ ] Released
-- [ ] Verified
+- [x] Released
+- [x] Verified
