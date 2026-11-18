@@ -152,8 +152,9 @@ Pota는 설치본을 `POTA_HOME`(기본 `~/.pota`) 아래에 둡니다. `CODEX_H
     codex/                  Codex 로컬 marketplace source
     claude/                 Claude Code 로컬 marketplace
   projects/                 goal 상태
-  config.json               사용자 설정 ("autoUpgrade")
+  config.json               사용자 설정 ("autoUpgrade", "commentChecker")
   update/                   자동 업그레이드 상태
+  tools/comment-checker/    comment-checker 바이너리(고정 release)
 $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex 플러그인 캐시 사본 (Codex를 선택했을 때만)
 ```
 
@@ -161,6 +162,7 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex 플러그인 캐시 사�
 - 유예: 버전이 바뀌는 업그레이드는 직전 canonical runtime과 Codex 캐시 사본을 3일 동안(종류별 최대 3개) 남겨, 업그레이드 전에 시작한 세션이 계속 동작하게 합니다. 기간이 지난 것은 다음 install이나 upgrade가 제거하고, uninstall은 모두 제거합니다. 새 버전과 같거나 높은 Codex 캐시 사본은 남기지 않습니다. Codex는 캐시에서 가장 높은 버전을 로드하기 때문입니다.
 - 자동 업그레이드: 기본으로 켜져 있습니다. 24시간에 한 번 이하로(설치·업그레이드 직후 24시간은 제외) `SessionStart`가 분리 프로세스를 시작합니다. 이 프로세스는 npm에서 `@comento/pota-harness` 최신 버전을 읽고, 그 정확한 버전을 `--ignore-scripts`로 `~/.pota/update/stage/`에 설치해 검증한 뒤, 그 패키지의 `pota-lifecycle.mjs upgrade --auto`를 실행합니다. major를 포함한 모든 새 버전을 적용하며 다운그레이드하지 않습니다. 다음 `SessionStart`는 결과를 한 줄로 한 번만 알립니다: `updated`, `failed`, `manual`(설치됐지만 Claude Code 플러그인 캐시에 `claude plugin update pota@pota`가 필요함). npm 조회·설치 실패는 알림 없이 backoff하고, 업그레이드 실패는 backoff하며 버전마다 한 번 알립니다. git 체크아웃에서 설치한 설치본(`origin: "checkout"`)과 소스 체크아웃 실행에서는 동작하지 않습니다.
 - 끄기: `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0`(`false`, `off`, `no`도 가능), 또는 `~/.pota/config.json`의 `"autoUpgrade": false`. 읽을 수 없는 `config.json`도 자동 업그레이드를 끕니다. 상태와 마지막 실행 출력은 `~/.pota/update/`(`state.json`, `notice.json`, `last-run.log`, `update.lock`, `stage/`)에 있습니다.
+- 주석 검사: 편집이 성공하면(Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch`와 편집 도구) PostToolUse hook이 바뀐 내용을 [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker)(MIT)로 검사합니다. 불필요한 주석이 보고되면 `decision: "block"`을 돌려줘 에이전트가 주석을 지우거나 필요한 이유를 설명하게 합니다. npm 의존성은 추가하지 않습니다. `pota install`과 `pota upgrade`(자동 업그레이드 포함)가 설치를 commit한 뒤 현재 플랫폼(darwin/linux x64·arm64, windows x64)용 고정 v0.8.2 release를 내려받고, 고정된 SHA256을 검증해 OS `tar`로 `~/.pota/tools/comment-checker/`에 풀고, 결과를 한 줄로 출력합니다. 다운로드가 실패해도 설치와 exit code는 그대로이며, 설치된 runtime의 `SessionStart`가 분리 프로세스로 backoff를 두고 다시 시도합니다. 다운로드가 성공하기 전까지 편집은 검사 없이 통과하며, 검사기 오류나 7초를 넘는 검사도 통과합니다. `pota doctor`가 상태를 한 줄로 보여 주고 `pota uninstall`이 제거합니다. `POTA_COMMENT_CHECKER=0`(`false`, `off`, `no`도 가능) 또는 `~/.pota/config.json`의 `"commentChecker": false`는 검사와 다운로드를 모두 끕니다.
 
 ## Antigravity Compatibility
 

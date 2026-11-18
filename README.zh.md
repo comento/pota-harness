@@ -133,8 +133,9 @@ Pota 将安装内容放在 `POTA_HOME`(默认 `~/.pota`)下。各 host 的路径
     codex/                  Codex local marketplace source
     claude/                 Claude Code local marketplace
   projects/                 goal state
-  config.json               用户设置 ("autoUpgrade")
+  config.json               用户设置 ("autoUpgrade", "commentChecker")
   update/                   auto-upgrade 状态
+  tools/comment-checker/    comment-checker 二进制(固定 release)
 $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (仅在选择 Codex 时)
 ```
 
@@ -143,6 +144,7 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (仅在
 - Claude Code plugin cache: 若仍为其他版本，`pota upgrade` 会用 `claude plugin marketplace update pota` 和 `claude plugin update pota@pota --scope user` 更新。更新失败时保留已升级的安装，输出手动完成的命令并以 exit 1 结束。
 - Auto-upgrade: 默认开启。`SessionStart` 每 24 小时最多一次(install 或 upgrade 后 24 小时内不检查)启动一个 detached process：从 npm 读取最新的 `@comento/pota-harness` 版本，以该确切版本加 `--ignore-scripts` 安装到 `~/.pota/update/stage/` 并验证，然后运行该 package 的 `pota-lifecycle.mjs upgrade --auto`。包括 major 在内的所有新版本都会应用，从不降级。下一个 `SessionStart` 用一行只提示一次结果(`updated`、`failed`、`manual`)。从 git checkout 安装(`origin: "checkout"`)或从 source checkout 运行时不会执行。
 - 关闭: `pota auto-upgrade off`、`POTA_AUTO_UPGRADE=0`(也可用 `false`、`off`、`no`)，或在 `~/.pota/config.json` 中设置 `"autoUpgrade": false`。无法读取的 `config.json` 也视为关闭。状态和上次运行日志位于 `~/.pota/update/`。
+- 注释检查: 编辑成功后(Claude Code `Write`/`Edit`/`MultiEdit`、Codex `apply_patch` 和编辑工具)，PostToolUse hook 用 [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker)(MIT)检查改动内容。报告多余注释时返回 `decision: "block"`，让代理删除注释或说明保留的理由。不新增 npm 依赖: `pota install` 和 `pota upgrade`(包括自动升级)在安装 commit 之后下载当前平台(darwin/linux x64 与 arm64、windows x64)的固定 v0.8.2 release，校验固定的 SHA256，用系统 `tar` 解压到 `~/.pota/tools/comment-checker/`，并用一行输出结果。下载失败时安装和 exit code 保持不变，已安装 runtime 的 `SessionStart` 会在分离进程中按 backoff 重试。下载成功之前编辑不经检查直接通过，检查器出错或检查超过 7 秒也会通过。`pota doctor` 用一行显示其状态，`pota uninstall` 会删除它。`POTA_COMMENT_CHECKER=0`(也可用 `false`、`off`、`no`)或 `~/.pota/config.json` 中的 `"commentChecker": false` 同时关闭检查和下载。
 
 ## Antigravity Compatibility
 

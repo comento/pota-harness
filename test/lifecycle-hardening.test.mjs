@@ -225,6 +225,8 @@ async function withHome(runTest) {
     ...process.env,
     HOME: join(temp, "home"),
     POTA_HOME: join(temp, "pota-home"),
+    // Lifecycle runs would otherwise download the real comment-checker after every install and upgrade.
+    POTA_COMMENT_CHECKER: "0",
     CODEX_HOME: join(temp, "codex"),
     CLAUDE_HOME: join(temp, "claude"),
     POTA_CLAUDE_CLI: fakeClaudeCli,

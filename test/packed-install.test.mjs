@@ -33,6 +33,8 @@ test("packed install remains self-contained after the npm package source is remo
   const env = {
     ...process.env,
     POTA_HOME: join(temp, "Pota Home"),
+    // Lifecycle runs would otherwise download the real comment-checker after every install and upgrade.
+    POTA_COMMENT_CHECKER: "0",
     CODEX_HOME: join(temp, "Codex Home"),
     CLAUDE_HOME: join(temp, "Claude Home"),
     POTA_CLAUDE_CLI: fakeClaudeCli,

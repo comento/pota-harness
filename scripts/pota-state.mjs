@@ -9,6 +9,7 @@ import { readHookGuard, readStopGuard, writeHookGuard, writeStopGuard } from "./
 import { hookIndexSnapshot } from "./pota-index.mjs";
 import { resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
 import { sessionStartUpdate } from "./pota-update-state.mjs";
+import { checkPostToolUse, startFetchWhenNeeded } from "./pota-comment-checker.mjs";
 
 const recoverableGoalStatuses = new Set(["active", "paused", "blocked"]);
 
@@ -35,6 +36,7 @@ export async function runStateResult(event = "manual", {
   locale = localeValue(),
   payload,
   update = {},
+  commentChecker = {},
 } = {}) {
   const resolvedRoot = resolveRoot(root, payload);
   const ko = locale.toLowerCase().startsWith("ko");
@@ -51,42 +53,20 @@ export async function runStateResult(event = "manual", {
 
   if (event === "session-start" || event === "user-prompt-submit") {
     const result = await promptContextResult(event, { ko, resolvedRoot, payload });
-    return event === "session-start" ? withUpdateNotice(result, ko, update) : result;
+    if (event !== "session-start") return result;
+    const withNotice = withUpdateNotice(result, ko, update);
+    startFetchWhenNeeded(commentCheckerOptions(update, commentChecker));
+    return withNotice;
   }
 
   if (event === "post-tool-use") {
-    // Only remind while an owned goal is active: an unconditional reminder after every edit accumulates in the
-    // conversation prefix, raising cached-read cost and bringing compaction (a full cache reset) sooner.
-    const { state } = await reconcileWorktreeState({ root: resolvedRoot });
-    if (state?.goal?.status !== "active" || !isGoalOwnedBySession(state, payload?.session_id)) {
-      return { status: 0, message: "", hookOutput: {} };
-    }
-    // Remind once per goal, task, and session; repeating it after every edit only grows the cached prefix.
-    const reminderKey = {
-      goalId: state.goal.id,
-      taskId: state.tasks.find((task) => task.status === "active")?.id ?? null,
-      sessionId: payload?.session_id ?? null,
-    };
-    const previousReminder = await readHookGuard(resolvedRoot, "reminder");
-    if (previousReminder?.goalId === reminderKey.goalId
-      && previousReminder?.taskId === reminderKey.taskId
-      && previousReminder?.sessionId === reminderKey.sessionId) {
-      return { status: 0, message: "", hookOutput: {} };
-    }
-    await writeHookGuard(resolvedRoot, "reminder", reminderKey);
-    const message = ko
-      ? "Pota 점검: 외부 상태 변경에는 dry-run/check 증거 기록이 필요합니다. 활성 목표가 있다면 현재 task에 성공 증거를 기록하세요."
-      : "Pota check: external-state changes need dry-run/check evidence. When a goal is active, record successful evidence for its current task.";
-    return {
-      status: 0,
-      message,
-      hookOutput: {
-        hookSpecificOutput: {
-          hookEventName: "PostToolUse",
-          additionalContext: message,
-        },
-      },
-    };
+    const comments = await checkPostToolUse(payload, commentCheckerOptions(update, commentChecker)).catch(() => null);
+    // Unreadable goal state keeps its failure result, except that findings for the edit still reach the model.
+    const reminder = await postToolUseReminder({ ko, resolvedRoot, payload }).catch((error) => {
+      if (comments?.reason) return { status: 0, message: "", hookOutput: {} };
+      throw error;
+    });
+    return withCommentFindings(reminder, comments);
   }
 
   if (event === "stop" || event === "subagent-stop") {
@@ -109,6 +89,65 @@ export async function runStateResult(event = "manual", {
     status: 0,
     message: ko ? "Pota: 지원하지 않는 상태 이벤트를 건너뛰었습니다." : "Pota: skipped an unsupported state event.",
   };
+}
+
+async function postToolUseReminder({ ko, resolvedRoot, payload }) {
+  // Only remind while an owned goal is active: an unconditional reminder after every edit accumulates in the
+  // conversation prefix, raising cached-read cost and bringing compaction (a full cache reset) sooner.
+  const { state } = await reconcileWorktreeState({ root: resolvedRoot });
+  if (state?.goal?.status !== "active" || !isGoalOwnedBySession(state, payload?.session_id)) {
+    return { status: 0, message: "", hookOutput: {} };
+  }
+  // Remind once per goal, task, and session; repeating it after every edit only grows the cached prefix.
+  const reminderKey = {
+    goalId: state.goal.id,
+    taskId: state.tasks.find((task) => task.status === "active")?.id ?? null,
+    sessionId: payload?.session_id ?? null,
+  };
+  const previousReminder = await readHookGuard(resolvedRoot, "reminder");
+  if (previousReminder?.goalId === reminderKey.goalId
+    && previousReminder?.taskId === reminderKey.taskId
+    && previousReminder?.sessionId === reminderKey.sessionId) {
+    return { status: 0, message: "", hookOutput: {} };
+  }
+  await writeHookGuard(resolvedRoot, "reminder", reminderKey);
+  const message = ko
+    ? "Pota 점검: 외부 상태 변경에는 dry-run/check 증거 기록이 필요합니다. 활성 목표가 있다면 현재 task에 성공 증거를 기록하세요."
+    : "Pota check: external-state changes need dry-run/check evidence. When a goal is active, record successful evidence for its current task.";
+  return {
+    status: 0,
+    message,
+    hookOutput: {
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        additionalContext: message,
+      },
+    },
+  };
+}
+
+// Findings block the edit's turn with a reason the model must address; a goal reminder from the same call rides along
+// as additional context. Without findings the reminder result is returned unchanged.
+function withCommentFindings(result, comments) {
+  if (!comments?.reason) return result;
+  const context = result.hookOutput?.hookSpecificOutput?.additionalContext;
+  return {
+    status: 0,
+    message: context ? `${comments.reason}\n${context}` : comments.reason,
+    hookOutput: {
+      decision: "block",
+      reason: comments.reason,
+      ...(context ? { hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: context } } : {}),
+    },
+  };
+}
+
+// The comment checker shares the update step's env, clock, and runtime root; its spawn is separate so tests can
+// observe each detached process on its own.
+function commentCheckerOptions(update, commentChecker) {
+  const options = { ...commentChecker };
+  for (const key of ["env", "now", "pluginRoot"]) if (options[key] === undefined && update[key] !== undefined) options[key] = update[key];
+  return options;
 }
 
 async function promptContextResult(event, { ko, resolvedRoot, payload }) {

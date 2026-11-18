@@ -133,8 +133,9 @@ Pota place son installation sous `POTA_HOME` (par défaut `~/.pota`). Les chemin
     codex/                  Codex local marketplace source
     claude/                 Claude Code local marketplace
   projects/                 goal state
-  config.json               réglages utilisateur ("autoUpgrade")
+  config.json               réglages utilisateur ("autoUpgrade", "commentChecker")
   update/                   état de l'auto-upgrade
+  tools/comment-checker/    binaire comment-checker (release figée)
 $CODEX_HOME/plugins/cache/pota/pota/<version>/   copie dans le Codex plugin cache (seulement si Codex est choisi)
 ```
 
@@ -143,6 +144,7 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   copie dans le Codex plugin cach
 - Claude Code plugin cache : s'il contient encore une autre version, `pota upgrade` le met à jour avec `claude plugin marketplace update pota` et `claude plugin update pota@pota --scope user`. En cas d'échec, l'installation mise à jour est conservée, les commandes pour terminer à la main sont affichées et la sortie est exit 1.
 - Auto-upgrade : activé par défaut. Au plus une fois toutes les 24 heures (et pas dans les 24 heures qui suivent un install ou un upgrade), `SessionStart` lance un processus détaché qui lit la dernière version de `@comento/pota-harness` sur npm, installe cette version exacte avec `--ignore-scripts` dans `~/.pota/update/stage/`, la vérifie, puis exécute son `pota-lifecycle.mjs upgrade --auto`. Toutes les nouvelles versions sont appliquées, major comprises, sans jamais de downgrade. Le `SessionStart` suivant affiche le résultat (`updated`, `failed` ou `manual`) en une ligne, une seule fois. Rien ne s'exécute pour une installation depuis un git checkout (`origin: "checkout"`) ni depuis un source checkout.
 - Désactiver : `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0` (ou `false`, `off`, `no`) ou `"autoUpgrade": false` dans `~/.pota/config.json`. Un `config.json` illisible le désactive aussi. L'état et le log de la dernière exécution se trouvent dans `~/.pota/update/`.
+- Vérification des commentaires : après une édition réussie (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` et outils d'édition), le hook PostToolUse exécute [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) sur le texte modifié et, s'il signale des commentaires inutiles, renvoie `decision: "block"` pour que l'agent les retire ou explique pourquoi ils sont nécessaires. Aucune dépendance npm n'est ajoutée : `pota install` et `pota upgrade` (mise à jour automatique comprise) téléchargent, après la validation de l'installation, la release figée v0.8.2 pour la plateforme courante (darwin/linux x64 et arm64, windows x64), vérifient son SHA256 figé, l'extraient avec le `tar` du système dans `~/.pota/tools/comment-checker/` et affichent le résultat sur une ligne. Un échec laisse l'installation et son exit code inchangés, et `SessionStart` depuis le runtime installé réessaie dans un processus détaché avec backoff. Tant qu'aucun téléchargement n'a réussi, les éditions passent sans vérification ; une erreur du vérificateur ou une vérification de plus de 7 secondes passe aussi. `pota doctor` affiche son état sur une ligne, `pota uninstall` le supprime, et `POTA_COMMENT_CHECKER=0` (ou `false`, `off`, `no`) ou `"commentChecker": false` dans `~/.pota/config.json` désactive la vérification et le téléchargement.
 
 ## Antigravity Compatibility
 
