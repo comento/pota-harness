@@ -27,7 +27,10 @@ export type Messages = {
   writeScope: string;
   model: string;
   calls: (count: number) => string;
-  readyList: string;
+  remaining: string;
+  nextUp: string;
+  others: string;
+  more: (count: number) => string;
   awaitingFinish: string;
   hiddenAfter: (count: number) => string;
   omitted: (count: number) => string;
@@ -51,6 +54,14 @@ export declare function formatSummary(summary: DagSummary, ctx: TextContext): st
 export declare function waveHeader(wave: DagWave, locale: Locale): string;
 export declare function roleLine(task: DagTask, separator: string): string;
 export declare function cardLines(node: DagNode, ctx: TextContext): { title: string; status: string; meta: string; progress: string; tooltip: string };
+export type DetailSections = {
+  running: { id: string; title: string; who: string; activity: string; calls: number; elapsed: string; evidence: { kind: string; done: boolean }[] }[];
+  blocked: { id: string; title: string; reason: string }[];
+  next: { id: string; title: string; waits: string[] }[];
+  more: number;
+  strays: { id: string; name: string; activity: string }[];
+};
+export declare function detailSections(snapshot: DagSnapshot, agentTask: Record<string, string>, agents: readonly DagAgent[], ctx: TextContext): DetailSections;
 export declare function runningRows(snapshot: DagSnapshot, agentTask: Record<string, string>, agents: readonly DagAgent[], ctx: TextContext): Row[];
 export declare function cellWidth(text: string): number;
 export declare function truncateCells(text: string, columns: number): string;

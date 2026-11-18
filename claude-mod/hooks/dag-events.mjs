@@ -11,13 +11,20 @@ const PLANNING_SUBS = new Set(["start", "replan"]);
 const GOAL_COMMAND = /(?:^|[\s"'/\\;&|(])pota(?:\.mjs)?["']?\s+goal\s+([a-z]+)\b/g;
 const ROOT_FLAG = /--root(?:=|\s+)("[^"]+"|'[^']+'|\S+)/;
 
+const READ_ONLY_SUBS = new Set(["status", "ready", "stats"]);
+const VARIABLE_GOAL_COMMAND = /(?:^|[\s;&|(])["']?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?["']?\s+goal\s+([a-z]+)\b/g;
+
 /**
  * @param {string} command a Bash command line
  * @returns {{ subs: string[], mutates: boolean, planned: boolean, root: string | null } | null}
  */
 export function parsePotaGoalCommand(command) {
   const text = String(command ?? "");
-  const subs = [...text.matchAll(GOAL_COMMAND)].map((match) => match[1]);
+  let subs = [...text.matchAll(GOAL_COMMAND)].map((match) => match[1]);
+  // `P=/…/pota.mjs; node "$P" goal start`: the CLI path sits in a shell variable, so the goal call names no pota.
+  if (subs.length === 0 && /\bpota\b/.test(text)) {
+    subs = [...text.matchAll(VARIABLE_GOAL_COMMAND)].map((match) => match[1]).filter((sub) => MUTATING_SUBS.has(sub) || READ_ONLY_SUBS.has(sub));
+  }
   if (subs.length === 0) return null;
   const flag = text.match(ROOT_FLAG);
   let root = flag ? flag[1] : null;

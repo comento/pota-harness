@@ -458,6 +458,10 @@ test("17. parsePotaGoalCommand", () => {
   assert.equal(parsePotaGoalCommand("pota goal finish").planned, false);
   assert.equal(parsePotaGoalCommand('pota goal assign --root "/a b/c"').root, "/a b/c");
   assert.equal(parsePotaGoalCommand("pota goal verify --root=/abs/x").root, "/abs/x");
+  assert.deepEqual(parsePotaGoalCommand('P="/x/scripts/pota.mjs"; node "$P" goal start --plan a.md'), { subs: ["start"], mutates: true, planned: true, root: null });
+  assert.deepEqual(parsePotaGoalCommand("POTA=/x/pota.mjs; node ${POTA} goal replan --quiet"), { subs: ["replan"], mutates: true, planned: true, root: null });
+  assert.equal(parsePotaGoalCommand('X=1; node "$X" goal start'), null);
+  assert.equal(parsePotaGoalCommand('P=/x/pota.mjs; node "$P" goal bogus'), null);
 });
 
 test("18. extractTaskMentions and resolveAgentTasks", () => {
@@ -661,4 +665,12 @@ test("text helpers: locale, elapsed, card lines and running rows", () => {
   assert.ok(rows.some((row) => row.tone === "run" && row.text.includes("Task mod-panel")));
   assert.ok(rows.some((row) => row.text.includes("Read register.tsx") && row.text.includes("7")));
   assert.ok(rows.some((row) => row.text.includes("stray")));
+  // The running task names the evidence it still lacks; what comes next names what it waits on.
+  const lacking = snapshot([task("a", [], "active", { requiredEvidence: ["moduleAcceptance", "surfaceIntegration"], evidence: ["moduleAcceptance"] }), task("b", ["a"]), task("c", ["b"]), task("d")]);
+  const texts = runningRows(lacking, {}, [], { ...ctx, snapshot: lacking, timeline: {} }).map((row) => row.text);
+  assert.ok(texts.includes("  남은 증거: surfaceIntegration"));
+  assert.ok(texts.includes("다음 차례"));
+  assert.ok(texts.includes("○ Task b ← Task a"));
+  assert.ok(texts.includes("○ Task d"));
+  assert.ok(!texts.some((text) => text.includes("Task c")));
 });

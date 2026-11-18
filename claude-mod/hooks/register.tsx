@@ -7,7 +7,7 @@ import type { EngineInterface, Register } from "claude-code";
 import type { DagAgent, DagState, DagUi } from "../types";
 import { VIEWS, buildDagModel, parseGoalStatus, planKey, summarize } from "./dag-model.mjs";
 import { panelWidth } from "./dag-layout.mjs";
-import { formatSummary, messages, pickLocale, runningRows, textRows } from "./dag-text.mjs";
+import { detailSections, formatSummary, messages, pickLocale, runningRows, textRows } from "./dag-text.mjs";
 import { renderDagSvg } from "./dag-svg.mjs";
 import {
   MAIN_AGENT_ID,
@@ -34,6 +34,8 @@ type PendingAgentEvent =
 
 const PANE = "pota-dag";
 const TITLE = "Pota DAG";
+// A request the surface may ignore: about 450px, room for two cards side by side. A width the person dragged wins.
+const PANE_COLUMNS = 56;
 const POLL_MS = 30_000;
 const FLUSH_MS = 1_000;
 const RUNTIME_MISSING = "runtime-missing";
@@ -162,7 +164,7 @@ async function tick($: Engine): Promise<void> {
 async function openPane($: Engine) {
   // Always asked of the engine: an open id is only retitled, and the list can still call a pane placed
   // after the desktop app hid it, which left `/dag` answering "opened" with nothing shown.
-  const opened = await $.ui.open({ id: PANE, title: TITLE });
+  const opened = await $.ui.open({ id: PANE, title: TITLE, columns: PANE_COLUMNS });
   startPoll($);
   return opened;
 }
@@ -339,7 +341,8 @@ export const register: Register = on => {
     try {
       scheduleFlush($);
       if (goal !== null && goal.mutates && ran.deny === undefined && ran.isError !== true) {
-        if (goal.root !== null && isAbsolutePath(goal.root)) observedRoot = goal.root;
+        // A command without an absolute --root ran in the session's own repository, so an earlier root does not stick.
+        observedRoot = goal.root !== null && isAbsolutePath(goal.root) ? goal.root : null;
         if (goal.planned) planned = true;
         void requestRefresh($, "goal").catch(ignore);
       }
@@ -459,7 +462,9 @@ export const register: Register = on => {
       );
     }
     const agentTask = resolveAgentTasks(agents, snapshot.tasks);
-    const rows = runningRows(snapshot, agentTask, agents, ctx);
+    // Where sizes and borders draw, the sections are framed; a text-only surface gets the same as rows.
+    const sections = drawsSvg ? detailSections(snapshot, agentTask, agents, ctx) : null;
+    const rows = sections === null ? runningRows(snapshot, agentTask, agents, ctx) : [];
     const goalState = state.ended !== null
       ? words.ended[state.ended.status]
       : snapshot.status !== "active" ? words.goalStatus[snapshot.status] : null;
@@ -475,11 +480,10 @@ export const register: Register = on => {
           <Text dimColor>{summaryText ?? ""}</Text>
         </Box>
         <Box flexDirection="row" columnGap={1} flexWrap="wrap">
-          {VIEWS.map((view, index) => (
+          {VIEWS.map(view => (
             <Button
               key={`view-${view}`}
               label={words.views[view]}
-              hotkey={String(index + 1)}
               {...(ui.view === view ? { variant: "primary" as const } : {})}
               onPress={() => void setView($, view).catch(ignore)}
             />
@@ -490,6 +494,64 @@ export const register: Register = on => {
         {rows.length > 0 && (
           <Box flexDirection="column">
             {rows.map(row => <Text bold={row.bold === true} {...toneProps(row.tone)}>{row.text}</Text>)}
+          </Box>
+        )}
+        {sections !== null && sections.running.length > 0 && (
+          <Box flexDirection="column" borderStyle="round" borderColor="suggestion" paddingX={1} rowGap={1}>
+            <Text size="caption" weight="semibold" color="suggestion">{words.state.active}</Text>
+            {sections.running.map(task => (
+              <Box key={`run-${task.id}`} flexDirection="column">
+                <Box flexDirection="row" justifyContent="space-between" columnGap={1}>
+                  <Text weight="semibold" wrap="truncate-end">{task.title}</Text>
+                  <Text size="footnote" dimColor>{task.elapsed}</Text>
+                </Box>
+                <Text size="footnote" dimColor wrap="truncate-end">
+                  {[task.who, task.calls > 0 ? words.calls(task.calls) : ""].filter(Boolean).join(" · ")}
+                </Text>
+                {task.activity.length > 0 && <Text size="footnote" mono wrap="truncate-end">{task.activity}</Text>}
+                {task.evidence.length > 0 && (
+                  <Box flexDirection="row" flexWrap="wrap" columnGap={1}>
+                    {task.evidence.map(item => (
+                      <Text size="caption" {...(item.done ? { color: "success" } : { dimColor: true })}>
+                        {item.done ? "●" : "○"} {item.kind}
+                      </Text>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            ))}
+          </Box>
+        )}
+        {sections !== null && sections.blocked.length > 0 && (
+          <Box flexDirection="column" borderStyle="round" borderColor="error" paddingX={1}>
+            <Text size="caption" weight="semibold" color="error">{words.state.blocked}</Text>
+            {sections.blocked.map(task => (
+              <Box key={`blocked-${task.id}`} flexDirection="column">
+                <Text weight="semibold" wrap="truncate-end">{task.title}</Text>
+                {task.reason.length > 0 && <Text size="footnote" color="error">{task.reason}</Text>}
+              </Box>
+            ))}
+          </Box>
+        )}
+        {sections !== null && sections.next.length > 0 && (
+          <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
+            <Text size="caption" weight="semibold" dimColor>{words.nextUp}</Text>
+            {sections.next.map(task => (
+              <Box key={`next-${task.id}`} flexDirection="row" columnGap={1}>
+                <Text {...(task.waits.length > 0 ? { dimColor: true } : { color: "warning" })}>○</Text>
+                <Text wrap="truncate-end">{task.title}</Text>
+                {task.waits.length > 0 && <Text size="footnote" dimColor wrap="truncate-end">← {task.waits.join(", ")}</Text>}
+              </Box>
+            ))}
+            {sections.more > 0 && <Text size="footnote" dimColor>{words.more(sections.more)}</Text>}
+          </Box>
+        )}
+        {sections !== null && sections.strays.length > 0 && (
+          <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
+            <Text size="caption" weight="semibold" dimColor>{words.others}</Text>
+            {sections.strays.map(agent => (
+              <Text size="footnote" dimColor wrap="truncate-end">{[agent.name, agent.activity].filter(Boolean).join(" · ")}</Text>
+            ))}
           </Box>
         )}
         {failure !== null && <Text dimColor>{failure}</Text>}

@@ -36,7 +36,10 @@ const MESSAGES = {
     writeScope: "범위",
     model: "모델",
     calls: (count) => `${count}회`,
-    readyList: "준비됨: ",
+    remaining: "남은 증거: ",
+    nextUp: "다음 차례",
+    others: "기타 에이전트",
+    more: (count) => `+${count}개`,
     awaitingFinish: "goal finish 대기",
     hiddenAfter: (count) => `+${count}개는 전체 보기에서`,
     omitted: (count) => `+${count}개 task 생략`,
@@ -69,7 +72,10 @@ const MESSAGES = {
     writeScope: "scope",
     model: "model",
     calls: (count) => `${count} ${count === 1 ? "call" : "calls"}`,
-    readyList: "Ready: ",
+    remaining: "Evidence left: ",
+    nextUp: "Next up",
+    others: "Other agents",
+    more: (count) => `+${count} more`,
     awaitingFinish: "awaiting goal finish",
     hiddenAfter: (count) => `+${count} more in All`,
     omitted: (count) => `+${count} tasks omitted`,
@@ -189,9 +195,53 @@ export function cardLines(node, ctx) {
   return { title: task.title, status, meta: roleLine(task, " · "), progress, tooltip };
 }
 
+const NEXT_UP_LIMIT = 5;
+
 /**
- * Rows under the graph: running tasks with their agent's latest call, blocked and ready tasks,
- * and running agents no task could be matched to.
+ * What sits under the graph, as data: running tasks with their agent's latest call and each evidence kind,
+ * blocked tasks, what is next with what it waits on, and running agents no task could be matched to.
+ * @param {DagSnapshot} snapshot
+ * @param {Record<string, string>} agentTask
+ * @param {DagAgent[]} agents
+ * @param {TextContext} ctx
+ */
+export function detailSections(snapshot, agentTask, agents, ctx) {
+  const byRecent = (a, b) => (a.status === b.status ? b.activityAt - a.activityAt : a.status === "running" ? -1 : 1);
+  const running = snapshot.tasks.filter((item) => item.status === "active").map((task) => {
+    const since = ctx.timeline?.[task.id]?.activeAt ?? (task.updatedAt > 0 ? task.updatedAt : undefined);
+    const agent = agents.filter((item) => agentTask[item.id] === task.id).sort(byRecent)[0];
+    const who = agent
+      ? agent.id === "main" ? "main" : `@${agent.name ?? task.assignedAgentId ?? agent.id.slice(0, 8)}`
+      : task.assignedAgentId ? `@${task.assignedAgentId}` : "main";
+    return {
+      id: task.id,
+      title: task.title,
+      who,
+      activity: agent?.activity ?? "",
+      calls: agent?.calls ?? 0,
+      elapsed: since !== undefined && ctx.minute > 0 ? formatElapsed(ctx.minute - since, ctx.locale) : "",
+      evidence: task.requiredEvidence.map((kind) => ({ kind, done: task.evidence.includes(kind) })),
+    };
+  });
+  const blocked = snapshot.tasks.filter((item) => item.status === "blocked")
+    .map((task) => ({ id: task.id, title: task.title, reason: task.blocker ?? "" }));
+  const byId = new Map(snapshot.tasks.map((item) => [item.id, item]));
+  // Next up: pending tasks whose dependencies are all done or running, with what each one waits on.
+  const settled = (dep) => !byId.has(dep) || byId.get(dep).status === "completed";
+  const upcoming = snapshot.tasks.filter((item) => item.status === "pending"
+    && item.dependsOn.every((dep) => settled(dep) || byId.get(dep).status === "active"));
+  const next = upcoming.slice(0, NEXT_UP_LIMIT).map((task) => ({
+    id: task.id,
+    title: task.title,
+    waits: task.dependsOn.filter((dep) => !settled(dep)).map((dep) => byId.get(dep).title),
+  }));
+  const strays = agents.filter((item) => item.status === "running" && item.id !== "main" && agentTask[item.id] === undefined)
+    .map((agent) => ({ id: agent.id, name: agent.name ?? (agent.description || agent.id.slice(0, 8)), activity: agent.activity }));
+  return { running, blocked, next, more: Math.max(0, upcoming.length - NEXT_UP_LIMIT), strays };
+}
+
+/**
+ * The same sections as plain rows, for a surface that draws only text.
  * @param {DagSnapshot} snapshot
  * @param {Record<string, string>} agentTask
  * @param {DagAgent[]} agents
@@ -200,33 +250,23 @@ export function cardLines(node, ctx) {
  */
 export function runningRows(snapshot, agentTask, agents, ctx) {
   const words = messages(ctx.locale);
+  const sections = detailSections(snapshot, agentTask, agents, ctx);
   /** @type {Row[]} */
   const rows = [];
-  const byRecent = (a, b) => (a.status === b.status ? b.activityAt - a.activityAt : a.status === "running" ? -1 : 1);
-  for (const task of snapshot.tasks.filter((item) => item.status === "active")) {
+  for (const task of sections.running) {
     rows.push({ text: `● ${task.title}`, tone: "run", bold: true });
-    const since = ctx.timeline?.[task.id]?.activeAt ?? (task.updatedAt > 0 ? task.updatedAt : undefined);
-    const elapsed = since !== undefined && ctx.minute > 0 ? formatElapsed(ctx.minute - since, ctx.locale) : null;
-    const agent = agents.filter((item) => agentTask[item.id] === task.id).sort(byRecent)[0];
-    const label = agent
-      ? agent.id === "main" ? "main" : `@${agent.name ?? task.assignedAgentId ?? agent.id.slice(0, 8)}`
-      : task.assignedAgentId ? `@${task.assignedAgentId}` : "main";
-    const parts = [label];
-    if (agent?.activity) parts.push(agent.activity);
-    if (agent && agent.calls > 0) parts.push(words.calls(agent.calls));
-    if (elapsed) parts.push(elapsed);
+    const parts = [task.who, task.activity, task.calls > 0 ? words.calls(task.calls) : "", task.elapsed].filter(Boolean);
     rows.push({ text: `  ${parts.join(" · ")}`, tone: "dim" });
+    const left = task.evidence.filter((item) => !item.done).map((item) => item.kind);
+    if (left.length > 0) rows.push({ text: `  ${words.remaining}${left.join(", ")}`, tone: "dim" });
   }
-  for (const task of snapshot.tasks.filter((item) => item.status === "blocked")) {
-    rows.push({ text: `! ${task.title} — ${task.blocker ?? words.state.blocked}`, tone: "bad" });
+  for (const task of sections.blocked) rows.push({ text: `! ${task.title} — ${task.reason || words.state.blocked}`, tone: "bad" });
+  if (sections.next.length > 0) rows.push({ text: words.nextUp, tone: "dim", bold: true });
+  for (const task of sections.next) {
+    rows.push({ text: `○ ${task.title}${task.waits.length > 0 ? ` ← ${task.waits.join(", ")}` : ""}`, tone: task.waits.length > 0 ? "plain" : "ready" });
   }
-  const byId = new Map(snapshot.tasks.map((item) => [item.id, item]));
-  const ready = snapshot.tasks.filter((item) => item.status === "pending" && item.dependsOn.every((dep) => !byId.has(dep) || byId.get(dep).status === "completed"));
-  if (ready.length > 0) rows.push({ text: `○ ${words.readyList}${ready.map((item) => item.id).join(", ")}`, tone: "ready" });
-  for (const agent of agents.filter((item) => item.status === "running" && item.id !== "main" && agentTask[item.id] === undefined)) {
-    const name = agent.name ?? (agent.description || agent.id.slice(0, 8));
-    rows.push({ text: `◦ ${[name, agent.activity].filter(Boolean).join(" · ")}`, tone: "dim" });
-  }
+  if (sections.more > 0) rows.push({ text: `  ${words.more(sections.more)}`, tone: "dim" });
+  for (const agent of sections.strays) rows.push({ text: `◦ ${[agent.name, agent.activity].filter(Boolean).join(" · ")}`, tone: "dim" });
   return rows;
 }
 
