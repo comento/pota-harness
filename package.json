@@ -39,7 +39,7 @@
     "README.*.md"
   ],
   "scripts": {
-    "check": "node --check scripts/pota.mjs && node --check scripts/pota-paths.mjs && node --check scripts/pota-safe-fs.mjs && node --check scripts/pota-goal.mjs && node --check scripts/pota-state.mjs && node --check scripts/pota-cleanup.mjs && node --check scripts/pota-lifecycle.mjs && node --check scripts/pota-lifecycle-layout.mjs && node --check scripts/pota-lifecycle-hosts.mjs && node --check scripts/pota-update-state.mjs && node --check scripts/pota-auto-upgrade.mjs && node --check scripts/pota-toolcheck.mjs && node -e \"JSON.parse(require('node:fs').readFileSync('package.json','utf8')); JSON.parse(require('node:fs').readFileSync('.codex-plugin/plugin.json','utf8')); JSON.parse(require('node:fs').readFileSync('hooks/hooks.json','utf8'))\" && npm test",
+    "check": "node --check scripts/pota.mjs && node --check scripts/pota-paths.mjs && node --check scripts/pota-safe-fs.mjs && node --check scripts/pota-goal.mjs && node --check scripts/pota-state.mjs && node --check scripts/pota-cleanup.mjs && node --check scripts/pota-lifecycle.mjs && node --check scripts/pota-lifecycle-layout.mjs && node --check scripts/pota-lifecycle-hosts.mjs && node --check scripts/pota-update-state.mjs && node --check scripts/pota-auto-upgrade.mjs && node --check scripts/pota-comment-checker.mjs && node --check scripts/pota-toolcheck.mjs && node -e \"JSON.parse(require('node:fs').readFileSync('package.json','utf8')); JSON.parse(require('node:fs').readFileSync('.codex-plugin/plugin.json','utf8')); JSON.parse(require('node:fs').readFileSync('hooks/hooks.json','utf8'))\" && npm test",
     "test": "node --test",
     "prepack": "npm run check"
   },

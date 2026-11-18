@@ -12,6 +12,7 @@ import {
   OWNERSHIP_SCHEMA_VERSION, RETAINED_RUNTIME_GRACE_MS, RETAINED_RUNTIME_IDS, RETAINED_RUNTIME_LIMIT,
   compareVersions,
 } from "./pota-lifecycle-integrity.mjs";
+import { commentCheckerStatusLine } from "./pota-comment-checker.mjs";
 import { AUTO_UPGRADE_EXIT } from "./pota-update-state.mjs";
 
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -370,6 +371,8 @@ async function doctor() {
     checks.push(["Antigravity CLI skill validation", await validateAntigravitySkills(antigravityCliHome, skillNames(), runtimeRoot)]);
   }
   for (const [name, ok] of checks) console.log(`${ok ? "OK" : "FAIL"} ${name}`);
+  // Informational: the checker is fetched in the background, so its absence never fails doctor.
+  console.log(commentCheckerStatusLine(process.env));
   if (checks.some(([, ok]) => !ok)) process.exitCode = 1;
 }
 

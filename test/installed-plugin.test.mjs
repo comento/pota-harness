@@ -232,6 +232,8 @@ function isolatedEnvironment(temp) {
   return {
     ...process.env,
     POTA_HOME: join(temp, "Pota Home"),
+    // Hooks run from an installed runtime would otherwise start a real comment-checker download.
+    POTA_COMMENT_CHECKER: "0",
     CODEX_HOME: join(temp, "Codex Home"),
     CLAUDE_HOME: join(temp, "Claude Home"),
     POTA_CLAUDE_CLI: fakeClaudeCli,

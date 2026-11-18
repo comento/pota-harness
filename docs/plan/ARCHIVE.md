@@ -2,6 +2,7 @@
 
 Older completed plan entries moved from `PLAN.md` by `pota plan index --archive`. Newest first.
 
+- [Pota 0.2.3 릴리스](release-0.2.3.md): dev/main PR 승격, npm 배포, npm 설치본 재설치와 실제 upgrade smoke 증거를 갱신하고 goal을 명시적으로 완료했습니다.
 - [경로별 추론 강도 라우팅](path-reasoning-effort-routing.md): 모델은 상속하고 Light=`medium`, Heavy=`high`, 최종 검토=`xhigh`를 task별로 적용하며 경로 변경 시 effort profile 등을 재계산합니다.
 - [단계별 복잡도 재평가](staged-complexity-reassessment.md): 요청·계획·코드 체크포인트에서 경로를 재평가하고 변경 시 plan artifact·goal task roadmap·Codex UI plan을 `goal replan`으로 동기화합니다.
 - [Pota 하네스 신뢰성 개선](harness-reliability-remediation.md): 상태 lock·검증 결속, lifecycle transaction과 교차 버전 rollback, 호스트 호환성, toolcheck·문서 계약을 보강(공식 plugin 경로 전환 제외).

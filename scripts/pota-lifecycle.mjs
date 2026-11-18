@@ -14,6 +14,7 @@ import { createIntegrity } from "./pota-lifecycle-integrity.mjs";
 import { HOSTS, isHostSelection, parseHostsOption, promptHosts } from "./pota-lifecycle-hosts.mjs";
 import { createLayout } from "./pota-lifecycle-layout.mjs";
 import { removeUpdateState } from "./pota-update-state.mjs";
+import { fetchAfterInstall, removeCommentCheckerTools } from "./pota-comment-checker.mjs";
 import {
   antigravityRuntimeLocatorPath, quoteShellArg, renderInstalledMirror as projectMirror,
 } from "./pota-lifecycle-mirror.mjs";
@@ -75,14 +76,24 @@ if (isCliEntry()) {
       // The prompt runs before any lock is taken so a waiting answer never blocks another lifecycle run.
       const hosts = requestedHosts ?? (command === "install" && await shouldPromptHosts() ? await promptHosts({ input: process.stdin, output: process.stdout, ko: localeFamily() === "ko" }) : null);
       await assertLifecycleMutationPaths(hosts);
-      await withLifecycleLocks(() => commands.install(command, { hosts, auto, allowDowngrade }), { afterRelease: pruneUninstallRoots });
+      // The comment-checker download runs after the commit and outside the lock: a failure keeps the installation and
+      // its exit code, and SessionStart retries it in the background.
+      await withLifecycleLocks(() => commands.install(command, { hosts, auto, allowDowngrade }), { afterRelease: async () => {
+        await pruneUninstallRoots();
+        const line = await fetchAfterInstall(process.env);
+        if (line) console.log(line);
+      } });
     } else if (command === "doctor") {
       await assertNoSymlinkAncestor(potaHomeRoot, lifecycleLockPath);
       await transaction.withLifecycleLock(commands.doctor, { timeoutMs: lifecycleLockTimeout(), afterRelease: pruneUninstallRoots });
     } else if (command === "uninstall") {
       await assertLifecycleMutationPaths(null);
-      // Auto-upgrade state goes with the installation; config.json and goal state stay.
-      await withLifecycleLocks(commands.uninstall, { afterRelease: async () => { await pruneUninstallRoots(); await removeUpdateState(process.env); } });
+      // Auto-upgrade state and the downloaded comment-checker go with the installation; config.json and goal state stay.
+      await withLifecycleLocks(commands.uninstall, { afterRelease: async () => {
+        await pruneUninstallRoots();
+        await removeUpdateState(process.env);
+        await removeCommentCheckerTools(process.env);
+      } });
     } else help();
   } catch (error) {
     console.error(`Pota lifecycle error: ${error.message}`);

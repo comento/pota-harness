@@ -755,6 +755,8 @@ async function withEnv(fn) {
   Object.assign(env, {
     HOME: join(temp, "home"),
     POTA_HOME: join(temp, "pota-home"),
+    // Hooks run from an installed runtime would otherwise start a real comment-checker download.
+    POTA_COMMENT_CHECKER: "0",
     CODEX_HOME: join(temp, "codex"),
     CLAUDE_HOME: join(temp, "claude"),
     POTA_CLAUDE_CLI: fakeClaudeCli,

@@ -150,8 +150,9 @@ const runtimeEntryRelativePaths = [
   join("scripts", "pota-toolcheck.mjs"),
   join("scripts", "pota-goal.mjs"),
   join("scripts", "pota-cleanup.mjs"),
-  // Spawned by path from the SessionStart hook, so it is an entrypoint of its own.
+  // Spawned by path from the SessionStart hook, so they are entrypoints of their own.
   join("scripts", "pota-auto-upgrade.mjs"),
+  join("scripts", "pota-comment-checker.mjs"),
 ];
 const localModuleSpecifier = /^(?:import|export)\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|[\w$]+)(?:\s*,\s*(?:\{[^}]*\}|\*\s+as\s+\w+))?\s+from\s+)?["'](\.[^"']+)["']/gm;
 

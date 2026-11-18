@@ -279,6 +279,8 @@ test("doctor waits for a concurrent lifecycle transaction before observing insta
   const env = {
     ...process.env,
     POTA_HOME: join(temp, "pota-home"),
+    // Lifecycle runs would otherwise download the real comment-checker after every install and upgrade.
+    POTA_COMMENT_CHECKER: "0",
     CODEX_HOME: join(temp, "codex"),
     CLAUDE_HOME: join(temp, "claude"),
     POTA_CLAUDE_CLI: fakeClaudeCli,
@@ -327,6 +329,8 @@ test("install doctor uninstall lifecycle uses isolated homes", async () => {
   const env = {
     ...process.env,
     POTA_HOME: join(temp, "pota-home"),
+    // Lifecycle runs would otherwise download the real comment-checker after every install and upgrade.
+    POTA_COMMENT_CHECKER: "0",
     CODEX_HOME: join(temp, "codex"),
     CLAUDE_HOME: join(temp, "claude"),
     POTA_CLAUDE_CLI: fakeClaudeCli,
@@ -1050,6 +1054,8 @@ function claudePluginEnv(temp) {
   return {
     ...process.env,
     POTA_HOME: join(temp, "pota-home"),
+    // Lifecycle runs would otherwise download the real comment-checker after every install and upgrade.
+    POTA_COMMENT_CHECKER: "0",
     CODEX_HOME: join(temp, "codex"),
     CLAUDE_HOME: join(temp, "claude"),
     POTA_CLAUDE_CLI: fakeClaudeCli,

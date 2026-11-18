@@ -133,8 +133,9 @@ Pota は install を `POTA_HOME`(既定 `~/.pota`)の下に置きます。host �
     codex/                  Codex local marketplace source
     claude/                 Claude Code local marketplace
   projects/                 goal state
-  config.json               user settings ("autoUpgrade")
+  config.json               user settings ("autoUpgrade", "commentChecker")
   update/                   auto-upgrade state
+  tools/comment-checker/    comment-checker バイナリ(固定 release)
 $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (Codex を選択した場合のみ)
 ```
 
@@ -143,6 +144,7 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (Codex 
 - Claude Code plugin cache: 別 version が残っていれば `pota upgrade` が `claude plugin marketplace update pota` と `claude plugin update pota@pota --scope user` で更新します。失敗した場合は upgrade 済みの install を残し、手動で完了する command を出力して exit 1 になります。
 - Auto-upgrade: 既定で有効です。`SessionStart` が 24 時間に 1 回まで(install・upgrade 直後の 24 時間は除く)detached process を起動し、npm の最新 `@comento/pota-harness` をその version 固定で `--ignore-scripts` 付きで `~/.pota/update/stage/` に install・検証してから、その package の `pota-lifecycle.mjs upgrade --auto` を実行します。major を含むすべての新しい version を適用し、downgrade はしません。次の `SessionStart` が結果(`updated`、`failed`、`manual`)を 1 行で 1 回だけ知らせます。git checkout からの install(`origin: "checkout"`)と source checkout からの実行では動作しません。
 - 無効化: `pota auto-upgrade off`、`POTA_AUTO_UPGRADE=0`(`false`、`off`、`no` も可)、または `~/.pota/config.json` の `"autoUpgrade": false`。読めない `config.json` も無効として扱います。状態と最後の実行 log は `~/.pota/update/` にあります。
+- コメントチェック: 編集が成功すると(Claude Code `Write`/`Edit`/`MultiEdit`、Codex `apply_patch` と編集ツール)、PostToolUse hook が変更内容を [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker)(MIT)で検査します。不要なコメントが報告されると `decision: "block"` を返し、エージェントにコメントの削除か必要な理由の説明を求めます。npm 依存は追加しません。`pota install` と `pota upgrade`(自動アップグレードを含む)がインストールを commit した後、現在のプラットフォーム(darwin/linux x64・arm64、windows x64)用の固定 v0.8.2 release をダウンロードし、固定 SHA256 を検証して OS の `tar` で `~/.pota/tools/comment-checker/` に展開し、結果を 1 行で表示します。ダウンロードに失敗してもインストールと exit code はそのままで、インストール済み runtime の `SessionStart` が分離プロセスで backoff を置いて再試行します。ダウンロードが成功するまで編集は検査なしで通過し、チェッカーのエラーや 7 秒を超える検査も通過します。`pota doctor` が状態を 1 行で表示し、`pota uninstall` が削除します。`POTA_COMMENT_CHECKER=0`(`false`、`off`、`no` も可)または `~/.pota/config.json` の `"commentChecker": false` で検査とダウンロードを両方無効にします。
 
 ## Antigravity Compatibility
 
