@@ -38,7 +38,7 @@ pota toolcheck --root .
 pota toolcheck --install --yes --root .
 ```
 
-- `toolcheck`는 감지된 스택과 누락 도구를 보고합니다.
+- `toolcheck`는 감지된 스택과 누락 도구를 보고합니다. 누락 도구마다 제안 설치 명령이나 자동 설치가 불가능한 사유를 출력하고, 에이전트는 설치할지 한 번 묻습니다. 거부하거나 비대화형 실행이면 blocker로 기록합니다.
 - 기본 검사는 읽기 전용이고 timeout으로 제한되며, 저장소 로컬 wrapper를 단순 탐지를 위해 실행하지 않습니다.
 - `toolcheck --install`은 사용자의 명시적 승인과 `--yes`를 모두 요구합니다. 버전이 고정되지 않았거나 checksum이 없는 installer는 `latest`를 내려받는 대신 canonical `installer-unavailable` 거부 결과로 보고합니다.
 - Pota 계획은 감지된 스택, 필요한 도구, 설치 명령, blocker를 기록합니다.
