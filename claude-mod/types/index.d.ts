@@ -40,7 +40,10 @@ export type DagState = {
   ended: { status: 'completed' | 'cancelled' | 'unknown'; endedAt: number | null } | null
   error: string | null
   fetchedAt: number
+  /** The root the snapshot was read from. */
   root: string | null
+  /** The root of the session's own project root at that fetch. */
+  home: string | null
   timeline: Record<string, { activeAt?: number; completedAt?: number }>
 }
 

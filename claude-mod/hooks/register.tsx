@@ -7,19 +7,31 @@ import type { EngineInterface, Register } from "claude-code";
 import type { DagAgent, DagState, DagUi } from "../types";
 import { VIEWS, buildDagModel, parseGoalStatus, planKey, summarize } from "./dag-model.mjs";
 import { panelWidth } from "./dag-layout.mjs";
-import { detailSections, formatSummary, messages, pickLocale, runningRows, textRows } from "./dag-text.mjs";
+import { detailSections, formatSummary, messages, pickLocale, runningRows } from "./dag-text.mjs";
 import { renderDagSvg } from "./dag-svg.mjs";
+import { termGraph } from "./dag-term.mjs";
 import {
   MAIN_AGENT_ID,
+  ancestorPaths,
   describeToolCall,
   extractTaskMentions,
+  goalCommandTarget,
+  isAbsolutePath,
+  joinPath,
   nextRefreshDelay,
+  observeGoalCommand,
   parsePotaGoalCommand,
+  pickRoot,
+  rebaseDagState,
   reduceAgents,
   reduceDagState,
   resolveAgentTasks,
+  rootLabel,
+  samePath,
   shouldAutoOpen,
+  shouldCheckHome,
 } from "./dag-events.mjs";
+import type { Observation } from "./dag-events.mjs";
 
 type Engine = EngineInterface;
 type View = DagUi["view"];
@@ -47,8 +59,8 @@ const VIEW_ALIASES: Record<string, View> = {
 
 // Change a tag when that value's fields change: it declines what an earlier version stored.
 const dag = atom({ plugin: "pota", key: "dag" } as const, {
-  seq: 0, snapshot: null, ended: null, error: null, fetchedAt: 0, root: null, timeline: {},
-}, { shape: "dag-1" });
+  seq: 0, snapshot: null, ended: null, error: null, fetchedAt: 0, root: null, home: null, timeline: {},
+}, { shape: "dag-2" });
 const dagUi = atom({ plugin: "pota", key: "dagUi" } as const, {
   view: "current", epoch: 0, minute: 0, autoOpenedPlanKey: null, closedGoalId: null,
 }, { shape: "ui-1" });
@@ -63,8 +75,9 @@ let refreshing = false;
 let dirty: Reason | null = null;
 let lastRunAt = 0;
 let failures = 0;
-let planned = false;
-let observedRoot: string | null = null;
+let pending: Observation | null = null;
+// Goal commands are observed after their answer is handed on, one after another so `pending` folds in order.
+let observing: Promise<void> = Promise.resolve();
 let pollTimer: Timer | null = null;
 let flushTimer: Timer | null = null;
 let pendingAgentEvents: PendingAgentEvent[] = [];
@@ -72,7 +85,6 @@ let svgMemo: { key: string; value: ReturnType<typeof renderDagSvg> } | null = nu
 
 const minuteOf = (ms: number): number => Math.floor(ms / 60_000) * 60_000;
 const firstLine = (text: string): string => (text.split(/\r?\n/).find(line => line.trim().length > 0) ?? "").trim().slice(0, 200);
-const isAbsolutePath = (path: string): boolean => path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path);
 const ignore = (): undefined => undefined;
 
 async function localeOf($: Engine): Promise<Locale> {
@@ -112,9 +124,38 @@ async function findCli($: Engine): Promise<string | null> {
   return cli;
 }
 
+async function exists($: Engine, path: string): Promise<boolean> {
+  try {
+    return await $.fs.exists(path);
+  } catch {
+    return false;
+  }
+}
+
+/** The root the CLI would resolve for a directory: the same order as scripts/pota-paths.mjs, without git. */
+async function rootOf($: Engine, target: { dir: string; explicitRoot: string | null }): Promise<string> {
+  if (target.explicitRoot !== null) return target.explicitRoot;
+  let env: string | undefined;
+  try {
+    env = await $.env.get("HARNESS_REPO_ROOT");
+  } catch {
+    // Unknown: the .git lookup answers.
+  }
+  if (env !== undefined && env.length > 0) return joinPath(target.dir, env);
+  for (const path of ancestorPaths(target.dir)) {
+    if (await exists($, joinPath(path, ".git"))) return path;
+  }
+  return target.dir;
+}
+
+async function homeOf($: Engine): Promise<string> {
+  return rootOf($, { dir: await $.session.root(), explicitRoot: null });
+}
+
+// The root is always passed, so the CLI does not guess again from the cwd (a root without .git included).
 async function fetchStatus($: Engine, runtime: string, root: string): Promise<ReturnType<typeof parseGoalStatus>> {
   try {
-    const ran = await $.process.run(["node", runtime, "goal", "status"], { cwd: root, timeoutMs: 10_000 });
+    const ran = await $.process.run(["node", runtime, "goal", "status", "--root", root], { cwd: root, timeoutMs: 10_000 });
     if (ran.exitCode !== 0) return { snapshot: null, error: firstLine(ran.stderr) || `goal status exited ${ran.exitCode}` };
     return parseGoalStatus(ran.stdout);
   } catch (error) {
@@ -124,7 +165,7 @@ async function fetchStatus($: Engine, runtime: string, root: string): Promise<Re
 
 async function fetchRecent($: Engine, runtime: string, root: string): Promise<{ goalId?: string; status?: string; endedAt?: string | number | null }[]> {
   try {
-    const ran = await $.process.run(["node", runtime, "goal", "stats", "--history", "--limit", "5"], { cwd: root, timeoutMs: 10_000 });
+    const ran = await $.process.run(["node", runtime, "goal", "stats", "--history", "--limit", "5", "--root", root], { cwd: root, timeoutMs: 10_000 });
     const parsed = JSON.parse(ran.stdout) as { recent?: unknown };
     return Array.isArray(parsed.recent) ? parsed.recent : [];
   } catch {
@@ -158,7 +199,9 @@ async function tick($: Engine): Promise<void> {
   const now = await $.clock.now();
   const minute = minuteOf(now);
   if ((await read($, dagUi)).minute !== minute) await update($, dagUi, ui => ({ ...ui, minute, epoch: now }));
-  if ((await read($, dag)).ended === null) await requestRefresh($, "poll");
+  const state = await read($, dag);
+  // An ended goal is not polled, unless the session moved: the new home may hold a live one.
+  if (state.ended === null || !samePath(state.home, await homeOf($))) await requestRefresh($, "poll");
 }
 
 async function openPane($: Engine) {
@@ -191,29 +234,46 @@ async function requestRefresh($: Engine, reason: Reason): Promise<void> {
 
 async function runRefresh($: Engine): Promise<void> {
   refreshing = true;
-  const wantsOpen = planned;
-  planned = false;
+  const observation = pending;
+  pending = null;
   try {
     const now = await $.clock.now();
     lastRunAt = now;
     const prev = await read($, dag);
     const runtime = await findCli($);
     let next: DagState;
+    let root: string | null = null;
     if (runtime === null) {
       failures += 1;
       next = { ...prev, error: RUNTIME_MISSING, fetchedAt: now };
     } else {
-      const root = observedRoot ?? prev.root ?? (await $.session.root());
-      const fetched = await fetchStatus($, runtime, root);
-      const needsEnding = fetched.snapshot === null && fetched.error === null && prev.snapshot !== null && prev.ended === null;
+      const home = await homeOf($);
+      const observed = observation?.root ?? null;
+      root = pickRoot({ observed, prev, home });
+      // A followed worktree that was removed falls back to home instead of failing on every poll.
+      if (!samePath(root, home) && !(await exists($, root))) root = home;
+      let fetched: ReturnType<typeof parseGoalStatus> | null = null;
+      if (shouldCheckHome({ observed, prev, root, home })) {
+        const atHome = await fetchStatus($, runtime, home);
+        if (atHome.snapshot !== null) {
+          root = home;
+          fetched = atHome;
+        }
+      }
+      const base = rebaseDagState(prev, { root, home });
+      // A new root starts without the old root's backoff.
+      if (!samePath(prev.root, root)) failures = 0;
+      fetched ??= await fetchStatus($, runtime, root);
+      const needsEnding = fetched.snapshot === null && fetched.error === null && base.snapshot !== null && base.ended === null;
       const recent = needsEnding ? await fetchRecent($, runtime, root) : undefined;
-      next = { ...reduceDagState(prev, { ...fetched, now, recent }), root };
+      next = reduceDagState(base, { ...fetched, now, recent });
       failures = fetched.error === null ? 0 : failures + 1;
     }
     await update($, dag, () => next);
     if (next.seq !== prev.seq) await update($, dagUi, ui => ({ ...ui, epoch: now, minute: minuteOf(now) }));
     const snapshot = next.snapshot;
-    if (wantsOpen && snapshot !== null) {
+    // A plan seen at another root than the one read does not open this one's goal.
+    if (observation?.planned === true && root !== null && (observation.root === null || samePath(observation.root, root)) && snapshot !== null) {
       const ui = await read($, dagUi);
       if (shouldAutoOpen({ planned: true, snapshot, ui, paneOpen: (await paneOf($)) !== undefined })) {
         await update($, dagUi, current => ({ ...current, autoOpenedPlanKey: planKey(snapshot), epoch: now, minute: minuteOf(now) }));
@@ -221,6 +281,10 @@ async function runRefresh($: Engine): Promise<void> {
       }
     }
     await syncAgents($);
+  } catch (error) {
+    // The next run gets the observation again, so a planned open is not lost.
+    pending ??= observation;
+    throw error;
   } finally {
     refreshing = false;
     if (dirty !== null) {
@@ -331,19 +395,47 @@ export const register: Register = on => {
 
   on("tool.call", async ($, e, next) => {
     let goal: ReturnType<typeof parsePotaGoalCommand> = null;
+    let command: string | null = null;
+    let cwd: string | null = null;
     try {
-      if (e.tool === "Bash" && typeof e.command === "string") goal = parsePotaGoalCommand(e.command);
+      if (e.tool === "Bash" && typeof e.command === "string") {
+        command = e.command;
+        goal = parsePotaGoalCommand(command);
+      }
       pendingAgentEvents.push({ type: "call", id: e.agentId ?? MAIN_AGENT_ID, activity: describeToolCall(e as unknown as Record<string, unknown>) });
     } catch {
       // Observation only: the call goes on untouched.
     }
+    if (goal !== null && goal.mutates) {
+      // Read in the hook: a subagent's own directory, which a later timer would read as the session's.
+      try {
+        const dir = await $.session.cwd();
+        cwd = isAbsolutePath(dir) ? dir : null;
+      } catch {
+        // Unknown: the command's root stays unknown.
+      }
+    }
     const ran = await next(e);
     try {
       scheduleFlush($);
-      if (goal !== null && goal.mutates && ran.deny === undefined && ran.isError !== true) {
-        // A command without an absolute --root ran in the session's own repository, so an earlier root does not stick.
-        observedRoot = goal.root !== null && isAbsolutePath(goal.root) ? goal.root : null;
-        if (goal.planned) planned = true;
+      const ok = ran.deny === undefined && ran.isError !== true;
+      if (goal !== null && goal.mutates && ok && command !== null) {
+        const planned = goal.planned;
+        const isSubagent = e.agentId !== undefined;
+        const at = command;
+        // Detached: the file checks below must not hold up the tool's answer.
+        observing = observing.then(async () => {
+          const target = cwd === null ? null : goalCommandTarget(at, cwd);
+          const root = target === null ? null : await rootOf($, target);
+          const shown = (await read($, dag)).root ?? (await homeOf($));
+          const observed = observeGoalCommand({ pending, shown, root, planned, isSubagent });
+          if (observed !== null) {
+            pending = observed;
+            await requestRefresh($, "goal");
+          }
+        }).catch(ignore);
+      } else if ((e.tool === "EnterWorktree" || e.tool === "ExitWorktree") && e.agentId === undefined && ok) {
+        // The session's root moved; no engine event says so.
         void requestRefresh($, "goal").catch(ignore);
       }
     } catch {
@@ -415,6 +507,9 @@ export const register: Register = on => {
     const summary = snapshot === null ? null : summarize(snapshot);
     const summaryText = summary === null ? null : formatSummary(summary, ctx);
     const failure = state.error !== null && state.error !== RUNTIME_MISSING ? `${words.refreshFailed}${state.error}` : null;
+    const otherRoot = state.root !== null && state.home !== null && !samePath(state.root, state.home)
+      ? <Text color="warning" wrap="truncate-end">{words.otherRoot(rootLabel(state.root))}</Text>
+      : null;
 
     if (e.props.placement === "widget") {
       return (
@@ -432,6 +527,7 @@ export const register: Register = on => {
       return (
         <Box flexDirection="column" gap={1}>
           <Text bold>{TITLE}</Text>
+          {otherRoot}
           <Text dimColor>{line}</Text>
           {failure !== null && <Text dimColor>{failure}</Text>}
           <Box flexDirection="row">
@@ -455,9 +551,14 @@ export const register: Register = on => {
       // while the image form draws the cards and runs the SMIL and CSS animation.
       graph = <Svg source={svgMemo.value.source} alt={svgMemo.value.alt} />;
     } else {
+      // One measured line per row: the gaps between boxes survive, and a width Ink counts otherwise ends in "…".
       graph = (
         <Box flexDirection="column">
-          {textRows(model, ctx, columns).map(row => <Text bold={row.bold === true} {...toneProps(row.tone)}>{row.text}</Text>)}
+          {termGraph(model, ctx, { columns }).rows.map(row => (
+            <Text wrap="truncate-end">
+              {row.map(span => <Text bold={span.bold === true} {...toneProps(span.tone)}>{span.text}</Text>)}
+            </Text>
+          ))}
         </Box>
       );
     }
@@ -476,6 +577,7 @@ export const register: Register = on => {
             <Text bold>{snapshot.title}</Text>
             {goalState !== null && <Text {...toneProps(state.ended?.status === "completed" ? "ok" : "dim")}>{goalState}</Text>}
           </Box>
+          {otherRoot}
           {snapshot.blocker !== null && <Text color="error">! {snapshot.blocker}</Text>}
           <Text dimColor>{summaryText ?? ""}</Text>
         </Box>

@@ -409,6 +409,7 @@ test("PostToolUse emits pure Codex hook JSON with additionalContext", async () =
       cwd: root,
       input: JSON.stringify({ cwd: root, tool_name: "exec_command" }),
       encoding: "utf8",
+      env: { ...process.env, LC_ALL: "en_US.UTF-8" },
     });
     assert.equal(idle.status, 0, idle.stderr);
     assert.deepEqual(JSON.parse(idle.stdout), {}, "PostToolUse must not add context without an active goal");
@@ -418,6 +419,7 @@ test("PostToolUse emits pure Codex hook JSON with additionalContext", async () =
       cwd: root,
       input: JSON.stringify({ cwd: root, tool_name: "exec_command" }),
       encoding: "utf8",
+      env: { ...process.env, LC_ALL: "en_US.UTF-8" },
     });
     assert.equal(result.status, 0, result.stderr);
     const output = JSON.parse(result.stdout);

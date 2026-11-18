@@ -32,6 +32,7 @@ test("packed install remains self-contained after the npm package source is remo
   const unrelated = join(temp, "unrelated cwd");
   const env = {
     ...process.env,
+    LC_ALL: "en_US.UTF-8",
     POTA_HOME: join(temp, "Pota Home"),
     // Lifecycle runs would otherwise download the real comment-checker after every install and upgrade.
     POTA_COMMENT_CHECKER: "0",

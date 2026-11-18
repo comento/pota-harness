@@ -37,6 +37,214 @@ export function parsePotaGoalCommand(command) {
   };
 }
 
+// Paths are plain strings here: both separators, and drive or UNC prefixes, since the pane runs on Windows too.
+const PATH_PREFIX = /^(?:\\\\|[A-Za-z]:[\\/]|\/)/;
+// A UNC path's prefix runs to the share: `..` never climbs to the server.
+const UNC_PREFIX = /^\\\\[^\\/]+(?:[\\/]+[^\\/]+)?/;
+
+/** @param {string} path */
+export function isAbsolutePath(path) {
+  return PATH_PREFIX.test(String(path ?? ""));
+}
+
+/** @param {string} path */
+function splitPath(path) {
+  const text = String(path ?? "");
+  const prefix = text.match(UNC_PREFIX)?.[0] ?? text.match(PATH_PREFIX)?.[0] ?? "";
+  const sep = text.includes("\\") && !text.includes("/") ? "\\" : "/";
+  return { prefix, sep, parts: text.slice(prefix.length).split(/[\\/]+/).filter(Boolean) };
+}
+
+/** `..` never climbs above the prefix. */
+function formatPath({ prefix, sep, parts }) {
+  /** @type {string[]} */
+  const kept = [];
+  for (const part of parts) {
+    if (part === "..") kept.pop();
+    else if (part !== ".") kept.push(part);
+  }
+  if (prefix.length > 2 && prefix.startsWith("\\\\")) return kept.length === 0 ? prefix : `${prefix}${sep}${kept.join(sep)}`;
+  const head = /^[A-Za-z]:/.test(prefix) ? `${prefix.slice(0, 2)}${sep}` : prefix;
+  return `${head}${kept.join(sep)}` || ".";
+}
+
+/**
+ * `path` resolved against `base`; an absolute `path` wins. No trailing separator.
+ * @param {string} base
+ * @param {string} path
+ */
+export function joinPath(base, path) {
+  if (isAbsolutePath(path)) return formatPath(splitPath(path));
+  const at = splitPath(base);
+  return formatPath({ ...at, parts: [...at.parts, ...splitPath(path).parts] });
+}
+
+/**
+ * Same place after normalizing; drive and UNC paths compare without case. Null on either side is never the same.
+ * @param {string | null | undefined} a
+ * @param {string | null | undefined} b
+ */
+export function samePath(a, b) {
+  if (a == null || b == null) return false;
+  const key = (path) => {
+    const value = joinPath(path, ".").replace(/\\/g, "/");
+    return /^(?:[A-Za-z]:|\/\/)/.test(value) ? value.toLowerCase() : value;
+  };
+  return key(a) === key(b);
+}
+
+/**
+ * The path, then each parent up to the root.
+ * @param {string} path
+ */
+export function ancestorPaths(path) {
+  const at = splitPath(joinPath(path, "."));
+  const list = [];
+  for (let count = at.parts.length; count >= 0; count -= 1) {
+    if (count === 0 && at.prefix === "") break;
+    list.push(formatPath({ ...at, parts: at.parts.slice(0, count) }));
+  }
+  return list;
+}
+
+/**
+ * The last two segments with `/` separators, or the whole path when it has two or fewer.
+ * @param {string} root
+ */
+export function rootLabel(root) {
+  const at = splitPath(joinPath(root, "."));
+  if (at.parts.length <= 2) return formatPath({ ...at, sep: "/" });
+  return `…/${at.parts.slice(-2).join("/")}`;
+}
+
+const SHELL_VALUE = String.raw`("[^"]*"|'[^']*'|[^\s;&|()]+)`;
+const CHANGE_DIR = new RegExp(String.raw`(?:^|&&|;|\(|\n)\s*(?:cd|pushd)(?=[\s;&|)]|$)[^\S\n]*${SHELL_VALUE}?`, "g");
+const ROOT_IN_CALL = new RegExp(String.raw`(?:^|\s)--root(?:=|\s+)${SHELL_VALUE}`, "g");
+const ROOT_IN_ENV = new RegExp(String.raw`(?:^|[\s;&|(])HARNESS_REPO_ROOT=${SHELL_VALUE}`, "g");
+const ROOT_EXPORTED = new RegExp(String.raw`(?:^|[\s;&|(])export\s+HARNESS_REPO_ROOT=${SHELL_VALUE}`, "g");
+const CALL_END = /&&|\|\||;|\||\n/g;
+const SEGMENT_START = /&&|\|\||;|\||\(|\n/g;
+
+/**
+ * Whether `index` sits inside a quoted string of `text`, read from the start of the line.
+ * @param {string} text
+ * @param {number} index
+ */
+function inQuotes(text, index) {
+  let quote = "";
+  for (let at = 0; at < index; at += 1) {
+    const char = text[at];
+    if (quote === "'") {
+      if (char === "'") quote = "";
+    } else if (char === "\\") {
+      at += 1;
+    } else if (char === quote) {
+      quote = "";
+    } else if (quote === "" && (char === '"' || char === "'")) {
+      quote = char;
+    }
+  }
+  return quote !== "";
+}
+
+/**
+ * Where the first goal-changing call runs: the directory after the `cd`/`pushd` steps before it, and
+ * its `--root` or `HARNESS_REPO_ROOT` resolved there. Null when any of these cannot be read statically:
+ * a wrong root is worse than none.
+ * @param {string} command
+ * @param {string} cwd
+ * @returns {{ dir: string, explicitRoot: string | null } | null}
+ */
+export function goalCommandTarget(command, cwd) {
+  const text = String(command ?? "");
+  if (!isAbsolutePath(cwd)) return null;
+  const mutating = (pattern) => [...text.matchAll(pattern)].find((match) => MUTATING_SUBS.has(match[1]));
+  // Same fallback as parsePotaGoalCommand: a CLI path held in a shell variable.
+  const call = mutating(GOAL_COMMAND) ?? (/\bpota\b/.test(text) ? mutating(VARIABLE_GOAL_COMMAND) : undefined);
+  if (!call) return null;
+  const value = (token) => {
+    if (token === undefined) return null;
+    const quoted = /^(["']).*\1$/s.test(token);
+    const plain = quoted ? token.slice(1, -1) : token;
+    if (/[$`*?"']/.test(plain) || plain.startsWith("~") || plain === "-") return null;
+    if (!quoted && cwd.startsWith("/") && plain.includes("\\")) return null;
+    return plain;
+  };
+  const outside = (pattern, from, to) => [...text.matchAll(pattern)]
+    .filter((match) => match.index >= from && match.index < to && !inQuotes(text, match.index));
+  let dir = cwd;
+  for (const match of outside(CHANGE_DIR, 0, call.index)) {
+    const step = value(match[1]);
+    // `cd -P wt`: an option, and what follows it is not read.
+    if (step === null || step.startsWith("-")) return null;
+    dir = joinPath(dir, step);
+  }
+  const callEnd = outside(CALL_END, call.index + call[0].length, text.length)[0]?.index ?? text.length;
+  // HARNESS_REPO_ROOT reaches the call only as a prefix in its own segment, or exported before it.
+  const segment = /^[;&|(\n]/.test(call[0]) ? call.index : (outside(SEGMENT_START, 0, call.index).at(-1)?.index ?? 0);
+  const flag = outside(ROOT_IN_CALL, call.index, callEnd)[0]
+    ?? outside(ROOT_IN_ENV, segment, call.index).at(-1)
+    ?? outside(ROOT_EXPORTED, 0, call.index).at(-1);
+  if (!flag) return { dir, explicitRoot: null };
+  const root = value(flag[1]);
+  return root === null ? null : { dir, explicitRoot: joinPath(dir, root) };
+}
+
+/**
+ * `root` is null when the command's directory could not be read.
+ * @typedef {{ root: string | null, planned: boolean }} Observation
+ */
+
+/**
+ * What one goal command tells the pane, against the root it is about to read. Subagents never move
+ * the pane: parallel worktree agents would pull it back and forth. Null: ignore the command.
+ * @param {{ pending: Observation | null, shown: string, root: string | null, planned: boolean, isSubagent: boolean }} input
+ * @returns {Observation | null}
+ */
+export function observeGoalCommand({ pending, shown, root, planned, isSubagent }) {
+  const current = pending?.root ?? shown;
+  /** @type {Observation} */
+  let seen;
+  // An unknown directory says nothing about the root: taking `current` would pin the pane where the session left.
+  if (root === null) seen = { root: pending?.root ?? null, planned: isSubagent ? false : planned };
+  else if (!isSubagent || samePath(root, current)) seen = { root, planned };
+  else return null;
+  if (pending && seen.root !== null && samePath(pending.root, seen.root)) seen.planned = seen.planned || pending.planned;
+  return seen;
+}
+
+/**
+ * The root to read: an observed one, else the root followed so far while the session stays put and
+ * it still shows a goal (live or ended; see shouldCheckHome), else the session's own root.
+ * @param {{ observed: string | null, prev: { root: string | null, home?: string | null, snapshot: DagSnapshot | null, ended: DagState["ended"] } | null, home: string }} input
+ */
+export function pickRoot({ observed, prev, home }) {
+  if (observed) return observed;
+  if (prev?.root && samePath(prev.home, home) && (samePath(prev.root, home) || prev.snapshot !== null)) return prev.root;
+  return home;
+}
+
+/**
+ * Whether to read home before `root`: the goal at the followed root has ended and nothing newer was
+ * observed. A live goal at home then takes over; otherwise the ended goal stays shown, as it does at home.
+ * @param {{ observed: string | null, prev: { root: string | null, snapshot: DagSnapshot | null, ended: DagState["ended"] } | null, root: string, home: string }} input
+ */
+export function shouldCheckHome({ observed, prev, root, home }) {
+  return !observed && prev !== null && !samePath(root, home) && samePath(prev.root, root) && prev.snapshot !== null && prev.ended !== null;
+}
+
+/**
+ * The state to fold the next fetch into. Another root drops what was read from the old one and moves
+ * `seq` so the pane redraws.
+ * @param {DagState | null} prev
+ * @param {{ root: string, home: string }} at
+ * @returns {DagState}
+ */
+export function rebaseDagState(prev, { root, home }) {
+  if (!prev || prev.root === null || samePath(prev.root, root)) return { ...(prev ?? initialDagState()), root, home };
+  return { ...initialDagState(), seq: prev.seq + 1, root, home };
+}
+
 const LIMIT = 40;
 
 /** @param {string} text */
@@ -204,14 +412,14 @@ export function resolveAgentTasks(agents, tasks) {
  * @typedef {{
  *   seq: number, snapshot: DagSnapshot | null,
  *   ended: { status: "completed" | "cancelled" | "unknown", endedAt: number | null } | null,
- *   error: string | null, fetchedAt: number, root: string | null,
+ *   error: string | null, fetchedAt: number, root: string | null, home: string | null,
  *   timeline: Record<string, { activeAt?: number, completedAt?: number }>
  * }} DagState
  */
 
 /** @returns {DagState} */
 export function initialDagState() {
-  return { seq: 0, snapshot: null, ended: null, error: null, fetchedAt: 0, root: null, timeline: {} };
+  return { seq: 0, snapshot: null, ended: null, error: null, fetchedAt: 0, root: null, home: null, timeline: {} };
 }
 
 const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
