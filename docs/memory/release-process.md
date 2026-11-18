@@ -14,6 +14,7 @@ Summary: 버전 표면, dev→main PR 승격, exact-main tarball 게시와 npm �
 - `test/repo-index.test.mjs`가 이 저장소의 `PLAN.md`·`MEMORY.md`를 `--strict`로 검사한다. 계획을 완료 목록으로 옮길 때 요약은 120자 이하로 쓰고, 완료 항목이 20개를 넘으면 `pota plan index --archive`를 실행한다(0.7.0에서 `npm run check` 실패).
 - `npm run check`는 핵심 스크립트 `node --check`, JSON 파싱, `npm test`(`node --test`)를 실행한다. `prepack`이 `npm run check`라서 `npm pack`·`npm publish`도 전체 테스트를 돌린다. 로컬 pack 검증에 `--ignore-scripts`를 쓰지 않는다. 출처: `package.json` `scripts`.
 - CI(`.github/workflows/ci.yml`)는 ubuntu·windows·macos × Node 18·current 매트릭스에서 `npm run check`, CLI smoke, `toolcheck --json`, `npm pack --dry-run --ignore-scripts`를 실행한다. 여기서 `--ignore-scripts`는 같은 job에서 check가 이미 돌았기 때문이다. 브랜치 보호의 필수 상태는 요약 job `check` 하나다.
+- CI는 `toolcheck --json` 전에 `npm install --global typescript@5.9.3 typescript-language-server@4.4.1`을 실행한다. `claude-mod/`의 TypeScript 파일 때문에 toolcheck가 두 도구를 요구하기 때문이다. `typescript-language-server` 5.x는 Node 20, 6.x는 Node 22 이상이라 Node 18 job이 있는 동안 4.4.1에 고정한다. `npm run check`는 toolcheck를 돌리지 않으므로 새 언어의 파일을 추가했다면 push 전에 `node scripts/pota.mjs toolcheck --json`을 깨끗한 checkout 기준으로 생각해 본다(1.2.0 dev PR에서 전 job 실패). 출처: `.github/workflows/ci.yml`, `docs/plan/release-1.2.0.md` Evidence `dev-pr`.
 - 배포 파일은 `package.json` `files`가 정한다. 저장소의 `docs/memory`, `docs/plan`, `MEMORY.md`, `PLAN.md`는 패키지에 들어가지 않는다.
 
 ### 절차(0.4.x~0.5.0에서 반복된 형태)

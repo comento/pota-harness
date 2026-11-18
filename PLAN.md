@@ -4,7 +4,6 @@
 
 ## Active Plans
 
-- [release-1.2.0](docs/plan/release-1.2.0.md): Pota 1.2.0 릴리스
 
 ## Superseded Plans
 
@@ -14,6 +13,7 @@
 
 최신 항목이 위에 오며 계획당 한 줄입니다. `pota plan index --archive`는 오래된 항목을 `docs/plan/ARCHIVE.md`로 옮깁니다.
 
+- [Pota 1.2.0 릴리스](docs/plan/release-1.2.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.2.0으로 게시해 digest와 격리 설치를 확인했습니다.
 - [Claude Code DAG 패널](docs/plan/claude-dag-panel.md): goal task를 wave DAG로 그리는 Claude Code mod(`/dag`, 자동 열림)와 얇은 플러그인 설치 배선.
 - [toolcheck 누락 도구 설치 질문](docs/plan/toolcheck-install-question.md): 누락 도구가 있으면 설치 여부를 한 번 묻도록 정책 표면을 고치고, `toolcheck` 출력에 도구별 제안 명령·자동 설치 불가 사유를 추가했습니다.
 - [Pota 1.1.0 릴리스](docs/plan/release-1.1.0.md): dev→main PR #2를 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.1.0으로 게시해 digest와 격리 설치를 확인했습니다.
@@ -33,4 +33,3 @@
 - [Pota 오버헤드 축소와 task DAG](docs/plan/pota-overhead-reduction.md): goal 증거로 task 재검증 면제, `goal finish`/`stats`/`ready`, PostToolUse 1회 알림, SKILL.md 축소, `dependsOn`/`writeScope` 병렬 task.
 - [Pota 0.2.7 릴리스](docs/plan/release-0.2.7.md): state/lifecycle 계약 hardening과 module split을 dev·main에 승격하고 exact main tarball을 npm `latest` 0.2.7로 게시했습니다.
 - [경로별 추론 강도 변경 보존 및 PR 게시](docs/plan/publish-path-reasoning-effort-routing.md): dirty `dev` 변경을 backup·stash로 보존하고 최신 `origin/dev` 기반 브랜치에 3-way 재적용·검증한 뒤 draft PR을 만들었습니다.
-- [Pota 0.2.5 hotfix 릴리스](docs/plan/release-0.2.5.md): dev·main PR을 exact head CI 성공 후 병합하고 exact main tarball을 npm `latest` 0.2.5로 게시해 digest와 격리 설치/CLI를 검증했습니다.
