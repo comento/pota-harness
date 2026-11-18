@@ -29,6 +29,9 @@ Summary: 버전 표면, dev→main PR 승격, exact-main tarball 게시와 npm �
 
 출처: `docs/plan/release-0.5.0.md`, `docs/plan/release-0.4.1.md`, `docs/plan/release-0.2.7.md` "Execution Contracts".
 
+- 1.1.0(`comento/pota-harness` 첫 릴리스): 원격 `dev`가 없어 로컬 `dev`(main + 기능 커밋)를 push해 원격 `dev`를 만들고 `dev` → `main` PR로 바로 승격했다. 기능 브랜치 → dev 단계는 생략했다. 출처: `docs/plan/release-1.1.0.md`.
+- 격리 설치 검증에서 `pota --version`의 출력은 `pota <version>`이다(버전만 나오지 않는다).
+
 ### npm 인증(사용자 메모로 확인된 사실)
 
 - `npm publish`와 `npm login`은 대화형 인증(OTP·브라우저 승인)이 필요하다. 에이전트의 비대화형 셸에서 실행하면 EOTP로 실패한다(0.4.1, 0.5.0에서 발생). 토큰이 만료되면 `npm whoami`가 401이고, publish는 PUT E404로 보인다.

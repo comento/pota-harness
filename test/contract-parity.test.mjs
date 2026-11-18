@@ -10,7 +10,7 @@ test("package and plugin metadata expose the same machine-consumed version", asy
   const packageJson = await readJson("package.json");
   const pluginJson = await readJson(".codex-plugin/plugin.json");
 
-  assert.equal(packageJson.version, "1.1.0");
+  assert.equal(packageJson.version, "1.2.0");
   assert.equal(pluginJson.version, packageJson.version);
   assert.deepEqual(packageJson.bin, {
     pota: "scripts/pota.mjs",
@@ -102,6 +102,81 @@ test("work and review surfaces require the Memory promotion decision and forbid 
     const content = await readText(path);
     assert.match(content, /memory check --root/, `${path} memory check`);
     assert.match(content, /plan check --root/, `${path} plan check`);
+  }
+});
+
+test("tool readiness surfaces tell the agent to ask the user once before installing missing tools", async () => {
+  const skill = await readText("skills/pota-plan/SKILL.md");
+  assert.ok(skill.includes("If tools are missing, ask the user once whether to install them."), "pota-plan step 5");
+  assert.match(await readText("skills/pota-work/SKILL.md"), /ask once before installing missing tools/, "pota-work step 3");
+
+  const canonical = {
+    "skills/pota-plan/planning-rules.md": /^## Tool Readiness Policy$/m,
+    "skills/pota-work/verification.md": /^## Tool Readiness Policy$/m,
+  };
+  for (const [path, heading] of Object.entries(canonical)) {
+    const policy = (await readText(path)).split(heading)[1].split(/^## /m)[0];
+    assert.match(policy, /main agent asks the user once whether to install them/, `${path} asks once`);
+    assert.match(policy, /proposed install command or the reason no automatic installer exists/, `${path} question content`);
+    assert.match(policy, /continue work that does not need (?:the missing|those) tools/i, `${path} keeps working`);
+    assert.match(policy, /do not ask again(?: about the same tools)? in this session/, `${path} asks only once per session`);
+    assert.match(policy, /once per session: a blocker an earlier session recorded \(declined or not asked\) does not suppress it/, `${path} earlier blocker does not suppress`);
+    assert.match(policy, /new session that still finds the tools missing asks once again/, `${path} new session asks again`);
+    assert.match(policy, /subagent (?:never asks|reports them to the orchestrator instead of asking)/i, `${path} subagents do not ask`);
+    assert.match(policy, /cannot ask the user \(non-interactive[^)]*\), do not ask; record/, `${path} non-interactive blocker`);
+    assert.match(policy, /If the user declines/, `${path} declined blocker`);
+    assert.match(policy, /explicit (?:user )?approval/, `${path} approval still required`);
+    assert.match(policy, /`toolcheck --install --yes(?: --root "<repoRoot>")?` only for pinned\/supported installers|pinned\/supported installer \(`toolcheck --install --yes`\)/, `${path} pinned installer rule`);
+  }
+
+  const derived = [
+    "commands/pota-toolcheck.md",
+    ".agents/workflows/pota-toolcheck.md",
+    ".claude/commands/pota-toolcheck.md",
+    "commands/pota-plan.md",
+    ".agents/workflows/pota-plan.md",
+    "commands/pota-work.md",
+    ".agents/workflows/pota-work.md",
+    "docs/model-guidance/README.md",
+  ];
+  for (const path of derived) {
+    const content = await readText(path);
+    assert.match(content, /asks? the user once whether to install/, `${path} asks once`);
+    assert.match(content, /explicit(?:ly)? approv/, `${path} approval still required`);
+  }
+  for (const path of ["commands/pota-toolcheck.md", ".agents/workflows/pota-toolcheck.md", ".claude/commands/pota-toolcheck.md", "docs/model-guidance/README.md"]) {
+    const content = await readText(path);
+    assert.match(content, /proposed command or the reason no automatic installer exists/, `${path} question content`);
+    assert.match(content, /non-interactive/, `${path} non-interactive blocker`);
+    assert.match(content, /record a blocker/, `${path} blocker`);
+  }
+  assert.match(await readText("commands/pota-toolcheck.md"), /do not ask again in this session; a blocker recorded by an earlier session does not suppress the question in a new one/, "pota-toolcheck command session scope");
+
+  for (const path of ["skills/pota-plan/delegation.md", "skills/pota-work/delegation.md", "agents/worker.md"]) {
+    const content = await readText(path);
+    assert.match(content, /`toolcheck` install proposal to the orchestrator, which asks the user once/, `${path} subagent reports instead of asking`);
+    assert.match(content, /never install without that approval/, `${path} approval still required`);
+  }
+  assert.doesNotMatch(await readText("skills/pota-work/delegation.md"), /Obtain explicit user approval before installing/, "workers cannot ask the user");
+
+  assert.match(await readText("templates/work-plan.md"), /^- Install approval: asked once and approved, asked once and denied, not asked \(non-interactive run\), or not needed\.$/m);
+});
+
+test("all readmes say toolcheck prints install question data and the agent asks once", async () => {
+  const cases = {
+    "README.md": [/suggested install command/, /asks you once whether to install/, /non-interactive/],
+    "README.ko.md": [/제안 설치 명령/, /한 번 묻습니다/, /비대화형/],
+    "README.ja.md": [/提案インストールコマンド/, /一度だけ確認/, /非対話/],
+    "README.zh.md": [/建议的安装命令/, /询问一次/, /非交互/],
+    "README.es.md": [/comando de instalación sugerido/, /una sola vez/, /no es interactiva/],
+    "README.fr.md": [/commande d'installation suggérée/, /une seule fois/, /n'est pas interactive/],
+    "README.de.md": [/vorgeschlagenen Installationsbefehl/, /fragt einmal/, /nicht interaktiver/],
+    "README.pt.md": [/comando de instalacao sugerido/, /uma unica vez/, /nao for interativa/],
+  };
+  for (const [path, patterns] of Object.entries(cases)) {
+    const entry = (await readText(path)).split(/\r?\n/).find((line) => line.startsWith("- `toolcheck`") && /blocker/.test(line));
+    assert.ok(entry, `${path} toolcheck missing-tool entry`);
+    for (const pattern of patterns) assert.match(entry, pattern, `${path} ${pattern}`);
   }
 });
 

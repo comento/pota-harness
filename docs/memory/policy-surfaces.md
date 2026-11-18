@@ -27,7 +27,7 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·command�
 
 ### 예산(테스트가 강제)
 
-- `skills/pota-plan/SKILL.md`와 `skills/pota-work/SKILL.md`는 각 9000바이트 이하다(`test/token-efficiency.test.mjs:349-354`). 현재 8999, 8962바이트라 plan은 여유가 1바이트다. 측정: `wc -c skills/*/SKILL.md`.
+- `skills/pota-plan/SKILL.md`와 `skills/pota-work/SKILL.md`는 각 9000바이트 이하다(`test/token-efficiency.test.mjs:349-354`). 현재 8993, 8975바이트라 여유가 7, 25바이트다. 측정: `wc -c skills/*/SKILL.md`.
 - `defaultPrompt`는 정확히 7줄, 1600자 이하다. 현재 1118자다. 회복 순서·증거·외부 상태 문장 정규식이 고정돼 있고, `update_plan`·`--ignore-scripts` 같은 단어는 금지다. 출처: `test/token-efficiency.test.mjs:23-38`, 설치본 검사 `test/lifecycle.test.mjs:357-365`.
 - 설치된 미러에는 대상 저장소 기준 상대 참조를 둘 수 없다: `node scripts/…`, `commands/pota-…`, `agents/(explorer|worker).md`, `templates/…`, `docs/model-guidance/…`, 렌더링 전 placeholder. 출처: `test/installed-plugin.test.mjs:229-236`. 명령 예시는 `memory index --root <repoRoot>`처럼 쓴다.
 
@@ -37,6 +37,7 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·command�
 - 두 `delegation.md`의 위임 프롬프트 `CONTEXT:`에는 고른 노트 경로가 들어간다. agent와 Claude 미러는 `MEMORY.md` 항목으로 노트를 고르라고 지시한다. 출처: 같은 파일 109·117행.
 - README 8개는 `pota memory check|index`, `pota plan check|index [--archive]`, `docs/plan/ARCHIVE.md`, `## Completed Plans`, SessionStart, `goal stats --history`, advisory `completionCriteria`, `Memory promotion:`, `--hosts`, `pota auto-upgrade status|on|off|run`, `POTA_AUTO_UPGRADE=0`, `~/.pota/install/`을 모두 담고 옛 Claude marketplace 경로 `~/.codex/plugins/cache/pota/claude`는 담지 않는다. cleanup lock 문장은 en·ko에만 있다. 출처: `test/docs-package-hardening.test.mjs:89-126`.
 - 8 locale 안내문은 같은 영문 정책 상수(`tokenEfficientWorkPolicy`, `reasoningEffortPolicy`, `memoryIndexPolicy`, `planIndexPolicy` 등)를 붙인다. ko는 일부 상수의 한국어 판을 쓴다. 출처: `scripts/pota.mjs:117-185`, `test/token-efficiency.test.mjs:450`.
+- 누락 도구 질문 규칙: main 에이전트가 설치 여부를 한 번 묻고(누락 도구별 제안 명령 또는 자동 설치 불가 사유 포함), 기다리는 동안 도구가 필요 없는 작업을 계속하며, 거부·비대화형 실행이면 묻지 않고 blocker를 기록한다. 질문은 세션당 한 번이고, 이전 세션이 남긴 blocker(거부·미질문)는 새 세션의 질문을 막지 않는다. subagent는 묻지 않고 orchestrator에 보고한다. 정본은 `skills/pota-plan/planning-rules.md`와 `skills/pota-work/verification.md`의 `## Tool Readiness Policy`이고, 파생 표면은 `commands`·`.agents/workflows`·`.claude/commands`의 `pota-toolcheck.md`, `commands`·`.agents/workflows`의 `pota-{plan,work}.md`, 두 `delegation.md`, `agents/worker.md`, `templates/work-plan.md`, `docs/model-guidance/README.md`, README 8개의 Tool Readiness bullet이다. 질문에 쓰는 데이터는 `toolcheck` 결과의 `installCommand`, `install.suggestedCommand`, `install.unavailableReason`이다. 출처: `test/contract-parity.test.mjs`의 tool readiness 테스트 2개, `test/toolcheck.test.mjs`.
 - 메모리 승격 절차 본문은 `skills/pota-work/verification.md` `## Memory Promotion`, 계획 재활용 절차는 `skills/pota-plan/planning-rules.md` `## Reuse Before Planning`에 있다. 옛 `PLAN.md`의 Planning Rules 정본도 이 파일이다.
 
 ## Policy

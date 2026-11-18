@@ -46,7 +46,7 @@ pota toolcheck --root .
 pota toolcheck --install --yes --root .
 ```
 
-- `toolcheck` reports detected stacks and missing tools.
+- `toolcheck` reports detected stacks and missing tools. For each missing tool it prints a suggested install command or the reason automatic installation is unavailable, and the agent asks you once whether to install; if you decline, or the run is non-interactive, it records a blocker.
 - Default checks are read-only, bounded by a timeout, and do not execute repository-local wrappers merely to discover them.
 - `toolcheck --install` requires both `--yes` and explicit user approval. Unpinned or checksum-free installers return the canonical `installer-unavailable` refusal rather than silently downloading `latest`.
 - Pota plans record detected stack, required tools, install commands, and blockers.
@@ -171,6 +171,14 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (only w
 - Auto-upgrade: on by default. At most once every 24 hours (and not within 24 hours of an install or upgrade), `SessionStart` starts a detached process that reads the latest `@comento/pota-harness` version from npm, installs that exact version into `~/.pota/update/stage/` with `--ignore-scripts`, verifies the staged package, and runs its `pota-lifecycle.mjs upgrade --auto`. Every newer release is applied, major versions included, and it never downgrades. The next `SessionStart` shows one line, once: `updated`, `failed`, or `manual` (installed, but the Claude Code plugin cache still needs `claude plugin update pota@pota`). npm lookup and install failures back off silently; a failed upgrade backs off and is announced once per version. It never runs for an installation from a git checkout (`origin: "checkout"`) or from a source checkout.
 - Turning it off: `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0` (also `false`, `off`, or `no`), or `"autoUpgrade": false` in `~/.pota/config.json`. A `config.json` that cannot be read also turns it off. State and the last run's output live in `~/.pota/update/` (`state.json`, `notice.json`, `last-run.log`, `update.lock`, `stage/`).
 - Comment checker: after a successful edit (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` and edit tools), the PostToolUse hook runs [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) on the changed text and, when it reports needless comments, returns `decision: "block"` so the agent removes them or explains why they are needed. No npm dependency is added: `pota install` and `pota upgrade` (auto-upgrade included) download the pinned v0.8.2 release for the current platform (darwin/linux x64 and arm64, windows x64) after the installation commits, verify its pinned SHA256, extract it with the OS `tar` into `~/.pota/tools/comment-checker/`, and print the result on one line. A failed download keeps the installation and its exit code; `SessionStart` from the installed runtime retries it in a detached process with a backoff. Until a download succeeds, edits pass unchecked; a checker error or a check over 7 seconds also passes. `pota doctor` prints its state on one line, `pota uninstall` removes it, and `POTA_COMMENT_CHECKER=0` (also `false`, `off`, or `no`) or `"commentChecker": false` in `~/.pota/config.json` turns off both the check and the download.
+
+## Claude Code DAG Panel
+
+Claude Code desktop shows the current Pota goal as a DAG panel, one column per wave. It is Claude Code only; Codex and Antigravity do not have it. It needs a Claude Code with mod support (written against the Claude Code 2.1.325 mod API); a surface without graphics, such as the terminal, shows a text list instead.
+
+- `/dag [previous|current|next|all|refresh|close]` opens the panel. The views are previous, current, next, and all. A finished link is a solid line; a link in progress is dashed with a moving dot.
+- It opens once automatically after `pota goal start` and `pota goal replan`. If you close it, it does not open again for the same goal.
+- It re-reads the goal state whenever a goal command runs and every 30 seconds.
 
 ## Antigravity Compatibility
 

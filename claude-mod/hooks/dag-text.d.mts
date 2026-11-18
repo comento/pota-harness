@@ -1,0 +1,68 @@
+import type { DagAgent, DagSnapshot, DagTask } from "../types";
+import type { DagModel, DagNode, DagSummary, DagWave, TaskState, ViewId } from "./dag-model.mjs";
+
+export type Locale = "ko" | "en";
+export type Tone = "plain" | "dim" | "ok" | "run" | "ready" | "bad";
+export type Row = { text: string; tone: Tone; bold?: boolean };
+export type TextContext = {
+  locale: Locale;
+  minute: number;
+  timeline: Record<string, { activeAt?: number; completedAt?: number }>;
+  snapshot: DagSnapshot | null;
+};
+export type Messages = {
+  noGoal: string;
+  noRuntime: string;
+  refreshFailed: string;
+  loading: string;
+  ended: Record<"completed" | "cancelled" | "unknown", string>;
+  goalStatus: Record<DagSnapshot["status"], string>;
+  empty: Record<"no-completed" | "no-next", string>;
+  views: Record<ViewId, string>;
+  refresh: string;
+  state: Record<TaskState, string>;
+  deps: (count: number) => string;
+  after: string;
+  evidence: string;
+  writeScope: string;
+  model: string;
+  calls: (count: number) => string;
+  remaining: string;
+  nextUp: string;
+  others: string;
+  more: (count: number) => string;
+  awaitingFinish: string;
+  hiddenAfter: (count: number) => string;
+  omitted: (count: number) => string;
+  waveDone: string;
+  waveRunning: string;
+  waveBlocked: string;
+  altCounts: (summary: DagSummary) => string;
+  altRunning: string;
+  elapsed: { under: string; minutes: (m: number) => string; hours: (h: number, m: number) => string };
+  opened: string;
+  notPlaced: string;
+  closed: string;
+  refreshing: string;
+  usage: string;
+};
+
+export declare function messages(locale: Locale): Messages;
+export declare function pickLocale(values: readonly (string | undefined)[]): Locale;
+export declare function formatElapsed(ms: number, locale: Locale): string;
+export declare function formatSummary(summary: DagSummary, ctx: TextContext): string;
+export declare function waveHeader(wave: DagWave, locale: Locale): string;
+export declare function roleLine(task: DagTask, separator: string): string;
+export declare function cardLines(node: DagNode, ctx: TextContext): { title: string; status: string; meta: string; progress: string; tooltip: string };
+export type DetailSections = {
+  running: { id: string; title: string; who: string; activity: string; calls: number; elapsed: string; evidence: { kind: string; done: boolean }[] }[];
+  blocked: { id: string; title: string; reason: string }[];
+  next: { id: string; title: string; waits: string[] }[];
+  more: number;
+  strays: { id: string; name: string; activity: string }[];
+};
+export declare function detailSections(snapshot: DagSnapshot, agentTask: Record<string, string>, agents: readonly DagAgent[], ctx: TextContext): DetailSections;
+export declare function runningRows(snapshot: DagSnapshot, agentTask: Record<string, string>, agents: readonly DagAgent[], ctx: TextContext): Row[];
+export declare function cellWidth(text: string): number;
+export declare function truncateCells(text: string, columns: number): string;
+export declare function textRows(model: DagModel, ctx: TextContext, columns: number): Row[];

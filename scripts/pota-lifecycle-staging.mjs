@@ -151,6 +151,11 @@ export function shouldCopyPluginPath(source, pluginRoot) {
   if (/^(package\.json|LICENSE|README(?:\.[^.]+)?\.md)$/.test(path)) return true;
   if (path === "docs") return true;
   if (path.startsWith("docs/")) return path === "docs/model-guidance" || path.startsWith("docs/model-guidance/");
+  // Same range as package.json `files`: the engine's generated .claude-plugin/types/ and kit tests stay out.
+  if (path === "claude-mod" || path === "claude-mod/.claude-plugin" || path === "claude-mod/.claude-plugin/plugin.json") return true;
+  if (path.startsWith("claude-mod/")) {
+    return ["claude-mod/hooks", "claude-mod/types"].some((directory) => path === directory || path.startsWith(`${directory}/`));
+  }
   return [".agents", ".claude", ".codex-plugin", "agents", "commands", "hooks", "scripts", "skills", "templates"]
     .some((directory) => path === directory || path.startsWith(`${directory}/`));
 }

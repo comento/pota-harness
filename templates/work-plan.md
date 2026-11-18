@@ -98,7 +98,7 @@ Describe the observable result.
 - Required LSP/symbol tools:
 - Required typecheck/lint/verification tools:
 - Missing tools:
-- Install approval: not requested, approved, denied, or not needed.
+- Install approval: asked once and approved, asked once and denied, not asked (non-interactive run), or not needed.
 - Install/bootstrap commands proposed or attempted:
 - Tool blockers:
 

@@ -31,7 +31,7 @@ pota toolcheck --root .
 pota toolcheck --install --yes --root .
 ```
 
-- `toolcheck` reporta detected stacks y missing tools.
+- `toolcheck` reporta detected stacks y missing tools. Para cada missing tool imprime un comando de instalación sugerido o el motivo por el que la instalación automática no está disponible, y el agent pregunta una sola vez si debe instalar; si se rechaza, o la ejecución no es interactiva, registra un blocker.
 - `toolcheck --install` exige aprobación explícita y `--yes`; un installer no compatible devuelve el resultado canónico `installer-unavailable` y no se ejecuta.
 - Los planes de Pota registran detected stack, required tools, install commands y blockers.
 - Que falte un LSP server no es razón válida para saltarse precise codebase exploration hasta intentar installation o un fallback symbol-aware equivalente.
@@ -145,6 +145,14 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   copia en el Codex plugin cache 
 - Auto-upgrade: activado por defecto. Como máximo una vez cada 24 horas (y no en las 24 horas siguientes a un install o upgrade), `SessionStart` lanza un proceso separado que lee la última versión de `@comento/pota-harness` en npm, instala esa versión exacta con `--ignore-scripts` en `~/.pota/update/stage/`, la verifica y ejecuta su `pota-lifecycle.mjs upgrade --auto`. Aplica todas las versiones nuevas, incluidas las major, y nunca hace downgrade. El siguiente `SessionStart` muestra el resultado (`updated`, `failed` o `manual`) en una línea, una sola vez. No funciona en instalaciones desde un git checkout (`origin: "checkout"`) ni al ejecutar desde un source checkout.
 - Desactivar: `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0` (también `false`, `off` o `no`) o `"autoUpgrade": false` en `~/.pota/config.json`. Un `config.json` ilegible también lo desactiva. El estado y el log de la última ejecución están en `~/.pota/update/`.
 - Comprobación de comentarios: tras una edición correcta (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` y herramientas de edición), el hook PostToolUse ejecuta [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) sobre el texto cambiado y, si informa de comentarios innecesarios, devuelve `decision: "block"` para que el agente los quite o explique por qué hacen falta. No añade dependencias npm: `pota install` y `pota upgrade` (incluida la actualización automática) descargan, tras confirmar la instalación, la release fija v0.8.2 para la plataforma actual (darwin/linux x64 y arm64, windows x64), verifican su SHA256 fijo, la extraen con el `tar` del sistema en `~/.pota/tools/comment-checker/` e imprimen el resultado en una línea. Si la descarga falla, la instalación y su exit code no cambian, y `SessionStart` desde el runtime instalado la reintenta en un proceso separado con backoff. Hasta que una descarga funciona, las ediciones pasan sin comprobar; un error del comprobador o una comprobación de más de 7 segundos también pasa. `pota doctor` muestra su estado en una línea, `pota uninstall` lo elimina, y `POTA_COMMENT_CHECKER=0` (también `false`, `off` o `no`) o `"commentChecker": false` en `~/.pota/config.json` desactiva la comprobación y la descarga.
+
+## Claude Code DAG Panel
+
+Claude Code de escritorio muestra el goal actual de Pota como un panel DAG con una columna por wave. Es solo para Claude Code; Codex y Antigravity no lo tienen. Requiere un Claude Code con soporte de mods (escrito para la API de mods de Claude Code 2.1.325); en una surface sin gráficos, como la terminal, muestra una lista de texto.
+
+- `/dag [previous|current|next|all|refresh|close]` abre el panel. Las vistas son anterior, actual, siguiente y todo. Un enlace terminado es una línea continua; uno en curso es una línea discontinua con un punto que se mueve.
+- Se abre una vez automáticamente después de `pota goal start` y `pota goal replan`. Si lo cierras, no se vuelve a abrir para el mismo goal.
+- Vuelve a leer el estado del goal cuando se ejecuta un comando de goal y cada 30 segundos.
 
 ## Antigravity Compatibility
 

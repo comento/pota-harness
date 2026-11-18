@@ -31,7 +31,7 @@ pota toolcheck --root .
 pota toolcheck --install --yes --root .
 ```
 
-- `toolcheck` signale les detected stacks et missing tools.
+- `toolcheck` signale les detected stacks et missing tools. Pour chaque missing tool, il affiche une commande d'installation suggérée ou la raison pour laquelle l'installation automatique est indisponible, et l'agent demande une seule fois s'il faut installer ; en cas de refus, ou si l'exécution n'est pas interactive, il enregistre un blocker.
 - `toolcheck --install` exige une approbation explicite et `--yes` ; un installer non pris en charge renvoie le résultat canonique `installer-unavailable` sans s'exécuter.
 - Les plans Pota enregistrent detected stack, required tools, install commands et blockers.
 - Un LSP server manquant n'est pas une raison valable pour ignorer precise codebase exploration tant qu'une installation ou un fallback symbol-aware équivalent n'a pas été tenté.
@@ -145,6 +145,14 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   copie dans le Codex plugin cach
 - Auto-upgrade : activé par défaut. Au plus une fois toutes les 24 heures (et pas dans les 24 heures qui suivent un install ou un upgrade), `SessionStart` lance un processus détaché qui lit la dernière version de `@comento/pota-harness` sur npm, installe cette version exacte avec `--ignore-scripts` dans `~/.pota/update/stage/`, la vérifie, puis exécute son `pota-lifecycle.mjs upgrade --auto`. Toutes les nouvelles versions sont appliquées, major comprises, sans jamais de downgrade. Le `SessionStart` suivant affiche le résultat (`updated`, `failed` ou `manual`) en une ligne, une seule fois. Rien ne s'exécute pour une installation depuis un git checkout (`origin: "checkout"`) ni depuis un source checkout.
 - Désactiver : `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0` (ou `false`, `off`, `no`) ou `"autoUpgrade": false` dans `~/.pota/config.json`. Un `config.json` illisible le désactive aussi. L'état et le log de la dernière exécution se trouvent dans `~/.pota/update/`.
 - Vérification des commentaires : après une édition réussie (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` et outils d'édition), le hook PostToolUse exécute [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) sur le texte modifié et, s'il signale des commentaires inutiles, renvoie `decision: "block"` pour que l'agent les retire ou explique pourquoi ils sont nécessaires. Aucune dépendance npm n'est ajoutée : `pota install` et `pota upgrade` (mise à jour automatique comprise) téléchargent, après la validation de l'installation, la release figée v0.8.2 pour la plateforme courante (darwin/linux x64 et arm64, windows x64), vérifient son SHA256 figé, l'extraient avec le `tar` du système dans `~/.pota/tools/comment-checker/` et affichent le résultat sur une ligne. Un échec laisse l'installation et son exit code inchangés, et `SessionStart` depuis le runtime installé réessaie dans un processus détaché avec backoff. Tant qu'aucun téléchargement n'a réussi, les éditions passent sans vérification ; une erreur du vérificateur ou une vérification de plus de 7 secondes passe aussi. `pota doctor` affiche son état sur une ligne, `pota uninstall` le supprime, et `POTA_COMMENT_CHECKER=0` (ou `false`, `off`, `no`) ou `"commentChecker": false` dans `~/.pota/config.json` désactive la vérification et le téléchargement.
+
+## Claude Code DAG Panel
+
+Claude Code Desktop affiche le goal Pota courant sous forme de panneau DAG, une colonne par wave. Il est propre à Claude Code ; Codex et Antigravity ne l'ont pas. Il faut un Claude Code avec prise en charge des mods (écrit pour l'API de mods de Claude Code 2.1.325) ; sur une surface sans graphique, comme le terminal, une liste texte est affichée à la place.
+
+- `/dag [previous|current|next|all|refresh|close]` ouvre le panneau. Les vues sont précédent, courant, suivant et tout. Un lien terminé est un trait plein ; un lien en cours est en pointillés avec un point qui se déplace.
+- Il s'ouvre une fois automatiquement après `pota goal start` et `pota goal replan`. Si vous le fermez, il ne se rouvre pas pour le même goal.
+- Il relit l'état du goal à chaque exécution d'une commande goal et toutes les 30 secondes.
 
 ## Antigravity Compatibility
 

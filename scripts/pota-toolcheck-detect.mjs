@@ -42,20 +42,23 @@ export function buildRequirements(stacks, entries = [], _commandAvailable = comm
     requirements.push(unsafeReq(manager, ["--version"], `JavaScript package manager selected from ${packageManagerSource(entries)}`, "automatic package-manager installation is unavailable"));
   }
   if (stacks.includes("typescript")) {
-    requirements.push(unsafeReq("typescript-language-server", ["--version"], "TypeScript LSP server", "automatic package installation is disabled without pinned package versions"));
-    requirements.push(unsafeReq("tsc", ["--version"], "TypeScript compiler verification", "automatic package installation is disabled without pinned package versions"));
+    const manager = packageManager(entries);
+    requirements.push(unsafeReq("typescript-language-server", ["--version"], "TypeScript LSP server", "automatic package installation is disabled without pinned package versions", installDev(manager, ["typescript-language-server"])));
+    requirements.push(unsafeReq("tsc", ["--version"], "TypeScript compiler verification", "automatic package installation is disabled without pinned package versions", installDev(manager, ["typescript"])));
   }
   if (stacks.includes("python")) {
-    requirements.push(unsafeReq("basedpyright", ["--version"], "Python LSP/type checker", "automatic Python package installation is disabled without pinned package versions"));
-    requirements.push(unsafeReq("ruff", ["--version"], "Python lint and format checker", "automatic Python package installation is disabled without pinned package versions"));
+    const uv = hasBasename(entries, "uv.lock");
+    const pythonProject = hasBasename(entries, "pyproject.toml");
+    requirements.push(unsafeReq("basedpyright", ["--version"], "Python LSP/type checker", "automatic Python package installation is disabled without pinned package versions", pythonInstall(uv, pythonProject, "basedpyright", platform)));
+    requirements.push(unsafeReq("ruff", ["--version"], "Python lint and format checker", "automatic Python package installation is disabled without pinned package versions", pythonInstall(uv, pythonProject, "ruff", platform)));
   }
   if (stacks.includes("php")) {
     const composerProject = hasBasename(entries, "composer.json");
     requirements.push(req("php", ["--version"], "PHP runtime for Composer scripts and CLI checks"));
     if (composerProject) requirements.push(req("composer", ["--version"], "PHP package manager for project-local tool installation"));
-    requirements.push(unsafeReq("phpactor", ["--version"], "PHP LSP server", "automatic Composer package installation is disabled without pinned package versions"));
-    requirements.push(unsafeReq("phpstan", ["--version"], "PHP static analysis verification", "automatic Composer package installation is disabled without pinned package versions"));
-    requirements.push(unsafeReq("php-cs-fixer", ["--version"], "PHP formatting verification", "automatic Composer package installation is disabled without pinned package versions"));
+    requirements.push(unsafeReq("phpactor", ["--version"], "PHP LSP server", "automatic Composer package installation is disabled without pinned package versions", composerProject ? composerInstall(["phpactor/phpactor"]) : null));
+    requirements.push(unsafeReq("phpstan", ["--version"], "PHP static analysis verification", "automatic Composer package installation is disabled without pinned package versions", composerProject ? composerInstall(["phpstan/phpstan"]) : null));
+    requirements.push(unsafeReq("php-cs-fixer", ["--version"], "PHP formatting verification", "automatic Composer package installation is disabled without pinned package versions", composerProject ? composerInstall(["friendsofphp/php-cs-fixer"]) : null));
   }
   if (stacks.includes("java")) {
     addJvmRequirements(requirements);
@@ -76,12 +79,12 @@ export function buildRequirements(stacks, entries = [], _commandAvailable = comm
     }
   }
   if (stacks.includes("go")) {
-    requirements.push(unsafeReq("gopls", ["version"], "Go LSP server", "unpinned go install targets are disabled"));
+    requirements.push(unsafeReq("gopls", ["version"], "Go LSP server", "unpinned go install targets are disabled", { command: "go", args: ["install", "golang.org/x/tools/gopls@latest"] }));
     requirements.push(unsafeReq("golangci-lint", ["--version"], "Go lint verification", "unpinned go install targets are disabled"));
   }
   if (stacks.includes("rust")) {
-    requirements.push(unsafeReq("rust-analyzer", ["--version"], "Rust LSP server", "automatic rustup changes are disabled without a pinned toolchain manifest"));
-    requirements.push(unsafeReq("cargo", ["clippy", "--version"], "Rust clippy verification", "automatic rustup changes are disabled without a pinned toolchain manifest"));
+    requirements.push(unsafeReq("rust-analyzer", ["--version"], "Rust LSP server", "automatic rustup changes are disabled without a pinned toolchain manifest", { command: "rustup", args: ["component", "add", "rust-analyzer"] }));
+    requirements.push(unsafeReq("cargo", ["clippy", "--version"], "Rust clippy verification", "automatic rustup changes are disabled without a pinned toolchain manifest", { command: "rustup", args: ["component", "add", "clippy"] }));
   }
   return requirements;
 }
@@ -112,8 +115,8 @@ export function pushUnique(requirements, requirement) {
   if (!requirements.some((candidate) => candidate.name === requirement.name)) requirements.push(requirement);
 }
 
-// Kept for API compatibility. Callers may show these commands, but buildRequirements
-// no longer attaches an unpinned command to an automatically executable requirement.
+// buildRequirements attaches these only as `suggestedInstall`: an unpinned command shown
+// to the user for approval. It never becomes `install`, so toolcheck does not run it.
 export function composerInstall(packages) {
   return { command: "composer", args: ["require", "--dev", ...packages] };
 }
@@ -137,12 +140,13 @@ export function req(command, args, reason, installCommand = null, options = {}) 
     reason,
     install: installCommand,
     installUnavailableReason: options.installUnavailableReason ?? null,
+    suggestedInstall: options.suggestedInstall ?? null,
     localOnly: options.localOnly ?? false,
   };
 }
 
-export function unsafeReq(command, args, reason, installUnavailableReason) {
-  return req(command, args, reason, null, { installUnavailableReason });
+export function unsafeReq(command, args, reason, installUnavailableReason, suggestedInstall = null) {
+  return req(command, args, reason, null, { installUnavailableReason, suggestedInstall });
 }
 
 export function packageManager(entries = []) {

@@ -2,6 +2,9 @@
 
 Older completed plan entries moved from `PLAN.md` by `pota plan index --archive`. Newest first.
 
+- [Pota 0.2.5 공용 설정 upgrade hotfix](upgrade-shared-config-ownership.md): 공유 `config.toml`을 mutable merge surface로 바꾸고 boundary trivia·concurrent edit·crash recovery·0.2.4→0.2.5 upgrade를 검증.
+- [Pota 0.2.4 릴리스](release-0.2.4.md): dev·main PR을 exact head CI 성공 후 병합하고 exact main tarball을 npm `latest` 0.2.4로 게시해 digest와 격리 설치/CLI를 검증했습니다.
+- [clean uninstall과 프롬프트 캐시 복원력](clean-uninstall-prompt-cache-resilience.md): 빈 managed cache root 정리, unmanaged 보존, completed-task evidence 갱신, 7문장 recovery kernel과 bounded reference 복원.
 - [Pota 0.2.3 릴리스](release-0.2.3.md): dev/main PR 승격, npm 배포, npm 설치본 재설치와 실제 upgrade smoke 증거를 갱신하고 goal을 명시적으로 완료했습니다.
 - [경로별 추론 강도 라우팅](path-reasoning-effort-routing.md): 모델은 상속하고 Light=`medium`, Heavy=`high`, 최종 검토=`xhigh`를 task별로 적용하며 경로 변경 시 effort profile 등을 재계산합니다.
 - [단계별 복잡도 재평가](staged-complexity-reassessment.md): 요청·계획·코드 체크포인트에서 경로를 재평가하고 변경 시 plan artifact·goal task roadmap·Codex UI plan을 `goal replan`으로 동기화합니다.
