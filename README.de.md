@@ -146,6 +146,14 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Kopie im Codex plugin cache (nu
 - Abschalten: `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0` (auch `false`, `off` oder `no`) oder `"autoUpgrade": false` in `~/.pota/config.json`. Eine unlesbare `config.json` schaltet es ebenfalls ab. Zustand und Log des letzten Laufs liegen in `~/.pota/update/`.
 - Kommentarprüfung: Nach einer erfolgreichen Bearbeitung (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` und Bearbeitungswerkzeuge) führt der PostToolUse-Hook [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) auf dem geänderten Text aus und gibt bei überflüssigen Kommentaren `decision: "block"` zurück, damit der Agent sie entfernt oder begründet. Es kommt keine npm-Abhängigkeit hinzu: `pota install` und `pota upgrade` (auch das automatische Upgrade) laden nach dem Commit der Installation die feste Release v0.8.2 für die aktuelle Plattform (darwin/linux x64 und arm64, windows x64), prüfen ihren festen SHA256, entpacken sie mit dem System-`tar` nach `~/.pota/tools/comment-checker/` und geben das Ergebnis in einer Zeile aus. Ein fehlgeschlagener Download lässt Installation und Exit-Code unverändert; `SessionStart` aus der installierten Runtime versucht es in einem abgetrennten Prozess mit Backoff erneut. Bis ein Download gelingt, gehen Bearbeitungen ungeprüft durch; ein Fehler des Prüfers oder eine Prüfung über 7 Sekunden geht ebenfalls durch. `pota doctor` zeigt den Zustand in einer Zeile, `pota uninstall` entfernt ihn, und `POTA_COMMENT_CHECKER=0` (auch `false`, `off` oder `no`) oder `"commentChecker": false` in `~/.pota/config.json` schaltet Prüfung und Download ab.
 
+## Claude Code DAG Panel
+
+Claude Code Desktop zeigt das aktuelle Pota-goal als DAG-Panel mit einer Spalte pro wave. Es gibt es nur für Claude Code; Codex und Antigravity haben es nicht. Nötig ist ein Claude Code mit mod-Unterstützung (geschrieben für die mod-API von Claude Code 2.1.325); auf einer surface ohne Grafik, etwa dem Terminal, erscheint stattdessen eine Textliste.
+
+- `/dag [previous|current|next|all|refresh|close]` öffnet das Panel. Die Ansichten sind vorherige, aktuelle, nächste und alle. Eine abgeschlossene Verbindung ist eine durchgezogene Linie; eine laufende ist gestrichelt mit einem wandernden Punkt.
+- Es öffnet sich nach `pota goal start` und `pota goal replan` automatisch einmal. Wenn Sie es schließen, öffnet es sich für dasselbe goal nicht erneut.
+- Es liest den goal-Zustand bei jedem goal-Befehl und alle 30 Sekunden neu.
+
 ## Antigravity Compatibility
 
 Antigravity unterstützt `SKILL.md`-basierte Agent Skills und Workflows, die als `/workflow-name` aufgerufen werden. Pota installiert für diese Oberfläche die folgenden paths.

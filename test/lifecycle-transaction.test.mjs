@@ -120,6 +120,7 @@ test("every runtime locator and Claude hook points at the canonical runtime", as
       join(paths.versioned, ".pota-runtime.json"),
       join(paths.source, ".pota-runtime.json"),
       join(env.CLAUDE_HOME, "pota", "runtime.json"),
+      join(paths.claudeMarketplace, "pota", "pota-runtime.json"),
       join(env.ANTIGRAVITY_HOME, "pota", "runtime.json"),
       join(env.ANTIGRAVITY_CLI_HOME, "pota", "runtime.json"),
       ...skills.flatMap((skill) => [

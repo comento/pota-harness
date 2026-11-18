@@ -274,6 +274,18 @@ test("plugin copy filtering ignores excluded names outside the package root", ()
   assert.equal(shouldCopyPluginPath("/tmp/node_modules/@comento/pota-harness/.git"), false);
 });
 
+test("plugin copy filtering keeps the Claude mod sources and drops engine types and kit tests", () => {
+  assert.equal(shouldCopyPluginPath(join(root, "claude-mod")), true);
+  assert.equal(shouldCopyPluginPath(join(root, "claude-mod", ".claude-plugin", "plugin.json")), true);
+  assert.equal(shouldCopyPluginPath(join(root, "claude-mod", "hooks", "register.tsx")), true);
+  assert.equal(shouldCopyPluginPath(join(root, "claude-mod", "types", "index.d.ts")), true);
+  assert.equal(shouldCopyPluginPath(join(root, "claude-mod", ".claude-plugin", "types")), false);
+  assert.equal(shouldCopyPluginPath(join(root, "claude-mod", ".claude-plugin", "types", "claude-code", "index.d.ts")), false);
+  assert.equal(shouldCopyPluginPath(join(root, "claude-mod", "tests")), false);
+  assert.equal(shouldCopyPluginPath(join(root, "claude-mod", "tests", "pane.test.tsx")), false);
+  assert.equal(shouldCopyPluginPath(join(root, "claude-mod", "tsconfig.json")), false);
+});
+
 test("doctor waits for a concurrent lifecycle transaction before observing installed state", async () => {
   const temp = await mkdtemp(join(tmpdir(), "pota-doctor-lock-"));
   const env = {
@@ -498,6 +510,28 @@ test("install registers a Claude Code plugin whose hooks call the installed runt
     await stat(join(pluginMarketplace, "pota", "skills", "pota-plan", "references", "pota-runtime.json"));
     await assert.rejects(stat(join(pluginMarketplace, "pota", "commands")), "commands stay in the ~/.claude mirrors");
 
+    // The DAG pane mod rides in the same thin plugin: its hooks module sits beside the command hooks.
+    const pluginDir = join(pluginMarketplace, "pota");
+    assert.deepEqual(JSON.parse(hooksText).modules, ["./register.tsx"]);
+    assert.equal(manifest.types, "./types/index.d.ts");
+    for (const file of [["hooks", "register.tsx"], ["hooks", "dag-model.mjs"], ["hooks", "dag-model.d.mts"], ["types", "index.d.ts"]]) {
+      await stat(join(pluginDir, ...file));
+    }
+    const modLocator = JSON.parse(await readFile(join(pluginDir, "pota-runtime.json"), "utf8"));
+    assert.equal(modLocator.pluginRoot, runtimeRoot);
+    assert.equal(modLocator.entrypoints.cli, join(runtimeRoot, "scripts", "pota.mjs"));
+    for (const devOnly of ["tests", "tsconfig.json", ".gitignore", join(".claude-plugin", "types")]) {
+      await assert.rejects(stat(join(pluginDir, devOnly)), `${devOnly} stays in the source checkout`);
+    }
+    const installedHooks = join(pluginDir, "hooks");
+    for (const file of await readdir(installedHooks)) {
+      if (file === "hooks.json") continue;
+      const text = await readFile(join(installedHooks, file), "utf8");
+      for (const [, specifier] of text.matchAll(/\bfrom\s+"(\.{1,2}\/[^"]+)"/g)) {
+        assert.ok(await resolvesModule(resolve(installedHooks, specifier)), `${file} imports ${specifier}, which the installed plugin lacks`);
+      }
+    }
+
     if (process.platform !== "win32") {
       const sessionStart = hooks.SessionStart[0].hooks[0].command;
       const hookRun = spawnSync(sessionStart, { shell: true, cwd: temp, input: JSON.stringify({ cwd: temp, session_id: "s" }), encoding: "utf8", env });
@@ -513,6 +547,7 @@ test("install registers a Claude Code plugin whose hooks call the installed runt
     // Claude Code installs a cached copy, not the marketplace directory itself.
     assert.equal(state.plugins[0].installPath, join(env.CLAUDE_HOME, "plugins", "cache", "pota", "pota", releaseVersion));
     await stat(join(state.plugins[0].installPath, "hooks", "hooks.json"));
+    await stat(join(state.plugins[0].installPath, "hooks", "register.tsx"));
 
     const upgrade = runLifecycle("upgrade", env);
     assert.equal(upgrade.status, 0, upgrade.stdout + upgrade.stderr);
@@ -529,6 +564,35 @@ test("install registers a Claude Code plugin whose hooks call the installed runt
     assert.equal(uninstall.status, 0, uninstall.stdout + uninstall.stderr);
     assert.deepEqual(await claudeState(), { marketplaces: [], plugins: [] });
     await assert.rejects(stat(pluginMarketplace));
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+// The specifier forms a hooks module may use: an exact file, a TypeScript-resolved extension, or a types folder.
+async function resolvesModule(path) {
+  const candidates = [path, ...[".ts", ".tsx", ".d.ts", ".js", ".mjs"].map((extension) => `${path}${extension}`), join(path, "index.d.ts")];
+  for (const candidate of candidates) {
+    if ((await stat(candidate).catch(() => null))?.isFile()) return true;
+  }
+  return false;
+}
+
+test("doctor fails Claude plugin files when the installed DAG pane entry is missing", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "pota-claude-mod-doctor-"));
+  const env = claudePluginEnv(temp);
+  try {
+    await mkdir(dirname(env.CODEX_CONFIG_PATH), { recursive: true });
+    await writeFile(env.CODEX_CONFIG_PATH, "");
+    const install = runLifecycle("install", env);
+    assert.equal(install.status, 0, install.stdout + install.stderr);
+    assert.match(runLifecycle("doctor", env).stdout, /^OK Claude plugin files$/m);
+
+    await rm(join(env.POTA_HOME, "install", "claude", "pota", "hooks", "register.tsx"));
+    const doctor = runLifecycle("doctor", env);
+    assert.equal(doctor.status, 1, doctor.stdout + doctor.stderr);
+    assert.match(doctor.stdout, /^FAIL Claude plugin files$/m);
+    assert.match(doctor.stdout, /^FAIL ownership digests$/m);
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

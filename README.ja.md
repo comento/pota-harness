@@ -146,6 +146,14 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (Codex 
 - 無効化: `pota auto-upgrade off`、`POTA_AUTO_UPGRADE=0`(`false`、`off`、`no` も可)、または `~/.pota/config.json` の `"autoUpgrade": false`。読めない `config.json` も無効として扱います。状態と最後の実行 log は `~/.pota/update/` にあります。
 - コメントチェック: 編集が成功すると(Claude Code `Write`/`Edit`/`MultiEdit`、Codex `apply_patch` と編集ツール)、PostToolUse hook が変更内容を [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker)(MIT)で検査します。不要なコメントが報告されると `decision: "block"` を返し、エージェントにコメントの削除か必要な理由の説明を求めます。npm 依存は追加しません。`pota install` と `pota upgrade`(自動アップグレードを含む)がインストールを commit した後、現在のプラットフォーム(darwin/linux x64・arm64、windows x64)用の固定 v0.8.2 release をダウンロードし、固定 SHA256 を検証して OS の `tar` で `~/.pota/tools/comment-checker/` に展開し、結果を 1 行で表示します。ダウンロードに失敗してもインストールと exit code はそのままで、インストール済み runtime の `SessionStart` が分離プロセスで backoff を置いて再試行します。ダウンロードが成功するまで編集は検査なしで通過し、チェッカーのエラーや 7 秒を超える検査も通過します。`pota doctor` が状態を 1 行で表示し、`pota uninstall` が削除します。`POTA_COMMENT_CHECKER=0`(`false`、`off`、`no` も可)または `~/.pota/config.json` の `"commentChecker": false` で検査とダウンロードを両方無効にします。
 
+## Claude Code DAG Panel
+
+Claude Code デスクトップは、現在の Pota goal を wave ごとの列に分けた DAG パネルで表示します。Claude Code 専用で、Codex と Antigravity にはありません。mod 機能のある Claude Code が必要です(Claude Code 2.1.325 の mod API を基準に作成)。ターミナルのようにグラフを描けない surface では文字の一覧で表示します。
+
+- `/dag [previous|current|next|all|refresh|close]` でパネルを開きます。表示は前、現在、次、全体の 4 つです。完了した接続は実線、進行中の接続は点線と移動する点です。
+- `pota goal start` と `pota goal replan` の後に自動で一度だけ開きます。閉じると、同じ goal では再び開きません。
+- goal コマンドの実行時と 30 秒ごとに goal の状態を読み直して更新します。
+
 ## Antigravity Compatibility
 
 Antigravity は `/workflow-name` で呼び出される `SKILL.md` based Agent Skills and Workflows をサポートします。Pota はこの surface に次の paths を install します。

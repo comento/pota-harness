@@ -2,6 +2,7 @@
 
 Older completed plan entries moved from `PLAN.md` by `pota plan index --archive`. Newest first.
 
+- [Pota 0.2.5 공용 설정 upgrade hotfix](upgrade-shared-config-ownership.md): 공유 `config.toml`을 mutable merge surface로 바꾸고 boundary trivia·concurrent edit·crash recovery·0.2.4→0.2.5 upgrade를 검증.
 - [Pota 0.2.4 릴리스](release-0.2.4.md): dev·main PR을 exact head CI 성공 후 병합하고 exact main tarball을 npm `latest` 0.2.4로 게시해 digest와 격리 설치/CLI를 검증했습니다.
 - [clean uninstall과 프롬프트 캐시 복원력](clean-uninstall-prompt-cache-resilience.md): 빈 managed cache root 정리, unmanaged 보존, completed-task evidence 갱신, 7문장 recovery kernel과 bounded reference 복원.
 - [Pota 0.2.3 릴리스](release-0.2.3.md): dev/main PR 승격, npm 배포, npm 설치본 재설치와 실제 upgrade smoke 증거를 갱신하고 goal을 명시적으로 완료했습니다.

@@ -6,7 +6,7 @@ import { hasSetting, readSharedConfigSnapshot, removePotaConfig, splitSections }
 import {
   installedSkillLocatorPath, validRuntimeLocator, validateAntigravitySkills,
 } from "./pota-lifecycle-mirror.mjs";
-import { createClaudeRegistration } from "./pota-lifecycle-claude.mjs";
+import { CLAUDE_MOD_ENTRY, CLAUDE_MOD_TYPES, createClaudeRegistration } from "./pota-lifecycle-claude.mjs";
 import { HOSTS, hostOfTarget, isHostSelection } from "./pota-lifecycle-hosts.mjs";
 import {
   OWNERSHIP_SCHEMA_VERSION, RETAINED_RUNTIME_GRACE_MS, RETAINED_RUNTIME_IDS, RETAINED_RUNTIME_LIMIT,
@@ -336,10 +336,21 @@ async function doctor() {
   }
   if (selected("claude")) {
     checks.push(["Claude runtime locator", await validRuntimeLocator(claudeRuntimeLocatorPath, runtimeRoot)]);
-    const claudePluginManifest = await readJson(join(claudePluginMarketplaceRoot, pluginName, ".claude-plugin", "plugin.json"));
+    const claudePluginDir = join(claudePluginMarketplaceRoot, pluginName);
+    const claudePluginManifest = await readJson(join(claudePluginDir, ".claude-plugin", "plugin.json"));
+    const claudePluginHooks = await readJson(join(claudePluginDir, "hooks", "hooks.json")).catch(() => null);
+    // An installation from a release before the DAG pane has no `modules`; a CLI of another version must not fail it.
+    const claudeModExpected = installedVersion === releaseVersion || Array.isArray(claudePluginHooks?.modules);
+    const claudeModOk = !claudeModExpected || (
+      JSON.stringify(claudePluginHooks?.modules) === JSON.stringify([`./${CLAUDE_MOD_ENTRY}`])
+      && claudePluginManifest?.types === CLAUDE_MOD_TYPES
+      && await exists(join(claudePluginDir, "hooks", CLAUDE_MOD_ENTRY))
+      && await exists(join(claudePluginDir, CLAUDE_MOD_TYPES))
+      && await validRuntimeLocator(join(claudePluginDir, "pota-runtime.json"), runtimeRoot));
     checks.push(["Claude plugin files", claudePluginManifest?.version === installedVersion
       && await exists(join(claudePluginMarketplaceRoot, ".claude-plugin", "marketplace.json"))
-      && await exists(join(claudePluginMarketplaceRoot, pluginName, "hooks", "hooks.json"))]);
+      && Boolean(claudePluginHooks)
+      && claudeModOk]);
     let claudeStatus = null;
     try { claudeStatus = claudeRegistration.status(); } catch { claudeStatus = null; }
     checks.push(["Claude plugin registered", Boolean(claudeStatus?.marketplace && claudeStatus.installed)]);

@@ -172,6 +172,14 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (only w
 - Turning it off: `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0` (also `false`, `off`, or `no`), or `"autoUpgrade": false` in `~/.pota/config.json`. A `config.json` that cannot be read also turns it off. State and the last run's output live in `~/.pota/update/` (`state.json`, `notice.json`, `last-run.log`, `update.lock`, `stage/`).
 - Comment checker: after a successful edit (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` and edit tools), the PostToolUse hook runs [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) on the changed text and, when it reports needless comments, returns `decision: "block"` so the agent removes them or explains why they are needed. No npm dependency is added: `pota install` and `pota upgrade` (auto-upgrade included) download the pinned v0.8.2 release for the current platform (darwin/linux x64 and arm64, windows x64) after the installation commits, verify its pinned SHA256, extract it with the OS `tar` into `~/.pota/tools/comment-checker/`, and print the result on one line. A failed download keeps the installation and its exit code; `SessionStart` from the installed runtime retries it in a detached process with a backoff. Until a download succeeds, edits pass unchecked; a checker error or a check over 7 seconds also passes. `pota doctor` prints its state on one line, `pota uninstall` removes it, and `POTA_COMMENT_CHECKER=0` (also `false`, `off`, or `no`) or `"commentChecker": false` in `~/.pota/config.json` turns off both the check and the download.
 
+## Claude Code DAG Panel
+
+Claude Code desktop shows the current Pota goal as a DAG panel, one column per wave. It is Claude Code only; Codex and Antigravity do not have it. It needs a Claude Code with mod support (written against the Claude Code 2.1.325 mod API); a surface without graphics, such as the terminal, shows a text list instead.
+
+- `/dag [previous|current|next|all|refresh|close]` opens the panel. The views are previous, current, next, and all. A finished link is a solid line; a link in progress is dashed with a moving dot.
+- It opens once automatically after `pota goal start` and `pota goal replan`. If you close it, it does not open again for the same goal.
+- It re-reads the goal state whenever a goal command runs and every 30 seconds.
+
 ## Antigravity Compatibility
 
 Antigravity supports `SKILL.md`-based Agent Skills and Workflows invoked as `/workflow-name`. Pota installs these paths for that surface.

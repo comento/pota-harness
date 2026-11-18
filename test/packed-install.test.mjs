@@ -77,6 +77,12 @@ test("packed install remains self-contained after the npm package source is remo
     const packageBin = join(prefix, "node_modules", ".bin", process.platform === "win32" ? "pota.cmd" : "pota");
     await stat(join(packageRoot, ".codex-plugin", "plugin.json"));
     await stat(packageBin);
+    // The DAG pane mod ships its sources only; kit tests and dev config stay in the checkout.
+    for (const file of [["hooks", "register.tsx"], ["types", "index.d.ts"], [".claude-plugin", "plugin.json"]]) {
+      await stat(join(packageRoot, "claude-mod", ...file));
+    }
+    await assert.rejects(stat(join(packageRoot, "claude-mod", "tests")));
+    await assert.rejects(stat(join(packageRoot, "claude-mod", "tsconfig.json")));
 
     const lifecycleInstall = run(packageBin, ["install"], { cwd: unrelated, env });
     assert.equal(lifecycleInstall.status, 0, lifecycleInstall.stderr);
@@ -109,6 +115,7 @@ test("packed install remains self-contained after the npm package source is remo
     assert.equal(installedLocator.entrypoints.cli, installedCli);
     assert.equal(installedLocator.resources.modelGuidance, join(installedRoot, "docs", "model-guidance"));
     await rm(packageRoot, { recursive: true, force: true });
+    await stat(join(env.POTA_HOME, "install", "claude", "pota", "hooks", "register.tsx"));
     await assertPackedLocatorRemovalMatrix({ installedRoot, installedLocator, env, temp, unrelated });
 
     const init = run(process.execPath, [installedCli, "init", "--root", project], { cwd: unrelated, env });
