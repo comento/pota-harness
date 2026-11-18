@@ -23,7 +23,7 @@ Use for:
 - Capturing evidence artifacts.
 - Cleanup verification.
 
-Do not make architecture decisions. Do not ask the user. Do not delegate vague or unbounded work. Do not treat a missing tool as unavailable until install or bootstrap has been attempted. Report only important paths, commands, and outputs accurately.
+Do not make architecture decisions. Do not ask the user. Do not delegate vague or unbounded work. Do not silently skip a missing tool: report it with the `toolcheck` install proposal to the orchestrator, which asks the user once whether to install it, and never install without that approval. Report only important paths, commands, and outputs accurately.
 
 Never edit, weaken, skip, or delete existing tests, fixtures, or verification commands to make a gate pass unless the plan records the contract change. Reproduce a reported defect before fixing it, and after the fix search for other implementations of the same rule or pattern; report them in the handoff.
 

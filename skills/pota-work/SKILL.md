@@ -48,7 +48,7 @@ Read a reference only when the selected path or situation requires it (Quick and
 
 1. Read `MEMORY.md` when present, `PLAN.md`, the plan, relevant memory notes, and the `pota://docs/model-guidance/*.md` inputs it records.
 2. Read the current task with `goal task status`, then run `goal ready`: activate (`goal task --task <id> --status active`) and delegate independent ready tasks to parallel workers in the same worktree with disjoint `writeScope` and `--watch` inside it (`delegation.md`); rerun `goal ready` after each completion. Fold new requests in with `goal replan`, never cancel; with no goal, create one from the plan.
-3. Confirm tool readiness, route, and the request and planning checkpoints; inspect exact files, callers, and tests and record the code checkpoint just before the first edit (pending blocks mutation).
+3. Confirm tool readiness (ask once before installing missing tools), route, and the request and planning checkpoints; inspect exact files, callers, and tests and record the code checkpoint just before the first edit (pending blocks mutation).
 4. Use the test contract first: spend reasoning on requirements, invariants, boundaries, and failure modes, write focused tests, confirm the intended failure, then give the `worker` only the contract, failing evidence, file scope, and constraints; require the minimum implementation.
 5. Before mutating external state, run the recorded dry-run or check (or record its absence).
 6. Run both gates through `goal verify -- ...` (module acceptance, surface integration). Treat the tool exit code as authoritative; keep successes short and expand context only for the failing test.

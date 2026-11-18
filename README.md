@@ -46,7 +46,7 @@ pota toolcheck --root .
 pota toolcheck --install --yes --root .
 ```
 
-- `toolcheck` reports detected stacks and missing tools.
+- `toolcheck` reports detected stacks and missing tools. For each missing tool it prints a suggested install command or the reason automatic installation is unavailable, and the agent asks you once whether to install; if you decline, or the run is non-interactive, it records a blocker.
 - Default checks are read-only, bounded by a timeout, and do not execute repository-local wrappers merely to discover them.
 - `toolcheck --install` requires both `--yes` and explicit user approval. Unpinned or checksum-free installers return the canonical `installer-unavailable` refusal rather than silently downloading `latest`.
 - Pota plans record detected stack, required tools, install commands, and blockers.

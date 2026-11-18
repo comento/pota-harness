@@ -41,6 +41,7 @@ export {
 } from "./pota-toolcheck-detect.mjs";
 
 const version = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+const NO_INSTALLER_REASON = "no pinned installer is defined for this tool; install it through the platform toolchain";
 const usage = "Usage: pota toolcheck [--root PATH] [--json] [--install --yes]";
 
 if (isCliEntry()) {
@@ -169,7 +170,8 @@ export async function createReport({
       installStatus: installDiagnostic?.status ?? null,
       install: {
         available: Boolean(requirement.install),
-        unavailableReason: requirement.installUnavailableReason ?? null,
+        unavailableReason: requirement.install ? null : requirement.installUnavailableReason ?? NO_INSTALLER_REASON,
+        suggestedCommand: !check.ok && requirement.suggestedInstall ? formatCommand(requirement.suggestedInstall) : null,
         requested: install,
         attempted: Boolean(installDiagnostic),
         refusal: installRefusal,
@@ -194,17 +196,32 @@ export async function createReport({
 }
 
 function printReport(report) {
-  console.log(`Pota toolcheck: ${report.root}`);
-  console.log(`Detected stacks: ${report.detected.length > 0 ? report.detected.join(", ") : "none"}`);
-  if (report.install.refused) console.log(`INSTALL REFUSED - ${report.install.refusalReason}`);
+  for (const line of formatReport(report)) console.log(line);
+}
+
+export function formatReport(report) {
+  const lines = [
+    `Pota toolcheck: ${report.root}`,
+    `Detected stacks: ${report.detected.length > 0 ? report.detected.join(", ") : "none"}`,
+  ];
+  if (report.install.refused) lines.push(`INSTALL REFUSED - ${report.install.refusalReason}`);
   for (const result of report.results) {
     const prefix = result.ok ? result.availability === "discovered" ? "DISCOVERED" : "OK" : "MISSING";
     const installedText = result.installed ? " installed" : "";
-    console.log(`${prefix}${installedText} ${result.name} - ${result.reason}`);
-    if (result.check?.timedOut) console.log(`  check timed out after ${result.check.durationMs}ms`);
-    if (!result.ok && result.install.unavailableReason) console.log(`  install unavailable: ${result.install.unavailableReason}`);
-    else if (!result.ok && result.installCommand) console.log(`  install: ${result.installCommand}`);
+    lines.push(`${prefix}${installedText} ${result.name} - ${result.reason}`);
+    if (result.check?.timedOut) lines.push(`  check timed out after ${result.check.durationMs}ms`);
+    if (result.ok) continue;
+    if (result.install.unavailableReason) lines.push(`  install unavailable: ${result.install.unavailableReason}`);
+    else if (result.installCommand) lines.push(`  install: ${result.installCommand}`);
+    if (result.install.suggestedCommand) {
+      lines.push(`  suggested command (manual, unpinned; toolcheck never runs it): ${result.install.suggestedCommand}`);
+    }
   }
+  const missing = report.results.filter((result) => !result.ok).length;
+  if (missing > 0) {
+    lines.push(`Missing tools: ${missing}. Ask the user once whether to install them, showing each command or unavailable reason above; record a blocker if declined or if no user can be asked.`);
+  }
+  return lines;
 }
 
 function formatCommand(command) {

@@ -11,6 +11,7 @@ import {
   collectEntries,
   createReport,
   detectStacks,
+  formatReport,
   jdtlsInstall,
   isWithin,
   packageManager,
@@ -346,5 +347,120 @@ test("repository-local wrappers are discovered without being executed", async ()
     assert.ok(!calls.some((call) => call.includes("gradlew")));
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+const missingToolsReport = (options = {}) => createReport({
+  root: join(fixtures, "typescript-missing"),
+  platform: "linux",
+  localChecker: () => false,
+  runner: (command) => ({ status: command === "node" || command === "pnpm" ? 0 : 1 }),
+  ...options,
+});
+
+test("every missing tool carries a suggested command or an unavailable reason for the install question", async () => {
+  const report = await missingToolsReport();
+  const missing = report.results.filter(({ ok }) => !ok);
+
+  assert.deepEqual(missing.map(({ name }) => name), ["typescript-language-server", "tsc"]);
+  assert.deepEqual(missing.map(({ install }) => install.suggestedCommand), [
+    "pnpm add -D typescript-language-server",
+    "pnpm add -D typescript",
+  ]);
+  for (const result of missing) {
+    assert.equal(result.installCommand, null, `${result.name} has no automatic installer`);
+    assert.equal(result.install.available, false);
+    assert.match(result.install.unavailableReason, /pinned package versions/);
+  }
+  for (const result of report.results.filter(({ ok }) => ok)) {
+    assert.equal(result.install.suggestedCommand, null, `${result.name} is installed`);
+  }
+});
+
+test("a missing tool without a suggested command still reports why it cannot be installed automatically", async () => {
+  const report = await createReport({
+    root: join(fixtures, "polyglot"),
+    platform: "linux",
+    localChecker: () => false,
+    runner: () => ({ status: 1 }),
+  });
+
+  assert.ok(report.results.length > 0);
+  for (const result of report.results) {
+    assert.equal(result.ok, false);
+    assert.equal(result.install.available, false);
+    assert.equal(typeof result.install.unavailableReason, "string", `${result.name} unavailable reason`);
+    assert.ok(result.install.unavailableReason.length > 0, `${result.name} unavailable reason`);
+  }
+  const byName = Object.fromEntries(report.results.map((result) => [result.name, result.install]));
+  assert.equal(byName.java.suggestedCommand, null);
+  assert.match(byName.java.unavailableReason, /no pinned installer/);
+  assert.equal(byName.jdtls.suggestedCommand, null);
+  assert.match(byName.jdtls.unavailableReason, /checksum-free/);
+  assert.equal(byName.gopls.suggestedCommand, "go install golang.org/x/tools/gopls@latest");
+  assert.equal(byName["rust-analyzer"].suggestedCommand, "rustup component add rust-analyzer");
+});
+
+test("the human report lists each missing tool's command or reason and tells the agent to ask once", async () => {
+  const lines = formatReport(await missingToolsReport());
+  const at = lines.indexOf("MISSING tsc - TypeScript compiler verification");
+
+  assert.notEqual(at, -1);
+  assert.equal(lines[at + 1], "  install unavailable: automatic package installation is disabled without pinned package versions");
+  assert.equal(lines[at + 2], "  suggested command (manual, unpinned; toolcheck never runs it): pnpm add -D typescript");
+  assert.match(lines.at(-1), /^Missing tools: 2\. Ask the user once whether to install them/);
+  assert.match(lines.at(-1), /record a blocker if declined or if no user can be asked/);
+});
+
+test("the human report asks nothing when no tool is missing", async () => {
+  const lines = formatReport(await missingToolsReport({ runner: () => ({ status: 0 }) }));
+
+  assert.ok(lines.every((line) => !/^Missing tools:|suggested command|install unavailable/.test(line)), lines.join("\n"));
+});
+
+test("--install --yes never runs a suggested command", async () => {
+  const calls = [];
+  const report = await missingToolsReport({
+    install: true,
+    yes: true,
+    runner(command, args) {
+      calls.push([command, ...args].join(" "));
+      return { status: command === "node" || command === "pnpm" ? 0 : 1 };
+    },
+  });
+  const missing = report.results.filter(({ ok }) => !ok);
+
+  assert.ok(calls.every((call) => call.endsWith("--version")), calls.join("\n"));
+  assert.ok(!calls.some((call) => /\badd\b|\binstall\b/.test(call)), calls.join("\n"));
+  assert.deepEqual(missing.map(({ install }) => install.refusal), ["installer-unavailable", "installer-unavailable"]);
+  assert.ok(missing.every(({ install, installed }) => install.attempted === false && installed === false));
+  assert.deepEqual(missing.map(({ install }) => install.suggestedCommand), [
+    "pnpm add -D typescript-language-server",
+    "pnpm add -D typescript",
+  ]);
+});
+
+test("the CLI prints the install question data for a repository with missing tools", () => {
+  const cli = resolve("scripts", "pota-toolcheck.mjs");
+  const root = join(fixtures, "typescript-missing");
+  const env = { ...process.env, PATH: "", Path: "" };
+
+  const human = spawnSync(process.execPath, [cli, "--root", root], { encoding: "utf8", env });
+  assert.equal(human.status, 1, human.stderr);
+  assert.match(human.stdout, /^MISSING tsc - TypeScript compiler verification$/m);
+  assert.match(human.stdout, /^  suggested command \(manual, unpinned; toolcheck never runs it\): pnpm add -D typescript$/m);
+  assert.match(human.stdout, /^Missing tools: 4\. Ask the user once whether to install them/m);
+
+  const json = spawnSync(process.execPath, [cli, "--json", "--root", root], { encoding: "utf8", env });
+  assert.equal(json.status, 1, json.stderr);
+  const report = JSON.parse(json.stdout);
+  assert.deepEqual(report.results.map(({ name, ok }) => [name, ok]), [
+    ["node", false],
+    ["pnpm", false],
+    ["typescript-language-server", false],
+    ["tsc", false],
+  ]);
+  for (const { name, install } of report.results) {
+    assert.ok(install.suggestedCommand || install.unavailableReason, `${name} question data`);
   }
 });
