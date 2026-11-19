@@ -51,7 +51,8 @@
 - `main-pr`: https://github.com/comento/pota-harness/pull/14 (head `fd47c2e`). CI 7개 통과 후 head 고정 병합, merge commit `9df41ac`.
 - `npm-publish`: `9df41ac`의 clean detached worktree에서 pack 1회(prepack의 `npm run check` 통과). tarball `comento-pota-harness-1.3.2.tgz`, 268,671 bytes, 118 files, sha1 `83be2ecb29a4c26d54e83f54f6f07beaeca0f668`, integrity `sha512-Ia7ZF7rW/cvPCCNkm9yzjkcMX+nOXR0WadrJavhZ4H3fAalGvOWEcWJtOaPTGmEWlFKAtKE68X4KCy/B2RQ2uA==`. 같은 tarball로 `npm publish --dry-run` exit 0 뒤 사용자가 터미널에서 게시했다. 반영 뒤 `dist.shasum`·`dist.integrity`가 tarball과 일치하고 `latest`가 1.3.2다.
 - `release-verify`: 격리된 prefix·cache·HOME·`POTA_HOME`·호스트 env(`POTA_CLAUDE_CLI=none`, `POTA_AUTO_UPGRADE=0`)에 registry 1.3.2를 설치했다. `pota --version` → `pota 1.3.2`, `pota install --hosts claude` exit 0, 패키지의 mod manifest와 설치된 Claude plugin manifest가 모두 `1.3.2`. 설치본 CLI에서 쉼표 id 목록과 깨진 JSON의 `goal start`가 exit 1이고, 정상 JSON 배열은 task 2개로 시작된다.
-- `release-record`: `main` merge commit `9df41ac`에서 만든 브랜치 `chore/release-1.3.2-record`에 이 기록을 커밋해 `dev` PR로 되돌린다. 로컬 설치본 업그레이드는 이번 요청 범위가 아니라 하지 않았다.
+- `release-record`: `main` merge commit `9df41ac`에서 만든 브랜치 `chore/release-1.3.2-record`에 이 기록을 커밋해 `dev` PR로 되돌린다.
+- 로컬 설치본: 게시 뒤 사용자가 요청해(2026-11-19) `npm install -g @comento/pota-harness@1.3.2` → `pota upgrade` → `pota doctor`를 실행했다. `pota --version` → `pota 1.3.2`, doctor는 `Hosts: claude,antigravity`와 18개 항목 모두 OK, `claude plugin list`의 `pota@pota`도 `1.3.2`.
 - Memory promotion: `docs/memory/release-process.md`(버전 표면 네 곳), `docs/memory/lifecycle-install.md`(개발용 manifest 버전)
 
 ## Status
