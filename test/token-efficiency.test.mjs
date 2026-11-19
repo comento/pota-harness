@@ -533,6 +533,56 @@ test("delegation policy surfaces state model identity, new-dispatch, task-list, 
   }
 });
 
+test("main-model gate surfaces name the capsule line, the review kind, and the bypass flag", async () => {
+  const read = (path) => readFile(path, "utf8");
+  for (const path of ["skills/pota-plan/delegation.md", "skills/pota-work/delegation.md"]) {
+    const content = await read(path);
+    assert.match(content, /^## Main Model Gate$/m, `${path} section`);
+    for (const phrase of ["`Pota main model:`", "--kind review", "--allow-main-model <reason>", "triageDecision", "Model routing: inherited"]) {
+      assert.ok(content.includes(phrase), `${path} ${phrase}`);
+    }
+  }
+  for (const path of ["skills/pota-review/SKILL.md", "commands/pota-review.md", ".agents/workflows/pota-review.md"]) {
+    const content = await read(path);
+    assert.ok(content.includes("--kind review"), `${path} --kind review`);
+    assert.ok(content.includes("--allow-main-model"), `${path} --allow-main-model`);
+  }
+  const readmes = ["README.md", ...["ko", "ja", "zh", "es", "fr", "de", "pt"].map((locale) => `README.${locale}.md`)];
+  for (const path of ["templates/work-plan.md", "docs/model-guidance/README.md", "docs/model-guidance/claude.md", "docs/model-guidance/codex.md", ...readmes]) {
+    assert.ok((await read(path)).includes("--allow-main-model"), `${path} --allow-main-model`);
+  }
+  for (const path of readmes) assert.ok((await read(path)).includes("`Pota main model:`"), `${path} capsule line`);
+  for (const path of ["skills/pota-plan/delegation.md", "skills/pota-work/delegation.md", "docs/model-guidance/README.md", ...readmes]) {
+    assert.ok((await read(path)).includes("POTA_MAIN_MODEL_GATE=0"), `${path} global off switch`);
+  }
+});
+
+test("model ceiling surfaces name the capsule line, the setting, and the user-only rule", async () => {
+  const read = (path) => readFile(path, "utf8");
+  for (const path of ["skills/pota-plan/delegation.md", "skills/pota-work/delegation.md"]) {
+    const content = await read(path);
+    assert.match(content, /^## Model Ceiling$/m, `${path} section`);
+    for (const phrase of ["`Pota model ceiling:`", "POTA_MODEL_CEILING", "\"modelCeiling\"", "Model substitution:"]) {
+      assert.ok(content.includes(phrase), `${path} ${phrase}`);
+    }
+    assert.match(content, /Never set .POTA_MODEL_CEILING. yourself/, `${path} user-only rule`);
+    assert.match(content, /^CONTEXT: .*`Pota model ceiling:`/m, `${path} delegation prompt CONTEXT`);
+  }
+  for (const path of [
+    "skills/pota-plan/heavy-path.md", "skills/pota-work/heavy-path.md", "templates/work-plan.md",
+    "docs/model-guidance/README.md", "docs/model-guidance/claude.md", "docs/model-guidance/codex.md",
+  ]) {
+    assert.ok((await read(path)).includes("`Pota model ceiling:`"), `${path} capsule line`);
+  }
+  const readmes = ["README.md", ...["ko", "ja", "zh", "es", "fr", "de", "pt"].map((locale) => `README.${locale}.md`)];
+  for (const path of readmes) {
+    const content = await read(path);
+    for (const phrase of ["POTA_MODEL_CEILING=stronger", "\"modelCeiling\"", "`Pota model ceiling:`"]) {
+      assert.ok(content.includes(phrase), `${path} ${phrase}`);
+    }
+  }
+});
+
 async function withTempRoot(run) {
   const root = await mkdtemp(join(tmpdir(), "pota-token-efficiency-"));
   const stateHome = `${root}-home`;

@@ -30,6 +30,7 @@ Resolve any `pota://...` resource through `references/pota-runtime.json` next to
    - Use `worker` for scoped verification command re-runs or QA artifact capture.
    - Recursive subagent delegation is allowed only for bounded sub-tasks when the current surface supports it.
    - Keep blocking review work local when the next step depends immediately on the result.
+   - When the session-start capsule has a `Pota main model:` line, this delegation is required: dispatch the review at the stronger tier or above and record `goal assign <task> --kind review --agent <id> --model <value> --model-source host-option`; otherwise `goal finish` fails unless `--allow-main-model <reason>`.
 5. Report findings first, ordered by severity, with file and line references. If there are no issues, say so clearly and record remaining test gaps or residual risk.
 6. Write user-visible responses and generated or updated documentation, plans, and memory artifacts in the OS locale unless the user asks for another language.
 

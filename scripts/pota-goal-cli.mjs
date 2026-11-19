@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { memoryPromotionReminder } from "./pota-goal-history.mjs";
+import { hostSessionId, mainModelGateEnabled } from "./pota-goal-state.mjs";
+import { invalidModelCeilingWarning, resolveModelCeiling } from "./pota-model-ceiling.mjs";
+import { classifyModel, isBelowTier, isStrongerOrAbove } from "./pota-model-tier.mjs";
 import { resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
 
 const GOAL_COMMANDS = ["start", "status", "ready", "stats", "task", "replan", "claim", "assign", "receipt", "verify", "finish", "pause", "resume", "block", "cancel", "complete"];
@@ -14,6 +17,7 @@ export async function runGoalCli(args, {
   stderr = console.error,
   defaultGoalEvidence,
   operations,
+  env = process.env,
 }) {
   const [firstCommand = "help", ...remaining] = args;
   const [command = "help", ...rest] = firstCommand === "goal" ? remaining : [firstCommand, ...remaining];
@@ -41,6 +45,22 @@ export async function runGoalCli(args, {
   const onTerminal = (record, { historyError } = {}) => {
     if (historyError) stderr(`Pota warning: goal history was not recorded: ${firstLine(historyError)}`);
     if (record?.status === "completed" && record.memoryPromotion === "missing") stderr(memoryPromotionReminder(record.planId));
+  };
+  const sessionId = hostSessionId(env);
+  const mainModelGate = mainModelGateEnabled(env);
+  const mainModelWaiver = options["allow-main-model"];
+  // The bypass is not stored in goal state; stderr and the plan's Evidence are its record.
+  const reportMainModelWaiver = () => {
+    if (mainModelWaiver !== undefined) stderr(`Pota warning: main-model gate bypassed for goal ${command}: ${mainModelWaiver}`);
+  };
+  // Read only by the gated commands (a task status change, finish, complete), once per call; an invalid value warns once.
+  let ceilingSetting = null;
+  const modelCeiling = () => {
+    if (ceilingSetting === null) {
+      ceilingSetting = resolveModelCeiling({ env });
+      if (ceilingSetting.invalid) stderr(invalidModelCeilingWarning(ceilingSetting.invalid));
+    }
+    return ceilingSetting.ceiling;
   };
   if (command === "start") {
     const tasks = parseTasks(options.tasks ?? positional.slice(0));
@@ -85,8 +105,13 @@ export async function runGoalCli(args, {
       blocker: options.reason,
       effortWaiver: options["allow-inherited-effort"],
       designWaiver: options["allow-no-design-model"],
+      mainModelWaiver,
+      sessionId,
+      mainModelGate,
+      modelCeiling: modelCeiling(),
     });
     emit(JSON.stringify(state));
+    reportMainModelWaiver();
     return state;
   }
   if (command === "replan") {
@@ -121,7 +146,15 @@ export async function runGoalCli(args, {
     }
     // A worker-reported ID that does not contain the passed alias hints at a silent fallback; warn, never block.
     if (task?.model && task.effectiveModel && task.effectiveModel !== "unreported" && !task.effectiveModel.toLowerCase().includes(task.model.toLowerCase())) {
-      stderr(`Pota warning: Task ${task.id} effective model ${task.effectiveModel} does not match the passed model ${task.model}; check the dispatch result.`);
+      const host = task.modelHost ?? null;
+      const passedTier = classifyModel(task.model, host)?.tier;
+      const lower = isBelowTier(classifyModel(task.effectiveModel, host)?.tier, passedTier);
+      // Only a stronger-or-above passed model can be the reason to set a ceiling.
+      const ceilingHint = isStrongerOrAbove(passedTier)
+        ? `; if this account cannot use ${task.model}, have the user set a model ceiling (see delegation.md "Model Ceiling").`
+        : ".";
+      const hint = lower ? ` The host may have substituted a lower model${ceilingHint}` : "";
+      stderr(`Pota warning: Task ${task.id} effective model ${task.effectiveModel} does not match the passed model ${task.model}; check the dispatch result.${hint}`);
     }
     emit(JSON.stringify(state));
     return state;
@@ -173,8 +206,13 @@ export async function runGoalCli(args, {
       timeoutMs: options["timeout-ms"] === undefined
         ? 600_000
         : positiveIntegerOption(options["timeout-ms"], "timeout-ms"),
+      mainModelWaiver,
+      sessionId,
+      mainModelGate,
+      modelCeiling: modelCeiling(),
     });
     emit(JSON.stringify({ id: state.goal.id, status: state.goal.status }));
+    reportMainModelWaiver();
     return state;
   }
   if (command === "ready") {
@@ -201,8 +239,13 @@ export async function runGoalCli(args, {
       status: { pause: "paused", resume: "active", block: "blocked", cancel: "cancelled", complete: "completed" }[command],
       blocker: options.reason,
       onTerminal,
+      mainModelWaiver,
+      sessionId,
+      mainModelGate,
+      modelCeiling: command === "complete" ? modelCeiling() : null,
     });
     emit(JSON.stringify(state));
+    reportMainModelWaiver();
     return state;
   }
   throw new Error(unknownCommandMessage(command));
@@ -267,20 +310,20 @@ function allowedOptions(command) {
   const byCommand = {
     start: ["goal", "plan", "tasks", "criteria", "requiredEvidence", "session", "evidencePolicy", "evidence-policy"],
     status: [],
-    task: ["task", "status", "reason", "allow-inherited-effort", "allow-no-design-model"],
+    task: ["task", "status", "reason", "allow-inherited-effort", "allow-no-design-model", "allow-main-model"],
     replan: ["tasks"],
     claim: ["session"],
     assign: ["task", "agent", "effort", "effort-source", "route", "allow-inherited-effort", "kind", "model", "model-source", "allow-no-design-model", "effective-model", "host"],
     receipt: ["task", "kind", "scope", "command", "exitCode", "exit-code", "exit", "timestamp", "goalId", "goal-id", "plan"],
     verify: ["task", "kind", "scope", "watch", "timeout-ms"],
-    finish: ["watch", "timeout-ms"],
+    finish: ["watch", "timeout-ms", "allow-main-model"],
     stats: ["history", "limit"],
     ready: [],
     pause: [],
     resume: [],
     block: ["reason"],
     cancel: [],
-    complete: [],
+    complete: ["allow-main-model"],
     help: [],
   };
   return new Set([...common, ...(byCommand[command] ?? [])]);

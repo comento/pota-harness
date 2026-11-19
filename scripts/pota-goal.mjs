@@ -27,10 +27,11 @@ export { finishGoal, goalStats, recordReceipt, verifyAndRecord } from "./pota-go
 export { currentTask, evaluateStop, isGoalOwnedBySession } from "./pota-goal-policy.mjs";
 export { readyTasks } from "./pota-goal-operations-mutations.mjs";
 
-export async function handleGoalCli(args = process.argv.slice(2), { stdout = console.log, stderr = console.error } = {}) {
+export async function handleGoalCli(args = process.argv.slice(2), { stdout = console.log, stderr = console.error, env = process.env } = {}) {
   return runGoalCli(args, {
     stdout,
     stderr,
+    env,
     defaultGoalEvidence,
     operations: {
       assignTask,
