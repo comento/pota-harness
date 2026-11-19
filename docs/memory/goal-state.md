@@ -11,10 +11,14 @@ Summary: goal 상태 파일 위치·전이·lock·증거 freshness·이력(histo
 ### 위치와 결속
 
 - 상태 디렉터리는 `$POTA_HOME`(기본 `~/.pota`)`/projects/<repositoryId>/worktrees/<worktreeId>/`다. repositoryId는 git common dir, worktreeId는 git dir의 해시다. git이 아니면 root 경로를 쓴다. 출처: `pota-paths.mjs:9-40`.
-- 그 안의 파일: `state.json`(schema v3, `GOAL_STATE_VERSION`), `history.jsonl`, `stop-guard.json`, `reminder-guard.json`, `.pota/state.lock`. 저장소 안에는 goal 상태를 두지 않는다.
+- 그 안의 파일: `state.json`(schema v3, `GOAL_STATE_VERSION`), `history.jsonl`, `stop-guard.json`, `reminder-guard.json`, 세션마다 1개인 `main-model-<sha256(sessionKey) hex 앞 16자>.json`(`{"schemaVersion":1,"sessionKey","model","tier","host","at"}`, 낮은 tier 세션만, lock 없이 씀), `.pota/state.lock`. 저장소 안에는 goal 상태를 두지 않는다.
+- task `kind`는 `TASK_KINDS`(`design`, `review`) 중 하나이거나 없다. `review`를 더해도 schema 버전은 3이다. 구버전 runtime은 `kind: "review"` 상태를 읽지 못한다. 출처: `pota-goal-state-validation.mjs` `TASK_KINDS`.
 - 예전 위치 `<repo>/.pota/state.json`은 읽을 때 lock 안에서 새 위치로 옮기고 지운다. 출처: `pota-goal-state.mjs:100-113`.
 - 읽기 전용 경로(hook, `stats --history`)는 상태가 없으면 디렉터리를 만들지 않는다. 출처: `test/goal-state.test.mjs` "hook failures emit JSON and read-only hooks create no user-home state", `test/goal-history.test.mjs` "… creates no state directory".
+- 유일한 예외: SessionStart·UPS payload의 main 모델이 stronger 미만일 때 hook이 worktree 상태 디렉터리를 만들고 그 세션의 `main-model-<hash>.json`만 쓴다. SessionStart 시점엔 goal이 없어 디렉터리가 없을 수 있기 때문이다. `POTA_MAIN_MODEL_GATE`가 `0|false|off|no`면 이 기록도 하지 않는다. 출처: `test/main-model-gate.test.mjs` "only a below-stronger payload creates the worktree state directory, holding only per-session main-model files", "POTA_MAIN_MODEL_GATE off makes a below-stronger hook payload identical to one without a model and writes nothing".
+- main 모델 기록은 세션마다 다른 파일이라 세션끼리 같은 파일을 읽고 다시 쓰지 않는다. 한 파일에 모든 세션을 두면 lock 없는 동시 쓰기가 지운 기록을 되살려 stronger 세션을 잘못 막는다(fail-open이 아니다). 지우기는 그 세션 파일만 삭제하고, 기록할 때 `main-model-*.json`이 8개를 넘으면 자기 파일을 빼고 mtime이 오래된 것부터 지운다. 저장된 `sessionKey`가 조회 키와 다르거나 파일이 symlink·디렉터리·손상이면 기록이 없는 것으로 본다. 출처: `scripts/pota-goal-state.mjs` `syncMainModelRecord`, `test/main-model-gate.test.mjs` "a concurrent clear and record for different sessions never resurrects the cleared record", "recording a ninth session removes the oldest session file by mtime", "a record file whose stored sessionKey differs from the lookup key is not accepted".
 - goal은 `worktreeId`를 저장한다. 다른 worktree의 상태를 만나면 hook과 `goal start`가 그 파일을 지운다. 이때 이력은 남기지 않는다. 출처: `pota-goal-operations.mjs:37-43,79-91`, `test/goal-history.test.mjs` "stale-worktree state removal records no history".
+- 모델 상한(`POTA_MODEL_CEILING`·`config.json` `"modelCeiling"`)은 상태·이력·`goal stats`에 저장하지 않는다. CLI가 게이트 명령마다 읽고, schema는 3 그대로다. 출처: `scripts/pota-model-ceiling.mjs`, `delegation-model-routing.md` "모델 상한".
 - `ownerSessionId`가 다른 session은 foreign으로 본다. payload에 session id가 없으면 소유로 간주한다. 이어받을 때는 `goal claim --session`을 쓴다. 출처: `pota-goal-policy.mjs:12-17`.
 
 ### 전이와 종료

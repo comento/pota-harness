@@ -2,11 +2,11 @@ import { randomUUID } from "node:crypto";
 import { normalizeVerificationArgv, normalizeWatchPaths, runVerificationEvidence, workspaceFingerprint } from "./pota-goal-evidence.mjs";
 import { readGoalState } from "./pota-goal-state.mjs";
 import {
-  normalizeToolEvidence, pathContains, requiredText, timestamp, validReceiptCommand, validReceiptScope,
+  normalizeToolEvidence, optionalText, pathContains, requiredText, timestamp, validReceiptCommand, validReceiptScope,
   validReceiptSource, validTimestamp,
 } from "./pota-goal-state-validation.mjs";
 import { assertGoalMutable, isReceiptFresh, mutateGoal, taskById } from "./pota-goal-operations-mutations.mjs";
-import { setTaskStatus, transitionGoal } from "./pota-goal-operations.mjs";
+import { ensureMainModelReview, setTaskStatus, transitionGoal } from "./pota-goal-operations.mjs";
 
 export async function recordReceipt(options = {}) {
   if (options.source !== undefined && options.source !== "declared") throw new Error("Only goal verify can create tool evidence");
@@ -133,8 +133,10 @@ export async function verifyAndRecord({
 
 // Completes the active task, proves every goal-level evidence kind with one run, and completes the goal.
 export async function finishGoal({
-  root = process.cwd(), argv = [], watchPaths = [], runner, timeoutMs = 600_000, onTerminal,
+  root = process.cwd(), argv = [], watchPaths = [], runner, timeoutMs = 600_000, onTerminal, mainModelWaiver, sessionId = null,
+  mainModelGate = true, modelCeiling = null,
 } = {}) {
+  const waiver = optionalText(mainModelWaiver, "mainModelWaiver");
   const initialState = await readGoalState({ root });
   if (!initialState) throw new Error("No Pota goal state exists; start a goal first");
   assertGoalMutable(initialState);
@@ -145,11 +147,15 @@ export async function finishGoal({
   }
   const goalKinds = initialState.goal.requiredEvidence;
   if (goalKinds.length > 0) normalizeVerificationArgv(argv);
-  if (active) await setTaskStatus({ root, taskId: active.id, status: "completed" });
+  // Checked before the verification run so a missing review dispatch never costs a full check first.
+  await ensureMainModelReview(root, initialState, { sessionId, waiver, enabled: mainModelGate, ceiling: modelCeiling });
+  if (active) {
+    await setTaskStatus({ root, taskId: active.id, status: "completed", mainModelWaiver: waiver, sessionId, mainModelGate, modelCeiling });
+  }
   if (goalKinds.length > 0) {
     await verifyAndRecord({ root, scope: "goal", kind: goalKinds, argv, watchPaths, runner, timeoutMs });
   }
-  return transitionGoal({ root, status: "completed", onTerminal });
+  return transitionGoal({ root, status: "completed", onTerminal, mainModelWaiver: waiver, sessionId, mainModelGate, modelCeiling });
 }
 
 // Overhead measurement: how many verifications ran, how many were reruns, and which latest receipts are stale.

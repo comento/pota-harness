@@ -676,3 +676,15 @@ test("text helpers: locale, elapsed, card lines and running rows", () => {
   assert.ok(texts.includes("○ Task d"));
   assert.ok(!texts.some((text) => text.includes("Task c")));
 });
+
+test("default view is all: an unset or unknown view builds the all model and register starts on all", () => {
+  const snap = snapshot(planTasks(allStatus("completed")));
+  const all = buildDagModel(snap, "all");
+  assert.equal(all.view, "all");
+  assert.deepEqual(buildDagModel(snap, undefined), all);
+  assert.deepEqual(buildDagModel(snap, "bogus"), all);
+  const register = readFileSync(join(modRoot, "hooks/register.tsx"), "utf8");
+  const dagUi = register.slice(register.indexOf("const dagUi = atom("), register.indexOf("const dagAgents"));
+  assert.match(dagUi, /view: "all"/);
+  assert.match(dagUi, /\{ shape: "ui-2" \}/);
+});

@@ -221,10 +221,11 @@ const EDGE_STATE = { completed: "done", active: "flow", blocked: "blocked" };
 
 /**
  * @param {DagSnapshot} snapshot
- * @param {ViewId} view
+ * @param {ViewId} requested
  * @returns {DagModel}
  */
-export function buildDagModel(snapshot, view) {
+export function buildDagModel(snapshot, requested) {
+  const view = VIEWS.includes(requested) ? requested : "all";
   const tasks = snapshot.tasks;
   const byId = new Map(tasks.map((item) => [item.id, item]));
   const { waveOf } = computeWaves(tasks);
@@ -251,11 +252,11 @@ export function buildDagModel(snapshot, view) {
       roles.clear();
     }
     hiddenAfter = incomplete.filter((item) => !focus.has(item.id) && !afterIds.has(item.id)).length;
-  } else if (view === "all") {
-    for (const item of tasks) roles.set(item.id, "focus");
-  } else {
+  } else if (view === "current") {
     for (const id of focus) roles.set(id, "focus");
     for (const edge of reduced) if (focus.has(edge.to) && !focus.has(edge.from)) roles.set(edge.from, "context");
+  } else {
+    for (const item of tasks) roles.set(item.id, "focus");
   }
 
   /** @type {DagNode[]} */
@@ -281,7 +282,7 @@ export function buildDagModel(snapshot, view) {
       blocked: members.filter((item) => item.status === "blocked").length,
     };
   });
-  return { view: VIEWS.includes(view) ? view : "current", nodes, edges, waves, empty, hiddenAfter };
+  return { view, nodes, edges, waves, empty, hiddenAfter };
 }
 
 /**

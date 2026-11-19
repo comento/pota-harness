@@ -2,10 +2,15 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { potaHome, worktreeId } from "./pota-paths.mjs";
 import { assertNoSymlinkComponents } from "./pota-safe-fs.mjs";
-import { goalStatePath, readGoalState, readGoalStateUnlocked, withGoalStateLock, writeGoalStateUnlocked } from "./pota-goal-state.mjs";
+import {
+  goalStatePath, readGoalState, readGoalStateUnlocked, readMainModelRecord, withGoalStateLock, writeGoalStateUnlocked,
+} from "./pota-goal-state.mjs";
+import {
+  MODEL_TIER_BY_HOST, classifyModel, effectiveModel, effectiveTier, isAtOrAboveTier, modelsAtOrAbove, validCeiling,
+} from "./pota-model-tier.mjs";
 import { recordGoalHistoryUnlocked } from "./pota-goal-history.mjs";
 import {
-  GOAL_STATE_VERSION, PLAN_ID_MAX_LENGTH, STRONGEST_MODEL_BY_HOST, assertRecoveryReferenceBudget, boundedRequiredText,
+  GOAL_STATE_VERSION, PLAN_ID_MAX_LENGTH, assertRecoveryReferenceBudget, boundedRequiredText,
   assertCanBeActive, assertEffortRecord, assertModelRecord, assertTaskGraph,
   defaultGoalEvidence, normalizeCriteria, normalizeTask, optionalText, requiredText,
   terminalGoalStatuses, timestamp, validEvidencePolicy, validGoalStatus, validModelHost, validTaskKind, validTaskRoute, validTaskStatus, validateState,
@@ -92,13 +97,22 @@ export async function reconcileWorktreeState({ root = process.cwd() } = {}) {
 }
 
 // onTerminal(record, { historyError }) runs after a terminal transition succeeds; a history failure never blocks it.
-export async function transitionGoal({ root = process.cwd(), status, blocker, onTerminal = () => {} } = {}) {
+export async function transitionGoal({
+  root = process.cwd(), status, blocker, onTerminal = () => {}, mainModelWaiver, sessionId = null, mainModelGate = true,
+  modelCeiling = null,
+} = {}) {
+  const ceiling = validCeiling(modelCeiling);
   const nextStatus = validGoalStatus(status);
+  const normalizedMainModelWaiver = optionalText(mainModelWaiver, "mainModelWaiver");
+  if (normalizedMainModelWaiver !== null && nextStatus !== "completed") throw new Error("--allow-main-model applies only when completing a goal");
   if (terminalGoalStatuses.has(nextStatus)) {
     const { next, history } = await withGoalStateLock(root, async () => {
       const state = await readGoalStateUnlocked(root);
       if (!state) throw new Error("No Pota goal state exists; start a goal first");
       const next = applyGoalTransition(structuredClone(state), nextStatus, blocker, root);
+      if (nextStatus === "completed") {
+        await ensureMainModelReview(root, next, { sessionId, waiver: normalizedMainModelWaiver, enabled: mainModelGate, ceiling });
+      }
       next.revision += 1;
       validateState(next);
       // Recorded before deletion; a retry after a crash replaces the record for the same goalId.
@@ -127,14 +141,20 @@ function applyGoalTransition(state, nextStatus, blocker, root) {
   return state;
 }
 
-export async function setTaskStatus({ root = process.cwd(), taskId, status, blocker, effortWaiver, designWaiver } = {}) {
+export async function setTaskStatus({
+  root = process.cwd(), taskId, status, blocker, effortWaiver, designWaiver, mainModelWaiver, sessionId = null, mainModelGate = true,
+  modelCeiling = null,
+} = {}) {
+  const ceiling = validCeiling(modelCeiling);
   const nextStatus = validTaskStatus(status);
   const normalizedTaskId = requiredText(taskId, "taskId");
   const normalizedWaiver = optionalText(effortWaiver, "effortWaiver");
   if (normalizedWaiver !== null && nextStatus !== "completed") throw new Error("--allow-inherited-effort applies only when completing a task");
   const normalizedDesignWaiver = optionalText(designWaiver, "designWaiver");
   if (normalizedDesignWaiver !== null && nextStatus !== "completed") throw new Error("--allow-no-design-model applies only when completing a task");
-  return mutateGoal(root, (state) => {
+  const normalizedMainModelWaiver = optionalText(mainModelWaiver, "mainModelWaiver");
+  if (normalizedMainModelWaiver !== null && nextStatus !== "completed") throw new Error("--allow-main-model applies only when completing a task");
+  return mutateGoal(root, async (state) => {
     assertGoalMutable(state);
     const task = taskById(state, normalizedTaskId);
     if (task.status === nextStatus) return state;
@@ -146,8 +166,9 @@ export async function setTaskStatus({ root = process.cwd(), taskId, status, bloc
       if (normalizedWaiver !== null) task.effortWaiver = normalizedWaiver;
       if (normalizedDesignWaiver !== null) task.designWaiver = normalizedDesignWaiver;
       ensureHeavyEffortApplied(task);
-      ensureHeavyDesignRecorded(state, task);
+      ensureHeavyDesignRecorded(state, task, ceiling);
       ensureTaskCanComplete(state, task, root);
+      await ensureMainModelPlanning(root, state, task, { sessionId, waiver: normalizedMainModelWaiver, enabled: mainModelGate, ceiling });
     }
     if (nextStatus === "blocked") task.blocker = requiredText(blocker, "blocker");
     if (nextStatus === "active" || nextStatus === "pending") task.blocker = null;
@@ -213,23 +234,80 @@ function ensureHeavyEffortApplied(task) {
   throw new Error(`Heavy task ${task.id} assigned to ${task.assignedAgentId} has no applied effort (effort ${task.effort ?? "none"}, source ${source ?? "none"}); record goal assign ${task.id} --effort <low|medium|high|xhigh|max> --effort-source host-option, or complete with --allow-inherited-effort <reason>`);
 }
 
-// A kind "design" task must record the strongest-tier model it was dispatched with (host-option). Any other assigned
-// Heavy task needs a completed design task in the goal. A designWaiver reason bypasses both; Light and unassigned
-// tasks are not checked.
-function ensureHeavyDesignRecorded(state, task) {
+// A kind "design" task must record the strongest-tier model it was dispatched with (host-option); under a model
+// ceiling the ceiling tier's model or any higher one passes. Any other assigned Heavy task needs a completed design task
+// in the goal. A designWaiver reason bypasses both; Light and unassigned tasks are not checked.
+function ensureHeavyDesignRecorded(state, task, ceiling = null) {
   if (task.designWaiver) return;
   if (task.kind === "design") {
+    // The host is declared, never guessed; without it any supported host's value passes.
+    const hosts = task.modelHost ? [task.modelHost] : Object.keys(MODEL_TIER_BY_HOST);
+    const target = designTarget(hosts, ceiling);
     if (!(task.model && task.modelSource === "host-option")) {
-      throw new Error(`Design task ${task.id} has no recorded design model (model ${task.model ?? "none"}, source ${task.modelSource ?? "none"}); dispatch it to the strongest tier and record goal assign ${task.id} --model <value> --model-source host-option, or complete with --allow-no-design-model <reason>`);
+      throw new Error(`Design task ${task.id} has no recorded design model (model ${task.model ?? "none"}, source ${task.modelSource ?? "none"}); dispatch it to ${target} and record goal assign ${task.id} --model <value> --model-source host-option, or complete with --allow-no-design-model <reason>`);
     }
-    // The host is declared, never guessed; without it any supported host's strongest value passes.
-    const expected = task.modelHost ? [STRONGEST_MODEL_BY_HOST[task.modelHost]] : Object.values(STRONGEST_MODEL_BY_HOST);
+    const expected = [...new Set(hosts.flatMap((host) => modelsAtOrAbove(host, effectiveTier("strongest", ceiling))))];
     if (expected.includes(task.model)) return;
-    throw new Error(`Design task ${task.id} recorded model ${task.model}, expected ${expected.join(" | ")}${task.modelHost ? ` for host ${task.modelHost}` : ""}; dispatch it to the strongest tier and record goal assign ${task.id} --model <value> --model-source host-option, or complete with --allow-no-design-model <reason>`);
+    throw new Error(`Design task ${task.id} recorded model ${task.model}, expected ${expected.join(" | ")}${task.modelHost ? ` for host ${task.modelHost}` : ""}${ceilingNote(ceiling)}; dispatch it to ${target} and record goal assign ${task.id} --model <value> --model-source host-option, or complete with --allow-no-design-model <reason>${ceilingHint(ceiling === "stronger" ? "balanced" : "stronger|balanced", ceiling)}`);
   }
   if (task.route !== "heavy" || !task.assignedAgentId) return;
   if (state.tasks.some((item) => item.kind === "design" && item.status === "completed")) return;
   throw new Error(`Heavy task ${task.id} assigned to ${task.assignedAgentId} has no completed design task; add a kind "design" task with goal replan, complete it with goal assign <design-task> --model <value> --model-source host-option, or complete with --allow-no-design-model <reason>`);
+}
+
+const ceilingNote = (ceiling) => (ceiling ? ` (model ceiling ${ceiling})` : "");
+
+// Under a ceiling the dispatch target is the ceiling tier's model, the first expected value for each host; without one
+// the wording stays "the strongest tier".
+function designTarget(hosts, ceiling) {
+  if (!validCeiling(ceiling)) return "the strongest tier";
+  return [...new Set(hosts.map((host) => effectiveModel(host, "strongest", ceiling)).filter(Boolean))].join(" | ");
+}
+
+// Gate errors point an account that cannot use the expected model to the user's ceiling setting; a balanced ceiling
+// is already the lowest, so it gets no hint.
+function ceilingHint(options, ceiling) {
+  if (ceiling === "balanced") return "";
+  return `. If this account cannot use that model, have the user set a model ceiling (POTA_MODEL_CEILING=${options}, or "modelCeiling" in ~/.pota/config.json); never set it yourself. See delegation.md "Model Ceiling"`;
+}
+
+// Passing evidence is a host-option dispatch classified at the floor tier (stronger, or the capped stronger tier) or
+// above for its declared host. The agent id is not required: goal assign without --agent resets it to null.
+const dispatchedAtOrAbove = (task, floor) => task.modelSource === "host-option"
+  && isAtOrAboveTier(classifyModel(task.model, task.modelHost ?? null)?.tier, floor);
+
+// The session key is the host session (CLAUDE_CODE_SESSION_ID) or else the goal owner; without one, or without a
+// recorded below-floor main model for it, nothing is gated. The CLI passes enabled: false for POTA_MAIN_MODEL_GATE off.
+async function mainModelRecordFor(root, state, sessionId, floor) {
+  const key = sessionId ?? state.goal.ownerSessionId ?? null;
+  return key ? readMainModelRecord(root, key, floor) : null;
+}
+
+function strongerExpectation(host, ceiling) {
+  if (!Object.hasOwn(MODEL_TIER_BY_HOST, host ?? "")) return `the ${effectiveTier("stronger", ceiling)} tier or above`;
+  return [...new Set([effectiveModel(host, "stronger", ceiling), effectiveModel(host, "strongest", ceiling)])].join(" or ");
+}
+
+const floorText = (floor, ceiling) => `at the ${floor} tier${ceilingNote(ceiling)}`;
+
+// A task that requires triageDecision evidence is planning work; a below-floor main session must have dispatched it.
+async function ensureMainModelPlanning(root, state, task, { sessionId = null, waiver = null, enabled = true, ceiling = null } = {}) {
+  const cap = validCeiling(ceiling);
+  const floor = effectiveTier("stronger", cap);
+  if (!enabled || waiver || !task.requiredEvidence.includes("triageDecision") || dispatchedAtOrAbove(task, floor)) return;
+  const record = await mainModelRecordFor(root, state, sessionId, floor);
+  if (!record) return;
+  throw new Error(`Planning task ${task.id} was not dispatched ${floorText(floor, cap)}: this session's main model is ${record.model} (${record.tier} tier). Dispatch planning and triage to ${strongerExpectation(record.host, cap)} and record goal assign ${task.id} --agent <id> --model <value> --model-source host-option, or complete with --allow-main-model <reason> (for example when the session model changed after session start)${ceilingHint("balanced", cap)}`);
+}
+
+// Goal completion under a below-floor main session needs one kind "review" task dispatched at the floor tier or above.
+export async function ensureMainModelReview(root, state, { sessionId = null, waiver = null, enabled = true, ceiling = null } = {}) {
+  const cap = validCeiling(ceiling);
+  const floor = effectiveTier("stronger", cap);
+  if (!enabled || waiver || state.tasks.some((task) => task.kind === "review" && dispatchedAtOrAbove(task, floor))) return;
+  const record = await mainModelRecordFor(root, state, sessionId, floor);
+  if (!record) return;
+  throw new Error(`Goal ${state.goal.id} has no review dispatched ${floorText(floor, cap)}: this session's main model is ${record.model} (${record.tier} tier). Dispatch the final review to ${strongerExpectation(record.host, cap)} and record goal assign <review-task> --kind review --agent <id> --model <value> --model-source host-option, or pass --allow-main-model <reason> to goal finish or goal complete (for example when the session model changed after session start)${ceilingHint("balanced", cap)}`);
 }
 
 // Omitted effort/route/waiver options keep stored values, so a reassignment can change only the agent. When effort

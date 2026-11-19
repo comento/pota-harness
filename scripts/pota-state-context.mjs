@@ -11,6 +11,8 @@ const contextLimits = {
   indexName: 32,
   planNames: 3,
   noticeVersion: 24,
+  mainModel: 40,
+  modelCeilingValue: 40,
 };
 
 export function prependContext(result, notice) {
@@ -30,6 +32,7 @@ export function prependContext(result, notice) {
 }
 
 import { currentTask } from "./pota-goal-policy.mjs";
+import { MODEL_TIER_BY_HOST } from "./pota-model-tier.mjs";
 
 export function contextResult({ ko, state, event, index = null }) {
   const base = kernelBase(ko);
@@ -154,6 +157,80 @@ export function updateNoticeLine({ ko, notice }) {
   return null;
 }
 
+// A conditional SessionStart line outside the standing budgets (340 characters); the prefix stays English in both
+// locales because delegation.md names the line by it. threshold is the capped stronger tier under a model ceiling.
+export function mainModelLine({ ko, model, tier, host, threshold = "stronger" }) {
+  const name = clipText(plainText(model), contextLimits.mainModel);
+  const stronger = strongerModel(host, threshold);
+  return ko
+    ? `Pota main model: ${name} (${tier} tier, ${threshold} 미만). 계획·트리아지와 최종 리뷰를 ${stronger} 이상 subagent에 위임하고 goal assign --model로 기록하세요. 기록이 없으면 triage-plan 완료와 goal finish가 거부됩니다(우회: --allow-main-model <reason>). 상세: delegation.md "Main Model Gate".`
+    : `Pota main model: ${name} (${tier} tier, below ${threshold}). Dispatch planning/triage and the final review to a subagent on ${stronger} or higher and record goal assign --model, or triage-plan completion and goal finish fail (bypass: --allow-main-model <reason>). See delegation.md "Main Model Gate".`;
+}
+
+// The user-facing systemMessage (240 characters), shown when the record is written or the model changes.
+export function mainModelNotice({ ko, model, host, threshold = "stronger" }) {
+  const name = clipText(plainText(model), contextLimits.mainModel);
+  const stronger = strongerModel(host, threshold);
+  return ko
+    ? `Pota: 이 세션의 main 모델(${name})은 ${threshold} tier 미만입니다. 계획·트리아지·리뷰는 ${stronger} 이상 subagent에 위임됩니다. 모델을 바꾸면 늦어도 다음 세션 시작 때 반영됩니다.`
+    : `Pota: this session runs on ${name}, below the ${threshold} tier. Planning, triage, and review go to subagents on ${stronger} or higher. A model switch is picked up by the next session start at the latest.`;
+}
+
+function strongerModel(host, threshold = "stronger") {
+  return Object.hasOwn(MODEL_TIER_BY_HOST, host ?? "") ? MODEL_TIER_BY_HOST[host][threshold] : `the ${threshold} tier`;
+}
+
+// A conditional SessionStart line (380 characters) while a model ceiling is set. The hook does not know the host, so
+// the line names all three hosts' values; the prefix stays English in both locales.
+export function modelCeilingLine({ ko, ceiling }) {
+  if (!Object.hasOwn(MODEL_CEILING_WORK, ceiling ?? "")) return null;
+  const [cc, cx, ag] = ["claude-code", "codex", "antigravity"].map((host) => MODEL_TIER_BY_HOST[host][ceiling]);
+  const head = `Pota model ceiling: ${ceiling} (Claude Code ${cc}, Codex ${cx}, Antigravity ${ag}).`;
+  const work = MODEL_CEILING_WORK[ceiling][ko ? "ko" : "en"];
+  return ko
+    ? `${head} 이보다 높은 모델로 dispatch하지 마세요. ${work}도 이 모델로 실행하고, 넘긴 값을 goal assign --model로 기록하면 게이트를 통과합니다. skill 문구의 tier 값보다 이 줄이 우선합니다. 상세: delegation.md "Model Ceiling".`
+    : `${head} Never dispatch above it: ${work} runs on that model; pass and record that value (goal assign --model) and the gates accept it. This overrides tier values in skill text. See delegation.md "Model Ceiling".`;
+}
+
+const MODEL_CEILING_WORK = {
+  stronger: { en: "strongest-tier work (Heavy design)", ko: "strongest tier 작업(Heavy 설계)" },
+  balanced: {
+    en: "stronger- and strongest-tier work (planning, triage, review, Heavy work)",
+    ko: "stronger·strongest tier 작업(계획·트리아지·리뷰·Heavy 작업)",
+  },
+};
+
+// The user-facing systemMessage (240 characters) on every SessionStart while the setting is invalid.
+export function modelCeilingInvalidNotice({ ko, source, value }) {
+  // An unpaired surrogate becomes U+FFFD so JSON.stringify cannot expand it to a six-character escape.
+  const shown = JSON.stringify(clipText(plainText(value).replace(LONE_SURROGATE, "\uFFFD"), contextLimits.modelCeilingValue));
+  const where = source === "config" ? "config.json \"modelCeiling\"" : "POTA_MODEL_CEILING";
+  return ko
+    ? `Pota: 모델 상한 값 ${shown}(${where})이 올바르지 않습니다. balanced 또는 stronger(또는 sonnet·opus 같은 모델 이름)를 쓰세요. 상한은 적용되지 않습니다.`
+    : `Pota: model ceiling ${shown} (${where}) is not valid; use balanced or stronger (or a model name such as sonnet or opus). No ceiling is applied.`;
+}
+
+// Appends a context line and joins a user message onto any systemMessage already present, so several notices keep
+// their order instead of replacing each other.
+export function appendNotice(result, line, userMessage = null) {
+  let next = result;
+  if (line) {
+    const specific = result.hookOutput?.hookSpecificOutput;
+    next = {
+      ...result,
+      message: `${result.message}\n${line}`,
+      hookOutput: specific
+        ? { ...result.hookOutput, hookSpecificOutput: { ...specific, additionalContext: `${specific.additionalContext}\n${line}` } }
+        : result.hookOutput,
+    };
+  }
+  if (userMessage) {
+    const systemMessage = [next.hookOutput?.systemMessage, userMessage].filter(Boolean).join("\n");
+    next = { ...next, hookOutput: { ...next.hookOutput, systemMessage } };
+  }
+  return next;
+}
+
 function withBlocks(message, ...blocks) {
   return [message, ...blocks].filter(Boolean).join("\n");
 }
@@ -275,6 +352,7 @@ function clipText(value, maxLength) {
 // Note names, summaries, and plan names are repository text: control characters and line separators become spaces
 // so they cannot start a new line in the capsule or hide text from the reader.
 const UNSAFE_TEXT = /[\u0000-\u001f\u007f-\u009f\u{2028}\u{2029}]/gu;
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
 
 function plainText(value) {
   return String(value ?? "").replace(UNSAFE_TEXT, " ");

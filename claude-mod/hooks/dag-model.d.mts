@@ -32,6 +32,6 @@ export declare function computeWaves(tasks: readonly Linked[]): { waveOf: Record
 export declare function reduceEdges(tasks: readonly Linked[]): { from: string; to: string }[];
 export declare function taskState(task: DagTask, byId: Map<string, DagTask>): TaskState;
 export declare function focusIds(snapshot: DagSnapshot): string[];
-export declare function buildDagModel(snapshot: DagSnapshot, view: ViewId): DagModel;
+export declare function buildDagModel(snapshot: DagSnapshot, view?: ViewId): DagModel;
 export declare function summarize(snapshot: { tasks: DagTask[] }): DagSummary;
 export declare function planKey(snapshot: DagSnapshot): string;
