@@ -4,8 +4,6 @@
 
 ## Active Plans
 
-- [Pota 1.3.1 릴리스](docs/plan/release-1.3.1.md): main 모델 게이트·모델 상한·테스트 분할·DAG 기본 보기를 1.3.1로 dev·main 병합 후 npm에 게시한다.
-
 ## Superseded Plans
 
 - [Pota 0.2.0 설치본 런타임 릴리스](docs/plan/release-0.2.0-installed-runtime.md): 후속 0.2.1·0.2.2 릴리스로 대체된 미완료 릴리스 계획입니다. 활성 작업으로 취급하지 않습니다.
@@ -14,6 +12,7 @@
 
 최신 항목이 위에 오며 계획당 한 줄입니다. `pota plan index --archive`는 오래된 항목을 `docs/plan/ARCHIVE.md`로 옮깁니다.
 
+- [Pota 1.3.1 릴리스](docs/plan/release-1.3.1.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.3.1로 게시해 digest와 격리 설치를 확인했습니다.
 - [구독 등급에 맞춘 모델 상한](docs/plan/available-model-ceiling.md): `POTA_MODEL_CEILING`·`config.json` `"modelCeiling"`으로 쓸 수 있는 최고 tier를 선언하면 게이트와 캡슐이 그 기준으로 판정한다.
 - [main 모델 게이트, 테스트 시간 단축, DAG 기본 보기](docs/plan/main-model-gate-and-test-time.md): opus 미만 main 모델의 계획·리뷰를 알림과 완료 게이트로 막고(`POTA_MAIN_MODEL_GATE=0`으로 끔), 테스트 분할로 `npm test` 235초→165초, DAG 기본 보기를 전체로.
 - [Pota 1.3.0 릴리스](docs/plan/release-1.3.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.3.0으로 게시해 digest와 격리 설치를 확인했습니다.
@@ -33,4 +32,3 @@
 - [Heavy Path 설계 모델 위임](docs/plan/heavy-design-model-routing.md): Heavy Path 설계를 strongest 모델 위임 task로 분리하고 모델 기록 누락을 완료 게이트로 차단; `npm run check` 통과.
 - [Pota 0.4.0 릴리스](docs/plan/release-0.4.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 0.4.0으로 게시해 digest와 격리 설치의 Heavy effort 게이트를 검증했습니다.
 - [작업별 모델 결정](docs/plan/per-task-model-routing.md): 모델 상속 고정을 fast/balanced/stronger/strongest 4-tier 작업별 결정으로 바꾸고 호스트별 매핑과 host 옵션 전달 규칙을 반영했습니다.
-- [dispatch 시 추론 강도 실제 적용과 검증](docs/plan/dispatch-effort-enforcement.md): host 옵션으로 effort를 넘기는 규칙·Effective 판정, `goal assign --effort`, Heavy 완료 게이트, stats·Stop 경고를 구현했습니다.
