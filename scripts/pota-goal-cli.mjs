@@ -337,8 +337,16 @@ function parseTasks(value) {
     if (!Array.isArray(parsed)) throw new Error("--tasks JSON must be an array");
     return parsed;
   } catch (error) {
-    if (error instanceof SyntaxError) return value.split("|").map((item) => item.trim()).filter(Boolean);
-    throw error;
+    if (!(error instanceof SyntaxError)) throw error;
+    const text = value.trim();
+    if (text.startsWith("[") || text.startsWith("{")) throw new Error("--tasks JSON is not valid");
+    if (!text.includes("|")) {
+      const parts = text.split(",").map((item) => item.trim());
+      if (parts.length >= 2 && parts.every((part) => /^[A-Za-z0-9._-]+$/.test(part))) {
+        throw new Error('--tasks does not split on commas; pass a JSON array such as --tasks \'[{"id":"a","title":"A"}]\' or titles separated by |');
+      }
+    }
+    return value.split("|").map((item) => item.trim()).filter(Boolean);
   }
 }
 
