@@ -349,3 +349,52 @@ test("unknown goal subcommands exit 1 with a one-line error", async () => {
     assert.deepEqual(await listTree(stateHome), []);
   });
 });
+
+test("goal --tasks rejects comma id lists and broken JSON but keeps pipe, prose and JSON forms", async () => {
+  const root = await mkdtemp(join(tmpdir(), "pota-cli-tasks-"));
+  const stateHome = await mkdtemp(join(tmpdir(), "pota-cli-tasks-home-"));
+  try {
+    const env = { ...process.env, POTA_HOME: stateHome };
+    const start = (tasks, goal = "tasks parse") => run(rootCli, ["goal", "start", "--quiet", "--root", root, "--goal", goal, "--plan", "plan-tasks", "--tasks", tasks], { env });
+    const status = () => run(rootCli, ["goal", "status", "--root", root], { env });
+    const commaMessage = /--tasks does not split on commas.*--tasks '\[\{"id":"a","title":"A"\}\]'.*\|/;
+
+    const comma = start("triage-plan,server-tree,client-tree,verify");
+    assert.notEqual(comma.status, 0);
+    assert.match(comma.stderr, commaMessage);
+    assert.equal(status().stdout.trim(), "null");
+    assert.deepEqual(await listTree(stateHome), []);
+
+    const broken = start('[{"id":"a"');
+    assert.notEqual(broken.status, 0);
+    assert.match(broken.stderr, /--tasks JSON is not valid/);
+    assert.equal(status().stdout.trim(), "null");
+    assert.notEqual(start("{oops").status, 0);
+
+    const prose = start("Fix a, b");
+    assert.equal(prose.status, 0, prose.stderr);
+    assert.deepEqual(JSON.parse(status().stdout).tasks.map(({ id, title }) => ({ id, title })), [{ id: "task-1", title: "Fix a, b" }]);
+    assert.equal(run(rootCli, ["goal", "cancel", "--quiet", "--root", root], { env }).status, 0);
+
+    const piped = start("Plan it|Build it");
+    assert.equal(piped.status, 0, piped.stderr);
+    assert.deepEqual(JSON.parse(status().stdout).tasks.map(({ title }) => title), ["Plan it", "Build it"]);
+    assert.equal(run(rootCli, ["goal", "cancel", "--quiet", "--root", root], { env }).status, 0);
+
+    const json = start(JSON.stringify([{ id: "a", title: "A" }, { id: "b", title: "B" }]));
+    assert.equal(json.status, 0, json.stderr);
+    const before = status().stdout;
+
+    const replanComma = run(rootCli, ["goal", "replan", "--quiet", "--root", root, "--tasks", "x,y,z"], { env });
+    assert.notEqual(replanComma.status, 0);
+    assert.match(replanComma.stderr, commaMessage);
+    assert.equal(status().stdout, before);
+    const replanBroken = run(rootCli, ["goal", "replan", "--quiet", "--root", root, "--tasks", "[{"], { env });
+    assert.notEqual(replanBroken.status, 0);
+    assert.match(replanBroken.stderr, /--tasks JSON is not valid/);
+    assert.equal(status().stdout, before);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(stateHome, { recursive: true, force: true });
+  }
+});

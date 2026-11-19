@@ -2,6 +2,7 @@
 
 Older completed plan entries moved from `PLAN.md` by `pota plan index --archive`. Newest first.
 
+- [dispatch 시 추론 강도 실제 적용과 검증](dispatch-effort-enforcement.md): host 옵션으로 effort를 넘기는 규칙·Effective 판정, `goal assign --effort`, Heavy 완료 게이트, stats·Stop 경고를 구현했습니다.
 - [Pota 0.3.0 릴리스](release-0.3.0.md): SessionStart 캡슐 예산 hotfix와 함께 main에 병합하고 exact main tarball을 npm `latest` 0.3.0으로 게시해 digest와 격리 설치를 검증했습니다.
 - [Pota 오버헤드 축소와 task DAG](pota-overhead-reduction.md): goal 증거로 task 재검증 면제, `goal finish`/`stats`/`ready`, PostToolUse 1회 알림, SKILL.md 축소, `dependsOn`/`writeScope` 병렬 task.
 - [Pota 0.2.7 릴리스](release-0.2.7.md): state/lifecycle 계약 hardening과 module split을 dev·main에 승격하고 exact main tarball을 npm `latest` 0.2.7로 게시했습니다.

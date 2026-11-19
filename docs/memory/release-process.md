@@ -10,7 +10,7 @@ Summary: 버전 표면, dev→main PR 승격, exact-main tarball 게시와 npm �
 
 ### 버전 표면과 검사
 
-- 버전 문자열은 `package.json`, `.codex-plugin/plugin.json`, `test/contract-parity.test.mjs`의 기대값 세 곳에 있다(0.7.0부터 나머지 테스트는 `package.json`에서 읽는다). `test/index-context.test.mjs`의 `0.5.0`은 baseline 주석이다. 확인: `grep -rn '<현재 버전>' package.json .codex-plugin test`. 출처: `docs/plan/release-0.7.0.md` Triage.
+- 버전 문자열은 `package.json`, `.codex-plugin/plugin.json`, `claude-mod/.claude-plugin/plugin.json`(1.3.2부터, 그 전에는 `0.0.0`), `test/contract-parity.test.mjs`의 기대값 네 곳에 있다(0.7.0부터 나머지 테스트는 `package.json`에서 읽는다). `test/index-context.test.mjs`의 `0.5.0`은 baseline 주석이다. 확인: `grep -rn '<현재 버전>' package.json .codex-plugin claude-mod/.claude-plugin test`. 출처: `docs/plan/release-0.7.0.md` Triage.
 - `test/repo-index.test.mjs`가 이 저장소의 `PLAN.md`·`MEMORY.md`를 `--strict`로 검사한다. 계획을 완료 목록으로 옮길 때 요약은 120자 이하로 쓰고, 완료 항목이 20개를 넘으면 `pota plan index --archive`를 실행한다(0.7.0에서 `npm run check` 실패).
 - `npm run check`는 핵심 스크립트 `node --check`, JSON 파싱, `npm test`(`node --test`)를 실행한다. `prepack`이 `npm run check`라서 `npm pack`·`npm publish`도 전체 테스트를 돌린다. 로컬 pack 검증에 `--ignore-scripts`를 쓰지 않는다. 출처: `package.json` `scripts`.
 - CI(`.github/workflows/ci.yml`)는 ubuntu·windows·macos × Node 18·current 매트릭스에서 `npm run check`, CLI smoke, `toolcheck --json`, `npm pack --dry-run --ignore-scripts`를 실행한다. 여기서 `--ignore-scripts`는 같은 job에서 check가 이미 돌았기 때문이다. 브랜치 보호의 필수 상태는 요약 job `check` 하나다.
