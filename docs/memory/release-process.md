@@ -41,7 +41,7 @@ Summary: 버전 표면, dev→main PR 승격, exact-main tarball 게시와 npm �
 
 ### 알려진 위험
 
-- Windows + Node current에서 `test/lifecycle-transaction.test.mjs` "a stale lifecycle observer never displaces a confirmed live lifecycle owner"가 1회 실패한 적이 있다(lock 대기 1초에 1018ms). lock 코드를 건드리지 않았다면 실패 job만 재실행한다. 출처: `docs/plan/release-0.5.0.md` Evidence `dev-pr`.
+- Windows + Node current에서 `test/lifecycle-transaction-commit.test.mjs`(분할 전 `test/lifecycle-transaction.test.mjs`) "a stale lifecycle observer never displaces a confirmed live lifecycle owner"가 1회 실패한 적이 있다(lock 대기 1초에 1018ms). lock 코드를 건드리지 않았다면 실패 job만 재실행한다. 출처: `docs/plan/release-0.5.0.md` Evidence `dev-pr`.
 - Windows 체크아웃은 `.gitattributes`(`* text=auto eol=lf`)로 LF에 고정돼 있다. 이 파일이 없으면 CRLF 때문에 SKILL.md 바이트 예산과 템플릿 동일성 테스트가 Windows에서만 실패한다(0.6.0 dev PR에서 발생). 예산에 가까운 문서를 고쳤다면 Windows job 결과를 먼저 본다. 출처: `docs/plan/release-0.6.0.md` Evidence `dev-pr`.
 - Windows CI의 임시 경로는 8.3 짧은 이름(`RUNNER~1`)이다. git이 기록하는 긴 경로와 달라 worktree를 쓰는 테스트는 임시 root를 `realpathSync.native`로 풀어야 한다. `repositoryId`는 경로 해시라 같은 문제가 실제 사용에서도 날 수 있다(미수정). 출처: `test/goal-history.test.mjs` "goal stats --history aggregates across worktree directories of the same repository".
 - Windows에서만 깨지는 테스트 helper 패턴 두 가지(0.7.0 dev PR): JSON 파일 안의 경로는 백슬래시가 escape돼 있어 raw 문자열 치환으로 바뀌지 않는다. `cpSync`의 `filter`가 받는 경로 형태가 Windows Node 18에서 달라 제외가 듣지 않는다(항목별 복사를 쓴다). 출처: `docs/plan/release-0.7.0.md` Evidence `dev-pr`, `test/fixtures/fake-npm.mjs`.

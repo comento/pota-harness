@@ -133,7 +133,7 @@ Pota 将安装内容放在 `POTA_HOME`(默认 `~/.pota`)下。各 host 的路径
     codex/                  Codex local marketplace source
     claude/                 Claude Code local marketplace
   projects/                 goal state
-  config.json               用户设置 ("autoUpgrade", "commentChecker")
+  config.json               用户设置 ("autoUpgrade", "commentChecker", "modelCeiling")
   update/                   auto-upgrade 状态
   tools/comment-checker/    comment-checker 二进制(固定 release)
 $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (仅在选择 Codex 时)
@@ -145,12 +145,14 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (仅在
 - Auto-upgrade: 默认开启。`SessionStart` 每 24 小时最多一次(install 或 upgrade 后 24 小时内不检查)启动一个 detached process：从 npm 读取最新的 `@comento/pota-harness` 版本，以该确切版本加 `--ignore-scripts` 安装到 `~/.pota/update/stage/` 并验证，然后运行该 package 的 `pota-lifecycle.mjs upgrade --auto`。包括 major 在内的所有新版本都会应用，从不降级。下一个 `SessionStart` 用一行只提示一次结果(`updated`、`failed`、`manual`)。从 git checkout 安装(`origin: "checkout"`)或从 source checkout 运行时不会执行。
 - 关闭: `pota auto-upgrade off`、`POTA_AUTO_UPGRADE=0`(也可用 `false`、`off`、`no`)，或在 `~/.pota/config.json` 中设置 `"autoUpgrade": false`。无法读取的 `config.json` 也视为关闭。状态和上次运行日志位于 `~/.pota/update/`。
 - 注释检查: 编辑成功后(Claude Code `Write`/`Edit`/`MultiEdit`、Codex `apply_patch` 和编辑工具)，PostToolUse hook 用 [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker)(MIT)检查改动内容。报告多余注释时返回 `decision: "block"`，让代理删除注释或说明保留的理由。不新增 npm 依赖: `pota install` 和 `pota upgrade`(包括自动升级)在安装 commit 之后下载当前平台(darwin/linux x64 与 arm64、windows x64)的固定 v0.8.2 release，校验固定的 SHA256，用系统 `tar` 解压到 `~/.pota/tools/comment-checker/`，并用一行输出结果。下载失败时安装和 exit code 保持不变，已安装 runtime 的 `SessionStart` 会在分离进程中按 backoff 重试。下载成功之前编辑不经检查直接通过，检查器出错或检查超过 7 秒也会通过。`pota doctor` 用一行显示其状态，`pota uninstall` 会删除它。`POTA_COMMENT_CHECKER=0`(也可用 `false`、`off`、`no`)或 `~/.pota/config.json` 中的 `"commentChecker": false` 同时关闭检查和下载。
+- main model 检查: 当会话的 main model 低于 stronger tier 时,`SessionStart` 会添加一行 `Pota main model:` 和一次性通知。此时计划/分诊和最终评审必须委派给 stronger tier 或更高并记录(评审使用 `goal assign … --kind review`),否则 `triage-plan` 的完成和 `goal finish` 会被拒绝;绕过方式是 `--allow-main-model <reason>`。model 值缺失或无法识别时不生效。设置 `POTA_MAIN_MODEL_GATE=0` 可关闭。
+- model ceiling: 当账户不能或不打算使用更高的 tier 时(订阅等级、组织策略、usage credits),设置 `POTA_MODEL_CEILING=stronger`(或 `balanced`;也可以写 `opus`、`sonnet` 等 model 名),或在 `~/.pota/config.json` 中写入 `"modelCeiling": "stronger"`。环境变量优先,`config.json` 是所有 hook 和 CLI 调用都会读取的同一位置。设置后 `SessionStart` 会添加一行 `Pota model ceiling:`,高于 ceiling 的 tier 使用 ceiling tier 的 model,Heavy 设计门禁接受该 model,main model 检查以应用 ceiling 后的 stronger tier 为准。未设置时行为不变;无效值不应用 ceiling 并给出提示。
 
 ## Claude Code DAG Panel
 
 Claude Code 桌面版会把当前 Pota goal 显示为按 wave 分列的 DAG 面板。它仅适用于 Claude Code,Codex 和 Antigravity 没有此功能。需要支持 mod 功能的 Claude Code(基于 Claude Code 2.1.325 的 mod API 编写);在终端等无法绘制图形的 surface 上改为文字列表。
 
-- 用 `/dag [previous|current|next|all|refresh|close]` 打开面板。视图有上一个、当前、下一个、全部。已完成的连线为实线,进行中的连线为虚线并带移动的点。
+- 用 `/dag [previous|current|next|all|refresh|close]` 打开面板。视图有上一个、当前、下一个、全部。默认是全部(all)视图,其余为可选项。已完成的连线为实线,进行中的连线为虚线并带移动的点。
 - 在 `pota goal start` 和 `pota goal replan` 之后自动打开一次。关闭后,同一个 goal 不会再自动打开。
 - 每次执行 goal 命令时以及每 30 秒重新读取 goal 状态并刷新。
 

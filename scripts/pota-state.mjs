@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { contextResult, foreignSessionContextResult, prependContext, updateNoticeLine } from "./pota-state-context.mjs";
+import {
+  appendNotice, contextResult, foreignSessionContextResult, mainModelLine, mainModelNotice, modelCeilingInvalidNotice,
+  modelCeilingLine, prependContext, updateNoticeLine,
+} from "./pota-state-context.mjs";
 import { continuationReason, stopAllowedMessage, stopHookOutput } from "./pota-state-hook.mjs";
 import { initializeProject } from "./pota-state-init.mjs";
 import { evaluateStop, isGoalOwnedBySession, reconcileWorktreeState } from "./pota-goal.mjs";
-import { readHookGuard, readStopGuard, writeHookGuard, writeStopGuard } from "./pota-goal-state.mjs";
+import {
+  mainModelGateEnabled, readHookGuard, readStopGuard, syncMainModelRecord, writeHookGuard, writeStopGuard,
+} from "./pota-goal-state.mjs";
+import { NO_MODEL_CEILING, resolveModelCeiling } from "./pota-model-ceiling.mjs";
+import { classifyModel, effectiveTier, isBelowTier } from "./pota-model-tier.mjs";
 import { hookIndexSnapshot } from "./pota-index.mjs";
 import { resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
 import { sessionStartUpdate } from "./pota-update-state.mjs";
@@ -16,9 +23,12 @@ const recoverableGoalStatuses = new Set(["active", "paused", "blocked"]);
 if (isCliEntry()) {
   const event = process.argv[2] ?? "manual";
   const payload = await readHookInput();
+  // Only SessionStart (the capsule line) and a prompt that carries a model (the main-model floor) read the setting.
+  const readsCeiling = event === "session-start" || (event === "user-prompt-submit" && payload?.model !== undefined);
+  const options = readsCeiling ? { payload, modelCeiling: resolveModelCeiling() } : { payload };
   const result = isHookEvent(event)
-    ? await runStateResult(event, { payload }).catch((error) => hookFailureResult(event, error))
-    : await runStateResult(event, { payload });
+    ? await runStateResult(event, options).catch((error) => hookFailureResult(event, error))
+    : await runStateResult(event, options);
   if (isHookEvent(event)) {
     console.log(JSON.stringify(result.hookOutput ?? {}));
   } else {
@@ -37,6 +47,9 @@ export async function runStateResult(event = "manual", {
   payload,
   update = {},
   commentChecker = {},
+  mainModel = {},
+  // The library default never reads the environment, so a developer's ceiling cannot leak into in-process callers.
+  modelCeiling = NO_MODEL_CEILING,
 } = {}) {
   const resolvedRoot = resolveRoot(root, payload);
   const ko = locale.toLowerCase().startsWith("ko");
@@ -52,7 +65,12 @@ export async function runStateResult(event = "manual", {
   }
 
   if (event === "session-start" || event === "user-prompt-submit") {
-    const result = await promptContextResult(event, { ko, resolvedRoot, payload });
+    const context = await promptContextResult(event, { ko, resolvedRoot, payload });
+    const ceilinged = event === "session-start" ? withModelCeiling(context, { ko, setting: modelCeiling }) : context;
+    const result = await withObservedMainModel(ceilinged, {
+      ko, event, resolvedRoot, payload, now: mainModel.now, env: mainModel.env,
+      floor: effectiveTier("stronger", modelCeiling?.ceiling ?? null),
+    });
     if (event !== "session-start") return result;
     const withNotice = withUpdateNotice(result, ko, update);
     startFetchWhenNeeded(commentCheckerOptions(update, commentChecker));
@@ -235,8 +253,54 @@ function withUpdateNotice(result, ko, { env = process.env, now = new Date(), spa
     line = null;
   }
   if (!line) return result;
-  const appended = appendContext(result, line);
-  return { ...appended, hookOutput: { ...appended.hookOutput, systemMessage: line } };
+  return appendNotice(result, line, line);
+}
+
+// SessionStart only: one capsule line while a ceiling is set, and a user notice while the setting is invalid. Without
+// either the result is returned unchanged; errors are swallowed.
+function withModelCeiling(result, { ko, setting }) {
+  try {
+    const line = setting?.ceiling ? modelCeilingLine({ ko, ceiling: setting.ceiling }) : null;
+    const notice = setting?.invalid ? modelCeilingInvalidNotice({ ko, ...setting.invalid }) : null;
+    return line || notice ? appendNotice(result, line, notice) : result;
+  } catch {
+    return result;
+  }
+}
+
+// Every error here is swallowed: an unrecognized or unreadable main model leaves the capsule unchanged (fail-open).
+// POTA_MAIN_MODEL_GATE off skips the observation entirely, so the result is the same as a payload without a model.
+async function withObservedMainModel(result, { ko, event, resolvedRoot, payload, now, env = process.env, floor = "stronger" }) {
+  if (!mainModelGateEnabled(env)) return result;
+  try {
+    const observed = await observeMainModel(resolvedRoot, payload, { now, floor });
+    if (!observed) return result;
+    const line = event === "session-start" ? mainModelLine({ ko, ...observed, threshold: floor }) : null;
+    const notice = observed.notify ? mainModelNotice({ ko, model: observed.model, host: observed.host, threshold: floor }) : null;
+    return appendNotice(result, line, notice);
+  } catch {
+    return result;
+  }
+}
+
+// Reads the host's main-session model field. Only a model below the floor (stronger, or the capped tier) is recorded (per payload session id, never
+// the environment, so a subagent or another process cannot write for this session); a stronger or unrecognized model
+// clears that session's record, and a payload without the field changes nothing.
+async function observeMainModel(root, payload, { now, floor = "stronger" } = {}) {
+  const raw = typeof payload?.model === "string" ? payload.model
+    : typeof payload?.model?.id === "string" ? payload.model.id : null;
+  if (raw === null) return null;
+  if (typeof payload.agent_id === "string" && payload.agent_id.length > 0) return null;
+  const model = raw.trim();
+  if (!/^[\x21-\x7e][\x20-\x7e]{0,127}$/.test(model)) return null;
+  const classified = classifyModel(model);
+  const low = Boolean(classified && isBelowTier(classified.tier, floor));
+  const sessionId = payload.session_id;
+  const key = typeof sessionId === "string" && sessionId.length >= 1 && sessionId.length <= 128 ? sessionId : null;
+  const change = key
+    ? await syncMainModelRecord(root, key, low ? { model, ...classified } : null, now ? { now } : {})
+    : (low ? "recorded" : "unchanged");
+  return low ? { model, ...classified, notify: change === "recorded" } : null;
 }
 
 function hookFailureResult(event, error) {

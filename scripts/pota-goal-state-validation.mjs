@@ -1,4 +1,5 @@
 import { normalizeVerificationArgv } from "./pota-goal-evidence.mjs";
+import { STRONGEST_MODEL_BY_HOST } from "./pota-model-tier.mjs";
 
 export const GOAL_STATE_VERSION = 3;
 export const MAX_ACTIVE_TASKS = 4;
@@ -25,9 +26,9 @@ export const TASK_ROUTES = new Set(["light", "heavy"]);
 export const CONCRETE_EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 export const TASK_EFFORTS = new Set([...CONCRETE_EFFORTS, "inherited"]);
 export const EFFORT_SOURCES = new Set(["host-option", "inherited", "not-applied"]);
-export const TASK_KINDS = new Set(["design"]);
-// The host's strongest tier is the value passed at dispatch; mirrors the strongest column in skills/pota-plan/delegation.md.
-export const STRONGEST_MODEL_BY_HOST = Object.freeze({ "claude-code": "fable", codex: "gpt-6-astra", antigravity: "pro" });
+export const TASK_KINDS = new Set(["design", "review"]);
+// The host's strongest tier is the value passed at dispatch; the tier table is the single source of these values.
+export { STRONGEST_MODEL_BY_HOST };
 
 export function validateState(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Pota goal state must be an object");

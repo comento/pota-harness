@@ -62,8 +62,8 @@ const dag = atom({ plugin: "pota", key: "dag" } as const, {
   seq: 0, snapshot: null, ended: null, error: null, fetchedAt: 0, root: null, home: null, timeline: {},
 }, { shape: "dag-2" });
 const dagUi = atom({ plugin: "pota", key: "dagUi" } as const, {
-  view: "current", epoch: 0, minute: 0, autoOpenedPlanKey: null, closedGoalId: null,
-}, { shape: "ui-1" });
+  view: "all", epoch: 0, minute: 0, autoOpenedPlanKey: null, closedGoalId: null,
+}, { shape: "ui-2" });
 const dagAgents = atom({ plugin: "pota", key: "dagAgents" } as const, [], { shape: "agents-1" });
 
 // Scheduling state: a reload drops it with the old environment's timers, which is what it describes.

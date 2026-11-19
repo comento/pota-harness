@@ -133,7 +133,7 @@ Pota は install を `POTA_HOME`(既定 `~/.pota`)の下に置きます。host �
     codex/                  Codex local marketplace source
     claude/                 Claude Code local marketplace
   projects/                 goal state
-  config.json               user settings ("autoUpgrade", "commentChecker")
+  config.json               user settings ("autoUpgrade", "commentChecker", "modelCeiling")
   update/                   auto-upgrade state
   tools/comment-checker/    comment-checker バイナリ(固定 release)
 $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (Codex を選択した場合のみ)
@@ -145,12 +145,14 @@ $CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (Codex 
 - Auto-upgrade: 既定で有効です。`SessionStart` が 24 時間に 1 回まで(install・upgrade 直後の 24 時間は除く)detached process を起動し、npm の最新 `@comento/pota-harness` をその version 固定で `--ignore-scripts` 付きで `~/.pota/update/stage/` に install・検証してから、その package の `pota-lifecycle.mjs upgrade --auto` を実行します。major を含むすべての新しい version を適用し、downgrade はしません。次の `SessionStart` が結果(`updated`、`failed`、`manual`)を 1 行で 1 回だけ知らせます。git checkout からの install(`origin: "checkout"`)と source checkout からの実行では動作しません。
 - 無効化: `pota auto-upgrade off`、`POTA_AUTO_UPGRADE=0`(`false`、`off`、`no` も可)、または `~/.pota/config.json` の `"autoUpgrade": false`。読めない `config.json` も無効として扱います。状態と最後の実行 log は `~/.pota/update/` にあります。
 - コメントチェック: 編集が成功すると(Claude Code `Write`/`Edit`/`MultiEdit`、Codex `apply_patch` と編集ツール)、PostToolUse hook が変更内容を [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker)(MIT)で検査します。不要なコメントが報告されると `decision: "block"` を返し、エージェントにコメントの削除か必要な理由の説明を求めます。npm 依存は追加しません。`pota install` と `pota upgrade`(自動アップグレードを含む)がインストールを commit した後、現在のプラットフォーム(darwin/linux x64・arm64、windows x64)用の固定 v0.8.2 release をダウンロードし、固定 SHA256 を検証して OS の `tar` で `~/.pota/tools/comment-checker/` に展開し、結果を 1 行で表示します。ダウンロードに失敗してもインストールと exit code はそのままで、インストール済み runtime の `SessionStart` が分離プロセスで backoff を置いて再試行します。ダウンロードが成功するまで編集は検査なしで通過し、チェッカーのエラーや 7 秒を超える検査も通過します。`pota doctor` が状態を 1 行で表示し、`pota uninstall` が削除します。`POTA_COMMENT_CHECKER=0`(`false`、`off`、`no` も可)または `~/.pota/config.json` の `"commentChecker": false` で検査とダウンロードを両方無効にします。
+- main model チェック: セッションの main model が stronger tier 未満の場合、`SessionStart` は `Pota main model:` 行と 1 回の通知を追加します。このとき計画・トリアージと最終レビューは stronger tier 以上に委任して記録する必要があり(レビューは `goal assign … --kind review`)、記録がなければ `triage-plan` の完了と `goal finish` は拒否されます。回避は `--allow-main-model <reason>` です。model 値がない、または認識できない場合は動作しません。`POTA_MAIN_MODEL_GATE=0` で無効にできます。
+- model ceiling: アカウントで上位 tier を使えない、または使わない場合(サブスクリプション、組織ポリシー、usage credits)は `POTA_MODEL_CEILING=stronger`(または `balanced`。`opus` や `sonnet` などの model 名も可)を設定するか、`~/.pota/config.json` に `"modelCeiling": "stronger"` を書きます。環境変数が優先され、`config.json` はすべての hook と CLI 呼び出しが同じ値を読む場所です。設定すると `SessionStart` が `Pota model ceiling:` 行を追加し、ceiling より上の tier は ceiling tier の model を使い、Heavy 設計ゲートはその model を通し、main model チェックは ceiling 適用後の stronger tier を基準にします。設定がなければ動作は変わらず、無効な値は ceiling なしとして通知されます。
 
 ## Claude Code DAG Panel
 
 Claude Code デスクトップは、現在の Pota goal を wave ごとの列に分けた DAG パネルで表示します。Claude Code 専用で、Codex と Antigravity にはありません。mod 機能のある Claude Code が必要です(Claude Code 2.1.325 の mod API を基準に作成)。ターミナルのようにグラフを描けない surface では文字の一覧で表示します。
 
-- `/dag [previous|current|next|all|refresh|close]` でパネルを開きます。表示は前、現在、次、全体の 4 つです。完了した接続は実線、進行中の接続は点線と移動する点です。
+- `/dag [previous|current|next|all|refresh|close]` でパネルを開きます。表示は前、現在、次、全体の 4 つです。既定は全体(all)表示で、ほかは選択オプションです。完了した接続は実線、進行中の接続は点線と移動する点です。
 - `pota goal start` と `pota goal replan` の後に自動で一度だけ開きます。閉じると、同じ goal では再び開きません。
 - goal コマンドの実行時と 30 秒ごとに goal の状態を読み直して更新します。
 
