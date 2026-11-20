@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { runState } from "./pota-state.mjs";
+import { planSteeringReport } from "./pota-goal-steering.mjs";
 import { INDEX_USAGE, checkIndex, parseIndexArgs, updateIndex } from "./pota-index.mjs";
 import { parseRootArgs, resolvePluginRoot } from "./pota-paths.mjs";
 
@@ -43,6 +44,10 @@ export async function main(command = "help", args = [], { runner = spawnSync } =
     }
     if (options.action === "version") {
       console.log(`pota ${version}`);
+      return;
+    }
+    if (options.action === "steering") {
+      console.log(JSON.stringify(planSteeringReport(options.root, { limit: options.limit }), null, 2));
       return;
     }
     const report = options.action === "check"

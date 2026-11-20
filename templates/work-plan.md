@@ -17,6 +17,20 @@ Describe the observable result.
 - Required goal evidence: `finalReview`
 - Terminal state: `completed`, `paused`, `blocked`, or `cancelled` (an `active` goal is never complete).
 
+## Request Brief
+
+- Original request: <the user's request, verbatim>
+- Interpreted outcome: <what must be true when the work is complete>
+- Scope: <what this plan changes>
+- Non-scope: <what it deliberately leaves alone>
+- Prior records: <consulted plans, memory notes, and past steering, with the recurring follow-ups found | none: reason>
+- Assumptions:
+  - A1 (evidence|inferred|confirmed): <assumption and its source>
+- Implicit requirements: <security, data, and rollback items the request did not state | none: reason>
+- Open questions: <questions that change the outcome and are hard to reverse | none>
+- Steering log: <one sub-bullet per user steering: "S<n> (correction|addition|redirect): original text -> changed assumption or task">
+- Current request (as of S0): <the currently valid request in one paragraph>
+
 ## Whole Work
 
 - Outcome:

@@ -173,8 +173,10 @@ test("task status returns the active task or a requested task", async () => {
 
 const initUsage = "Usage: pota init [--root PATH]\n";
 const goalUsage = [
-  "Usage: pota goal <start|status|ready|stats|task|replan|claim|assign|receipt|verify|finish|pause|resume|block|cancel|complete> [options] [--root PATH]",
+  "Usage: pota goal <start|status|ready|stats|task|replan|steer|claim|assign|receipt|verify|finish|pause|resume|block|cancel|complete> [options] [--root PATH]",
   "Note: --criteria (completionCriteria) is advisory and is not enforced; completion is gated only by required evidence.",
+  "Request Brief: completing a triageDecision task (goal task --status completed, goal finish) needs a filled \"## Request Brief\" in a plan file; bypass with --allow-no-request-brief <reason>.",
+  "Steering: goal steer --kind <correction|addition|redirect> --reason <text>; with a plan file, goal replan needs --steer <correction|addition|redirect|none> --reason <text>.",
   "",
 ].join("\n");
 

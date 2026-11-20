@@ -13,7 +13,7 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·command�
 | 표면 | 파일 | 비고 |
 | --- | --- | --- |
 | 스킬 본문 | `skills/pota-{memory,plan,work,review}/SKILL.md` | 정본 |
-| 스킬 참조 | `skills/pota-plan/{planning-rules,delegation,heavy-path}.md`, `skills/pota-work/{delegation,heavy-path,recovery,verification}.md` | 긴 절차는 여기에 둔다 |
+| 스킬 참조 | `skills/pota-plan/{planning-rules,delegation,heavy-path,request-brief}.md`, `skills/pota-work/{delegation,heavy-path,recovery,verification}.md` | 긴 절차는 여기에 둔다 |
 | 명령 | `commands/pota-*.md` 9개 | install·upgrade·doctor·uninstall·memory·plan·work·review·toolcheck |
 | Antigravity 미러 | `.agents/workflows/pota-*.md` 9개 | 같은 규칙을 locator 문구로 다시 쓴 별도 파일(동일 복사본 아님) |
 | Claude 명령 미러 | `.claude/commands/pota-*.md` 9개 | `{{POTA_RUNTIME_LOCATOR_JSON}}`로 runtime의 `commands/`를 가리키는 포인터. 정책 문구 없음 |
@@ -27,7 +27,7 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·command�
 
 ### 예산(테스트가 강제)
 
-- `skills/pota-plan/SKILL.md`와 `skills/pota-work/SKILL.md`는 각 9000바이트 이하다(`test/token-efficiency.test.mjs:349-354`). 현재 8993, 8975바이트라 여유가 7, 25바이트다. 측정: `wc -c skills/*/SKILL.md`.
+- `skills/pota-plan/SKILL.md`와 `skills/pota-work/SKILL.md`는 각 9000바이트 이하다(`test/token-efficiency.test.mjs:349-354`). 현재 8989, 8978바이트라 여유가 11, 22바이트다. 측정: `wc -c skills/*/SKILL.md`.
 - `defaultPrompt`는 정확히 7줄, 1600자 이하다. 현재 1118자다. 회복 순서·증거·외부 상태 문장 정규식이 고정돼 있고, `update_plan`·`--ignore-scripts` 같은 단어는 금지다. 출처: `test/token-efficiency.test.mjs:23-38`, 설치본 검사 `test/lifecycle.test.mjs:357-365`.
 - 설치된 미러에는 대상 저장소 기준 상대 참조를 둘 수 없다: `node scripts/…`, `commands/pota-…`, `agents/(explorer|worker).md`, `templates/…`, `docs/model-guidance/…`, 렌더링 전 placeholder. 출처: `test/installed-plugin.test.mjs:229-236`. 명령 예시는 `memory index --root <repoRoot>`처럼 쓴다.
 
@@ -40,6 +40,7 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·command�
 - 누락 도구 질문 규칙: main 에이전트가 설치 여부를 한 번 묻고(누락 도구별 제안 명령 또는 자동 설치 불가 사유 포함), 기다리는 동안 도구가 필요 없는 작업을 계속하며, 거부·비대화형 실행이면 묻지 않고 blocker를 기록한다. 질문은 세션당 한 번이고, 이전 세션이 남긴 blocker(거부·미질문)는 새 세션의 질문을 막지 않는다. subagent는 묻지 않고 orchestrator에 보고한다. 정본은 `skills/pota-plan/planning-rules.md`와 `skills/pota-work/verification.md`의 `## Tool Readiness Policy`이고, 파생 표면은 `commands`·`.agents/workflows`·`.claude/commands`의 `pota-toolcheck.md`, `commands`·`.agents/workflows`의 `pota-{plan,work}.md`, 두 `delegation.md`, `agents/worker.md`, `templates/work-plan.md`, `docs/model-guidance/README.md`, README 8개의 Tool Readiness bullet이다. 질문에 쓰는 데이터는 `toolcheck` 결과의 `installCommand`, `install.suggestedCommand`, `install.unavailableReason`이다. 출처: `test/contract-parity.test.mjs`의 tool readiness 테스트 2개, `test/toolcheck.test.mjs`.
 - main 모델 게이트: 정본은 두 `delegation.md`의 `## Main Model Gate`다. 파생 표면은 `skills/pota-review/SKILL.md` Procedure 4 하위 bullet, `commands/pota-review.md`·`.agents/workflows/pota-review.md` 3번 문장, `templates/work-plan.md` `- Model:` bullet, `docs/model-guidance/{README,claude,codex}.md` bullet 1개씩, README 8개의 "Comment checker" 다음 bullet이다. `skills/pota-{plan,work}/SKILL.md`는 바이트 예산 때문에 고치지 않고 캡슐 줄이 `delegation.md`를 가리킨다. 출처: `test/token-efficiency.test.mjs` "main-model gate surfaces name the capsule line, the review kind, and the bypass flag".
 - 모델 상한: 정본은 두 `delegation.md`의 `## Model Ceiling`(같은 절을 바이트 동일하게 둔다)과 설계 게이트 문장·Main Model Gate 문장·`CONTEXT:` 줄 보강이다. 파생 표면은 `skills/pota-{plan,work}/heavy-path.md` 설계 bullet, `templates/work-plan.md` `- Model:` bullet, `docs/model-guidance/{README,claude,codex}.md` bullet 1개씩, README 8개의 "Main model check" 다음 bullet이다. `skills/pota-{plan,work}/SKILL.md`, `commands/`, `.agents/workflows/`, `agents/*.md`, `skills/pota-review/SKILL.md`는 고치지 않는다(캡슐 줄 "This overrides tier values in skill text"와 `CONTEXT:`로 전달). 출처: `test/token-efficiency.test.mjs` "model ceiling surfaces name the capsule line, the setting, and the user-only rule".
+- 요청 계약과 스티어링(1.4.0): 정본은 `skills/pota-plan/request-brief.md`(계약 작성, `## Prior records`, 빈틈 3분류, 암묵 요구사항, 스티어링 분류, CLI 강제 항목)다. 파생 표면은 `templates/work-plan.md`의 `## Request Brief` 섹션(`## Goal` 다음), `skills/pota-plan/SKILL.md` Reference Files 포인터, `skills/pota-plan/planning-rules.md` bullet 2개, `skills/pota-work/SKILL.md`의 replan 예시(`--steer`·`--reason`)와 Procedure 2번 포인터, `skills/pota-work/recovery.md`, `commands`·`.agents/workflows`의 `pota-{plan,work}.md`, README 8개의 "Model ceiling" 다음 bullet이다. 계획 라벨과 명령·플래그는 모든 locale에서 영문 고정이다. 템플릿의 Request Brief에는 `S1 (`로 시작하는 목록 줄을 두지 않는다(CLI 순번 검사가 실제 기록으로 볼 수 있다). 게이트 동작은 `goal-state.md`. 출처: `test/contract-parity.test.mjs` "request brief and steering surfaces name the template section, the commands, and the bypass flag".
 - 메모리 승격 절차 본문은 `skills/pota-work/verification.md` `## Memory Promotion`, 계획 재활용 절차는 `skills/pota-plan/planning-rules.md` `## Reuse Before Planning`에 있다. 옛 `PLAN.md`의 Planning Rules 정본도 이 파일이다.
 
 ## Policy

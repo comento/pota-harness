@@ -10,7 +10,7 @@ test("package and plugin metadata expose the same machine-consumed version", asy
   const packageJson = await readJson("package.json");
   const pluginJson = await readJson(".codex-plugin/plugin.json");
 
-  assert.equal(packageJson.version, "1.3.2");
+  assert.equal(packageJson.version, "1.4.0");
   assert.equal(pluginJson.version, packageJson.version);
   // The mod manifest in the repo is a dev manifest, but it ships in the package, so it carries the release version too.
   assert.equal((await readJson("claude-mod/.claude-plugin/plugin.json")).version, packageJson.version);
@@ -206,4 +206,44 @@ test("work plan template declares advisory completion criteria, Related complete
   assert.match(memoryInputs, /^- Related completed plans: <docs\/plan\/<topic>\.md \| none related>$/m);
   const evidence = template.split(/^## Evidence$/m)[1].split(/^## /m)[0];
   assert.match(evidence, /^- Memory promotion: <docs\/memory\/<domain>\.md \| none: reason>$/m);
+});
+
+test("request brief and steering surfaces name the template section, the commands, and the bypass flag", async () => {
+  const template = await readText("templates/work-plan.md");
+  assert.match(template, /^## Request Brief$/m);
+  assert.ok(template.indexOf("## Goal") < template.indexOf("## Request Brief") && template.indexOf("## Request Brief") < template.indexOf("## Whole Work"));
+  const brief = template.split(/^## Request Brief$/m)[1].split(/^## /m)[0];
+  for (const label of ["Original request", "Interpreted outcome", "Scope", "Non-scope", "Assumptions", "Prior records", "Implicit requirements", "Open questions", "Steering log", "Current request (as of S0)"]) {
+    assert.ok(brief.includes(`- ${label}:`), `template ${label}`);
+  }
+  assert.ok(brief.indexOf("- Prior records:") < brief.indexOf("- Assumptions:"), "Prior records before Assumptions");
+  assert.doesNotMatch(brief, /^\s*- S1 \(/m, "template has no S1 example line");
+
+  const reference = await readText("skills/pota-plan/request-brief.md");
+  for (const needle of ["## Request Brief", "## Prior records", "pota plan steering", "Prior records", "goal steer", "--steer", "--allow-no-request-brief", "Current request (as of S", "correction", "addition", "redirect", "Quick Path"]) {
+    assert.ok(reference.includes(needle), `request-brief.md ${needle}`);
+  }
+
+  assert.ok((await readText("skills/pota-plan/SKILL.md")).includes("pota://skills/pota-plan/request-brief.md"), "pota-plan SKILL pointer");
+  const rules = await readText("skills/pota-plan/planning-rules.md");
+  for (const needle of ["## Request Brief", "--allow-no-request-brief", "goal steer", "--steer", "Current request (as of S", "pota plan steering", "Prior records"]) assert.ok(rules.includes(needle), `planning-rules ${needle}`);
+  const work = await readText("skills/pota-work/SKILL.md");
+  assert.match(work, /goal replan --quiet[^\n]*--steer "<correction\|addition\|redirect\|none>" --reason/);
+  assert.ok(work.includes("pota://skills/pota-plan/request-brief.md"), "pota-work SKILL pointer");
+  const recovery = await readText("skills/pota-work/recovery.md");
+  for (const needle of ["goal steer", "--steer", "Current request (as of S", "## Request Brief"]) assert.ok(recovery.includes(needle), `recovery ${needle}`);
+
+  for (const path of ["commands/pota-plan.md", ".agents/workflows/pota-plan.md"]) {
+    const content = await readText(path);
+    for (const needle of ["## Request Brief", "--allow-no-request-brief", "request-brief.md", "pota plan steering", "Prior records"]) assert.ok(content.includes(needle), `${path} ${needle}`);
+  }
+  for (const path of ["commands/pota-work.md", ".agents/workflows/pota-work.md"]) {
+    const content = await readText(path);
+    for (const needle of ["goal steer", "--steer", "Current request (as of S", "## Request Brief", "request-brief.md"]) assert.ok(content.includes(needle), `${path} ${needle}`);
+  }
+
+  for (const path of ["README.md", "README.ko.md", "README.ja.md", "README.zh.md", "README.es.md", "README.fr.md", "README.de.md", "README.pt.md"]) {
+    const content = await readText(path);
+    for (const needle of ["## Request Brief", "goal steer", "--steer", "--allow-no-request-brief", "Current request (as of S", "pota plan steering", "Prior records"]) assert.ok(content.includes(needle), `${path} ${needle}`);
+  }
 });

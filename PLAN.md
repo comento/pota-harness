@@ -4,6 +4,8 @@
 
 ## Active Plans
 
+- [요청 계약과 스티어링 기록](docs/plan/request-brief-steering.md): 불명확한 요청과 스티어링을 계획의 요청 계약 섹션과 goal CLI 게이트·기록으로 보정한다.
+
 ## Superseded Plans
 
 - [Pota 0.2.0 설치본 런타임 릴리스](docs/plan/release-0.2.0-installed-runtime.md): 후속 0.2.1·0.2.2 릴리스로 대체된 미완료 릴리스 계획입니다. 활성 작업으로 취급하지 않습니다.

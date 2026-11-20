@@ -25,6 +25,8 @@ Reuse recorded knowledge before exploring from scratch. Do not read every note o
 - Every plan must describe the whole work first, then classify it into executable tasks and any needed sub-tasks.
 - Every plan must treat the user-called/main agent as the orchestrator and assign implementation edits to `worker` whenever subagent tools are available, regardless of Light Path or Heavy Path (see `pota://skills/pota-plan/delegation.md`).
 - Every plan must include complexity triage, the selected path, and the Heavy Path signals checked, even when Light Path is selected.
+- Every Light or Heavy Path plan must include a filled `## Request Brief` (`pota://skills/pota-plan/request-brief.md`): original request, interpreted outcome, prior records (`Prior records`, consulted via `pota plan steering`), assumptions, and implicit requirements. Completing `triage-plan` is refused without them unless `--allow-no-request-brief <reason>`.
+- Record every user steering (correction, addition, redirect) in the brief's `Steering log` before or with `goal steer` or `goal replan --steer`; the second steering or a redirect also rewrites `Current request (as of S<n>)`.
 - Every plan must include applied model guidance and rationale.
 - Every plan must include tool readiness results: detected stack, required LSP/check tools, installed tools, and blockers.
 - Every executable plan must include a stable goal ID, stable task IDs, explicit terminal states, and fail-closed required evidence. A missing evidence section never means success.

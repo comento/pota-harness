@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { normalizeVerificationArgv, normalizeWatchPaths, runVerificationEvidence, workspaceFingerprint } from "./pota-goal-evidence.mjs";
 import { readGoalState } from "./pota-goal-state.mjs";
+import { readSteeringEntries, steeringCounts } from "./pota-goal-steering.mjs";
 import {
   normalizeToolEvidence, optionalText, pathContains, requiredText, timestamp, validReceiptCommand, validReceiptScope,
   validReceiptSource, validTimestamp,
@@ -134,7 +135,7 @@ export async function verifyAndRecord({
 // Completes the active task, proves every goal-level evidence kind with one run, and completes the goal.
 export async function finishGoal({
   root = process.cwd(), argv = [], watchPaths = [], runner, timeoutMs = 600_000, onTerminal, mainModelWaiver, sessionId = null,
-  mainModelGate = true, modelCeiling = null,
+  mainModelGate = true, modelCeiling = null, requestBriefWaiver,
 } = {}) {
   const waiver = optionalText(mainModelWaiver, "mainModelWaiver");
   const initialState = await readGoalState({ root });
@@ -150,7 +151,7 @@ export async function finishGoal({
   // Checked before the verification run so a missing review dispatch never costs a full check first.
   await ensureMainModelReview(root, initialState, { sessionId, waiver, enabled: mainModelGate, ceiling: modelCeiling });
   if (active) {
-    await setTaskStatus({ root, taskId: active.id, status: "completed", mainModelWaiver: waiver, sessionId, mainModelGate, modelCeiling });
+    await setTaskStatus({ root, taskId: active.id, status: "completed", mainModelWaiver: waiver, sessionId, mainModelGate, modelCeiling, requestBriefWaiver });
   }
   if (goalKinds.length > 0) {
     await verifyAndRecord({ root, scope: "goal", kind: goalKinds, argv, watchPaths, runner, timeoutMs });
@@ -181,6 +182,7 @@ export function goalStats(state, root = process.cwd()) {
     byKind,
     reruns,
     stale,
+    steering: steeringCounts(readSteeringEntries(root, state.goal.id)),
     tasks: state.tasks.map((task) => ({
       id: task.id,
       status: task.status,
