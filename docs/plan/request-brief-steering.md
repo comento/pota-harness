@@ -3,7 +3,7 @@
 ## Plan Phase
 
 - Initial: decision-complete for `triage-plan`; not implementation-ready. (완료)
-- Finalized: decision-complete for implementation after planned triage.
+- Finalized: decision-complete for implementation after planned triage. (완료, 1.4.0 게시)
 - Codex UI synchronization: `update_plan` 호출함(Claude Code 데스크톱 task list). `create_goal`은 이 호스트에 없음.
 
 ## Goal
@@ -238,6 +238,14 @@
 - `verify`: 임시 저장소 실행 확인(빈 계약 거부 → 채운 뒤 통과, `S1` 없는 steer 거부, `--steer` 없는 replan 거부, `Current request (as of S2)` 없는 2번째 스티어링 거부, `state.json` schema 3 유지, 종료 후 `steering.json` 삭제와 이력 개수). 첫 `npm test`는 `test/lifecycle.test.mjs`가 고정한 "user-called/main agent as the orchestrator" 문구가 줄어 1건 실패했고, 문구 복원 뒤 `npm run check` exit 0(1.4.0 버전 표면 포함).
 - Tests: `npm run check` exit 0.
 - Verification pass count: `verify` 2회(1회 실패 후 수정).
+- `release`:
+  - `dev-pr`: comento/pota-harness#16(`feat/request-brief-steering` → `dev`), head `8e99b96`의 CI 7개 검사 통과 후 head SHA 고정 병합 → `733ff7a`.
+  - `main-pr`: comento/pota-harness#17(`dev` → `main`), head `733ff7a`의 CI 통과 후 head SHA 고정 병합 → `122b031`.
+  - `npm-publish`: `122b031`의 clean detached worktree에서 pack 1회(prepack의 `npm run check` 통과). tarball `comento-pota-harness-1.4.0.tgz`, 277,231 bytes, 120 files, sha1 `a7a028137973888113b2abc6e1281125aa10a7a9`, integrity `sha512-iWMO0v3WRi9cSBNlR0EXtCb+bDLvuUQvZVEOWRYWcB3X2MkX3mG/C+gqdiI7i185ciKko41nIQ3a1101tVvDFg==`. `npm publish --dry-run` 통과 후 사용자가 자기 터미널에서 같은 tarball을 게시했다.
+  - registry: `npm view @comento/pota-harness@1.4.0`의 shasum·integrity가 tarball과 일치하고 `latest`는 `1.4.0`이다.
+  - 격리 설치(별도 prefix·cache·HOME·`POTA_HOME`): `pota --version` → `pota 1.4.0`, `goal --help`에 `steer`, `plan --help`에 `steering`. 빈 Request Brief로 triage 완료 거부(exit 1), `S1` 없는 `goal steer` 거부(exit 1).
+  - 로컬 설치본(S3): `npm install -g @comento/pota-harness@1.4.0` → `pota upgrade`(runtime `~/.pota/install/runtime/1.4.0`) → `pota doctor` 첫 줄 `Hosts: claude,antigravity`, 전 항목 OK.
+  - `main` 병합 커밋을 `dev`에 다시 합치는 것은 이 기록 PR에 포함했다.
 - Memory promotion: `docs/memory/goal-state.md`(요청 계약 게이트와 스티어링 기록), `docs/memory/policy-surfaces.md`(표면 지도).
 
 ## Status
@@ -248,4 +256,4 @@
 - [x] Module acceptance passed
 - [x] Surface integration passed
 - [x] Reviewed
-- [ ] Goal completed, or an explicit paused/blocked/cancelled reason was recorded
+- [x] Goal completed, or an explicit paused/blocked/cancelled reason was recorded
