@@ -4,8 +4,6 @@
 
 ## Active Plans
 
-- [요청 계약과 스티어링 기록](docs/plan/request-brief-steering.md): 불명확한 요청과 스티어링을 계획의 요청 계약 섹션과 goal CLI 게이트·기록으로 보정한다.
-
 ## Superseded Plans
 
 - [Pota 0.2.0 설치본 런타임 릴리스](docs/plan/release-0.2.0-installed-runtime.md): 후속 0.2.1·0.2.2 릴리스로 대체된 미완료 릴리스 계획입니다. 활성 작업으로 취급하지 않습니다.
@@ -14,6 +12,7 @@
 
 최신 항목이 위에 오며 계획당 한 줄입니다. `pota plan index --archive`는 오래된 항목을 `docs/plan/ARCHIVE.md`로 옮깁니다.
 
+- [요청 계약과 스티어링 기록, Pota 1.4.0 릴리스](docs/plan/request-brief-steering.md): 요청 계약 게이트·스티어링 기록·`pota plan steering`을 넣고 npm `latest` 1.4.0으로 게시했습니다.
 - [`--tasks` 쉼표 목록 거부와 Pota 1.3.2 릴리스](docs/plan/release-1.3.2.md): 쉼표 목록·깨진 JSON을 오류로 거부하고 mod manifest 버전을 맞춰 npm `latest` 1.3.2로 게시했습니다.
 - [Pota 1.3.1 릴리스](docs/plan/release-1.3.1.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.3.1로 게시해 digest와 격리 설치를 확인했습니다.
 - [구독 등급에 맞춘 모델 상한](docs/plan/available-model-ceiling.md): `POTA_MODEL_CEILING`·`config.json` `"modelCeiling"`으로 쓸 수 있는 최고 tier를 선언하면 게이트와 캡슐이 그 기준으로 판정한다.
@@ -33,4 +32,3 @@
 - [모델 위임 규칙 4가지 개선](docs/plan/delegation-model-identity-rules.md): 실제 모델 ID 기록(`--effective-model`), 모델·effort 변경 시 새 dispatch, task list main 전담, 설계 strongest 게이트(`--host`)를 반영.
 - [Pota 0.4.1 릴리스](docs/plan/release-0.4.1.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 0.4.1로 게시해 registry digest와 격리 설치를 확인했습니다.
 - [Heavy Path 설계 모델 위임](docs/plan/heavy-design-model-routing.md): Heavy Path 설계를 strongest 모델 위임 task로 분리하고 모델 기록 누락을 완료 게이트로 차단; `npm run check` 통과.
-- [Pota 0.4.0 릴리스](docs/plan/release-0.4.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 0.4.0으로 게시해 digest와 격리 설치의 Heavy effort 게이트를 검증했습니다.
