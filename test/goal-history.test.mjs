@@ -27,7 +27,7 @@ const goalScript = resolve("scripts/pota-goal.mjs");
 const passArgv = [process.execPath, "-e", "process.exit(0)"];
 const recordKeys = [
   "createdAt", "durationMs", "efforts", "endedAt", "evidencePolicy", "goalId", "memoryPromotion", "models", "planId",
-  "receipts", "recordedBy", "revision", "schemaVersion", "status", "tasks", "title", "waivers", "worktreeId",
+  "receipts", "recordedBy", "revision", "schemaVersion", "status", "steering", "tasks", "title", "waivers", "worktreeId",
 ];
 const reminder = (planId) => `Pota memory: plan ${planId} has no "Memory promotion:" line. If this goal produced reusable repository knowledge, write it to docs/memory/<domain>.md and run pota memory index; otherwise record "Memory promotion: none: <reason>" in the plan.`;
 

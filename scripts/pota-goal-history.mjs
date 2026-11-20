@@ -4,6 +4,7 @@ import { lstat, readFile, readdir, rename, rm } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { potaHome, goalStateDirectory, repositoryId } from "./pota-paths.mjs";
 import { assertNoSymlinkComponents, safeWriteFile } from "./pota-safe-fs.mjs";
+import { readSteeringEntries, steeringCounts } from "./pota-goal-steering.mjs";
 
 export const GOAL_HISTORY_SCHEMA_VERSION = 1;
 export const GOAL_HISTORY_MAX_RECORDS = 200;
@@ -106,6 +107,7 @@ export function buildGoalHistoryRecord(state, { root = process.cwd(), recordedBy
     models,
     efforts,
     memoryPromotion: memoryPromotionStatus(root, goal.planId),
+    steering: steeringCounts(readSteeringEntries(root, goal.id)),
     recordedBy,
   };
 }

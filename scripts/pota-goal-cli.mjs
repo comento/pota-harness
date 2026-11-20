@@ -6,10 +6,12 @@ import { invalidModelCeilingWarning, resolveModelCeiling } from "./pota-model-ce
 import { classifyModel, isBelowTier, isStrongerOrAbove } from "./pota-model-tier.mjs";
 import { resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
 
-const GOAL_COMMANDS = ["start", "status", "ready", "stats", "task", "replan", "claim", "assign", "receipt", "verify", "finish", "pause", "resume", "block", "cancel", "complete"];
+const GOAL_COMMANDS = ["start", "status", "ready", "stats", "task", "replan", "steer", "claim", "assign", "receipt", "verify", "finish", "pause", "resume", "block", "cancel", "complete"];
 const GOAL_USAGE = [
   `Usage: pota goal <${GOAL_COMMANDS.join("|")}> [options] [--root PATH]`,
   "Note: --criteria (completionCriteria) is advisory and is not enforced; completion is gated only by required evidence.",
+  "Request Brief: completing a triageDecision task (goal task --status completed, goal finish) needs a filled \"## Request Brief\" in a plan file; bypass with --allow-no-request-brief <reason>.",
+  "Steering: goal steer --kind <correction|addition|redirect> --reason <text>; with a plan file, goal replan needs --steer <correction|addition|redirect|none> --reason <text>.",
 ].join("\n");
 
 export async function runGoalCli(args, {
@@ -52,6 +54,10 @@ export async function runGoalCli(args, {
   // The bypass is not stored in goal state; stderr and the plan's Evidence are its record.
   const reportMainModelWaiver = () => {
     if (mainModelWaiver !== undefined) stderr(`Pota warning: main-model gate bypassed for goal ${command}: ${mainModelWaiver}`);
+  };
+  const requestBriefWaiver = options["allow-no-request-brief"];
+  const reportRequestBriefWaiver = () => {
+    if (requestBriefWaiver !== undefined) stderr(`Pota warning: request-brief gate bypassed for goal ${command}: ${requestBriefWaiver}`);
   };
   // Read only by the gated commands (a task status change, finish, complete), once per call; an invalid value warns once.
   let ceilingSetting = null;
@@ -106,18 +112,30 @@ export async function runGoalCli(args, {
       effortWaiver: options["allow-inherited-effort"],
       designWaiver: options["allow-no-design-model"],
       mainModelWaiver,
+      requestBriefWaiver,
       sessionId,
       mainModelGate,
       modelCeiling: modelCeiling(),
     });
     emit(JSON.stringify(state));
     reportMainModelWaiver();
+    reportRequestBriefWaiver();
     return state;
   }
   if (command === "replan") {
-    const state = await operations.replanGoal({ root, tasks: parseTasks(options.tasks ?? positional.slice(0)) });
+    const state = await operations.replanGoal({
+      root,
+      tasks: parseTasks(options.tasks ?? positional.slice(0)),
+      steer: options.steer,
+      reason: options.reason,
+    });
     emit(JSON.stringify(state));
     return state;
+  }
+  if (command === "steer") {
+    const entry = await operations.steerGoal({ root, kind: options.kind, reason: options.reason });
+    emit(JSON.stringify(entry));
+    return entry;
   }
   if (command === "claim") {
     const state = await operations.claimGoal({ root, sessionId: options.session });
@@ -207,12 +225,14 @@ export async function runGoalCli(args, {
         ? 600_000
         : positiveIntegerOption(options["timeout-ms"], "timeout-ms"),
       mainModelWaiver,
+      requestBriefWaiver,
       sessionId,
       mainModelGate,
       modelCeiling: modelCeiling(),
     });
     emit(JSON.stringify({ id: state.goal.id, status: state.goal.status }));
     reportMainModelWaiver();
+    reportRequestBriefWaiver();
     return state;
   }
   if (command === "ready") {
@@ -310,13 +330,14 @@ function allowedOptions(command) {
   const byCommand = {
     start: ["goal", "plan", "tasks", "criteria", "requiredEvidence", "session", "evidencePolicy", "evidence-policy"],
     status: [],
-    task: ["task", "status", "reason", "allow-inherited-effort", "allow-no-design-model", "allow-main-model"],
-    replan: ["tasks"],
+    task: ["task", "status", "reason", "allow-inherited-effort", "allow-no-design-model", "allow-main-model", "allow-no-request-brief"],
+    replan: ["tasks", "steer", "reason"],
+    steer: ["kind", "reason"],
     claim: ["session"],
     assign: ["task", "agent", "effort", "effort-source", "route", "allow-inherited-effort", "kind", "model", "model-source", "allow-no-design-model", "effective-model", "host"],
     receipt: ["task", "kind", "scope", "command", "exitCode", "exit-code", "exit", "timestamp", "goalId", "goal-id", "plan"],
     verify: ["task", "kind", "scope", "watch", "timeout-ms"],
-    finish: ["watch", "timeout-ms", "allow-main-model"],
+    finish: ["watch", "timeout-ms", "allow-main-model", "allow-no-request-brief"],
     stats: ["history", "limit"],
     ready: [],
     pause: [],
