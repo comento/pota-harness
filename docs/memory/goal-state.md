@@ -1,6 +1,6 @@
 # Domain: goal-state
 
-Summary: goal 상태 파일 위치·전이·lock·증거 freshness·이력(history.jsonl)과 cleanup 규칙. goal CLI나 완료 게이트를 바꿀 때 읽는다.
+Summary: goal 상태 파일 위치·전이·lock·증거 freshness·요청 계약 게이트·스티어링 기록·이력과 cleanup 규칙. goal CLI나 완료 게이트를 바꿀 때 읽는다.
 
 ## Scope
 
@@ -11,7 +11,7 @@ Summary: goal 상태 파일 위치·전이·lock·증거 freshness·이력(histo
 ### 위치와 결속
 
 - 상태 디렉터리는 `$POTA_HOME`(기본 `~/.pota`)`/projects/<repositoryId>/worktrees/<worktreeId>/`다. repositoryId는 git common dir, worktreeId는 git dir의 해시다. git이 아니면 root 경로를 쓴다. 출처: `pota-paths.mjs:9-40`.
-- 그 안의 파일: `state.json`(schema v3, `GOAL_STATE_VERSION`), `history.jsonl`, `stop-guard.json`, `reminder-guard.json`, 세션마다 1개인 `main-model-<sha256(sessionKey) hex 앞 16자>.json`(`{"schemaVersion":1,"sessionKey","model","tier","host","at"}`, 낮은 tier 세션만, lock 없이 씀), `.pota/state.lock`. 저장소 안에는 goal 상태를 두지 않는다.
+- 그 안의 파일: `state.json`(schema v3, `GOAL_STATE_VERSION`), `history.jsonl`, `stop-guard.json`, `reminder-guard.json`, `steering.json`(goal의 스티어링 기록), 세션마다 1개인 `main-model-<sha256(sessionKey) hex 앞 16자>.json`(`{"schemaVersion":1,"sessionKey","model","tier","host","at"}`, 낮은 tier 세션만, lock 없이 씀), `.pota/state.lock`. 저장소 안에는 goal 상태를 두지 않는다.
 - task `kind`는 `TASK_KINDS`(`design`, `review`) 중 하나이거나 없다. `review`를 더해도 schema 버전은 3이다. 구버전 runtime은 `kind: "review"` 상태를 읽지 못한다. 출처: `pota-goal-state-validation.mjs` `TASK_KINDS`.
 - 예전 위치 `<repo>/.pota/state.json`은 읽을 때 lock 안에서 새 위치로 옮기고 지운다. 출처: `pota-goal-state.mjs:100-113`.
 - 읽기 전용 경로(hook, `stats --history`)는 상태가 없으면 디렉터리를 만들지 않는다. 출처: `test/goal-state.test.mjs` "hook failures emit JSON and read-only hooks create no user-home state", `test/goal-history.test.mjs` "… creates no state directory".
@@ -39,6 +39,16 @@ Summary: goal 상태 파일 위치·전이·lock·증거 freshness·이력(histo
 - `goal finish`는 active task 완료, goal evidence 1회 기록, goal 완료를 한 번에 한다. stale task 증거면 거부한다. 출처: `test/goal-state.test.mjs` "goal finish …" 2개 케이스.
 - `completionCriteria`(`--criteria`)는 advisory이며 강제하지 않는다. 완료는 required evidence로만 막는다. 출처: `GOAL_STATE_CONTRACT.completionCriteria`, `goal --help` 둘째 줄(`pota-goal-cli.mjs:7-10`).
 - 한도: planId 128자, taskId 64자, planId+taskId 160자, 동시 active task 4개. 병렬 task는 `dependsOn`과 겹치지 않는 `writeScope`가 필요하다. 출처: `pota-goal-state-validation.mjs:4-9`, `test/goal-dag.test.mjs`.
+
+### 요청 계약 게이트와 스티어링 기록(1.4.0)
+
+- 계획 파일 판정은 `readPlanText`(`scripts/pota-goal-steering.mjs`)가 한다: 저장소 안 일반 파일, symlink 구성요소 없음, 512 KiB 이하. 그렇지 않은 plan id(`plan-status` 같은 식별자)는 검사할 수 없으므로 아래 게이트를 모두 건너뛴다. 기존 테스트 대부분이 이 경로라 출력이 그대로다.
+- 요청 계약 게이트: `requiredEvidence`에 `triageDecision`이 있는 task를 완료할 때(`goal task --status completed`, `goal finish`) 계획의 `## Request Brief`에 `REQUEST_BRIEF_LABELS` 5개(`Original request`, `Interpreted outcome`, `Prior records`, `Assumptions`, `Implicit requirements`)가 채워져 있어야 한다. "채워짐"은 같은 줄 값이 있고 `<...>` placeholder가 아니거나, 더 깊게 들여쓴 목록 줄 중 placeholder가 아닌 것이 있는 경우다. 코드 펜스 안은 무시한다. 우회는 `--allow-no-request-brief <reason>`(완료 전이에서만, stderr 보고)이다. 출처: `requestBriefGateError`, `setTaskStatus`, `test/request-brief.test.mjs`.
+- 스티어링 기록: `goal steer --kind <correction|addition|redirect> --reason`(roadmap 불변, active goal만, `state.json`을 다시 쓰지 않아 revision이 오르지 않음)과 `goal replan --steer <kind|none> --reason`. 계획이 파일이면 replan에 두 플래그가 필수이고, 파일이 아니면 선택이지만 한쪽만 주면 오류다.
+- 순번 검사: n번째 스티어링(`none` 제외)은 Request Brief 섹션에 `- S<n> (<명령과 같은 kind>): <placeholder 아닌 text>` 줄이 있어야 하고, n이 2 이상이거나 `redirect`면 `Current request (as of S<n>)`가 채워져 있어야 한다. 거부되면 상태와 기록이 바뀌지 않는다. 출처: `steeringBriefError`, `prepareSteeringEntry`.
+- 저장: 상태 디렉터리의 `steering.json` `{schemaVersion:1, goalId, entries:[{seq, kind, reason, at, replan}]}`. `none`은 `seq: null`이고 순번에 세지 않는다. reason은 제어문자를 공백으로 바꾸고 500자에서 자른다. goalId가 다르거나 symlink·손상이면 빈 기록으로 읽는다. state lock 안에서 임시 파일 + rename으로 쓰고, terminal 전이가 이력을 기록한 뒤 지운다. `state.json` schema는 3 그대로다.
+- 이력 레코드와 `goal stats`에 `steering: {total, correction, addition, redirect}` 개수가 붙는다(원문 없음).
+- `pota plan steering [--limit 1..200]`은 `docs/plan/*.md`의 Request Brief에서 `S<n> (kind): text` 줄을 모아 JSON으로 낸다(읽기 전용, mtime 최신순, 기본 20개 계획, text 200자 clip). 출처: `planSteeringReport`, `scripts/pota-index.mjs` `parseIndexArgs`.
 
 ### lock과 cleanup
 

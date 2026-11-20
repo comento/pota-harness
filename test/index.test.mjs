@@ -752,8 +752,8 @@ test("pota memory and pota plan without a subcommand keep printing guidance; unk
     }
 
     assertCli(cli(["memory", "--help"], { home }), 0, "Usage: pota memory [check|index] [--root PATH] [--strict] [--dry-run]\n", "");
-    assertCli(cli(["plan", "--help"], { home }), 0, "Usage: pota plan [check|index] [--root PATH] [--strict] [--dry-run] [--archive]\n", "");
-    assertCli(cli(["plan", "check", "--help"], { home }), 0, "Usage: pota plan [check|index] [--root PATH] [--strict] [--dry-run] [--archive]\n", "");
+    assertCli(cli(["plan", "--help"], { home }), 0, "Usage: pota plan [check|index|steering] [--root PATH] [--strict] [--dry-run] [--archive] [--limit N]\n", "");
+    assertCli(cli(["plan", "check", "--help"], { home }), 0, "Usage: pota plan [check|index|steering] [--root PATH] [--strict] [--dry-run] [--archive] [--limit N]\n", "");
     for (const [args, error] of [
       [["memory", "bogus"], "unknown memory command: bogus"],
       [["plan", "bogus"], "unknown plan command: bogus"],

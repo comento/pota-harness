@@ -1,6 +1,6 @@
 {
   "name": "pota",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "description": "Token-efficient agent harness with tool readiness for Codex, Claude Code, and Antigravity.",
   "author": {
     "name": "WkNam"

@@ -20,6 +20,7 @@ node "<pluginRoot>/scripts/pota.mjs" goal cancel --quiet --root "<repoRoot>"
 ```
 
 - `active` is not a completion state. Successful completion or cancellation removes the user-home active state because completed evidence already lives in the plan document; paused and blocked state remains resumable.
+- User steering: classify it as `correction`, `addition`, or `redirect` (`pota://skills/pota-plan/request-brief.md`). Run `goal steer --kind correction --reason <text>` for a correction, or `goal replan --steer <addition|redirect> --reason <text>` for new or invalidated tasks; a redirect that touches completed work adds a re-verification task. First record `S<n>` in the plan's `## Request Brief` `Steering log`; from the second steering, or on a redirect, rewrite `Current request (as of S<n>)`. If the CLI refuses, fix the brief; never bypass it.
 - Resume a paused or blocked goal before folding new work into it with `goal replan`. Start a separate goal only when the user explicitly switches work.
 
 ## Ownership and State Conflicts

@@ -10,6 +10,10 @@ import {
 } from "./pota-model-tier.mjs";
 import { recordGoalHistoryUnlocked } from "./pota-goal-history.mjs";
 import {
+  REPLAN_STEER_VALUES, prepareSteeringEntry, readPlanText, readSteeringEntries, steeringReason, removeSteeringUnlocked, requestBriefGateError, validSteerKind,
+  writeSteeringEntriesUnlocked,
+} from "./pota-goal-steering.mjs";
+import {
   GOAL_STATE_VERSION, PLAN_ID_MAX_LENGTH, assertRecoveryReferenceBudget, boundedRequiredText,
   assertCanBeActive, assertEffortRecord, assertModelRecord, assertTaskGraph,
   defaultGoalEvidence, normalizeCriteria, normalizeTask, optionalText, requiredText,
@@ -120,6 +124,7 @@ export async function transitionGoal({
       const path = goalStatePath(root);
       await assertNoSymlinkComponents(potaHome(), path, { allowMissing: false });
       await rm(path);
+      await removeSteeringUnlocked(root);
       return { next, history };
     });
     await onTerminal(history.record, { historyError: history.error });
@@ -143,7 +148,7 @@ function applyGoalTransition(state, nextStatus, blocker, root) {
 
 export async function setTaskStatus({
   root = process.cwd(), taskId, status, blocker, effortWaiver, designWaiver, mainModelWaiver, sessionId = null, mainModelGate = true,
-  modelCeiling = null,
+  modelCeiling = null, requestBriefWaiver,
 } = {}) {
   const ceiling = validCeiling(modelCeiling);
   const nextStatus = validTaskStatus(status);
@@ -154,6 +159,8 @@ export async function setTaskStatus({
   if (normalizedDesignWaiver !== null && nextStatus !== "completed") throw new Error("--allow-no-design-model applies only when completing a task");
   const normalizedMainModelWaiver = optionalText(mainModelWaiver, "mainModelWaiver");
   if (normalizedMainModelWaiver !== null && nextStatus !== "completed") throw new Error("--allow-main-model applies only when completing a task");
+  const normalizedBriefWaiver = optionalText(requestBriefWaiver, "requestBriefWaiver");
+  if (normalizedBriefWaiver !== null && nextStatus !== "completed") throw new Error("--allow-no-request-brief applies only when completing a task");
   return mutateGoal(root, async (state) => {
     assertGoalMutable(state);
     const task = taskById(state, normalizedTaskId);
@@ -167,6 +174,10 @@ export async function setTaskStatus({
       if (normalizedDesignWaiver !== null) task.designWaiver = normalizedDesignWaiver;
       ensureHeavyEffortApplied(task);
       ensureHeavyDesignRecorded(state, task, ceiling);
+      if (normalizedBriefWaiver === null && task.requiredEvidence.includes("triageDecision")) {
+        const message = requestBriefGateError(root, state.goal.planId, task.id);
+        if (message) throw new Error(message);
+      }
       ensureTaskCanComplete(state, task, root);
       await ensureMainModelPlanning(root, state, task, { sessionId, waiver: normalizedMainModelWaiver, enabled: mainModelGate, ceiling });
     }
@@ -180,11 +191,21 @@ export async function setTaskStatus({
   });
 }
 
-export async function replanGoal({ root = process.cwd(), tasks } = {}) {
+export async function replanGoal({ root = process.cwd(), tasks, steer, reason } = {}) {
   if (!Array.isArray(tasks) || tasks.length === 0) throw new Error("replan tasks must contain at least one incomplete task");
-  return mutateGoal(root, (state) => {
+  const steerGiven = steer !== undefined && steer !== null;
+  const reasonGiven = reason !== undefined && reason !== null;
+  const normalizedSteer = steerGiven ? validSteerKind(steer, { allowNone: true, label: "--steer" }) : null;
+  return mutateGoal(root, async (state) => {
     assertGoalMutable(state);
     if (state.goal.status !== "active") throw new Error("Only an active goal can be replanned");
+    // A plan file needs both flags; an uninspectable plan accepts them but records only when both are given.
+    const planInspectable = readPlanText(root, state.goal.planId) !== null;
+    if ((planInspectable || steerGiven || reasonGiven) && !(steerGiven && reasonGiven)) {
+      throw new Error(`goal replan on plan ${state.goal.planId} requires --steer <${REPLAN_STEER_VALUES.join("|")}> and --reason <text>; use correction, addition, or redirect for a user steering and none for a replan that is not one`);
+    }
+    const entries = steerGiven ? readSteeringEntries(root, state.goal.id) : [];
+    const entry = steerGiven ? prepareSteeringEntry({ root, state, entries, kind: normalizedSteer, reason, replan: true }) : null;
     const completedTasks = state.tasks.filter((task) => task.status === "completed");
     const completedIds = new Set(completedTasks.map((task) => task.id));
     const replacementTasks = normalizeTaskList(
@@ -200,7 +221,27 @@ export async function replanGoal({ root = process.cwd(), tasks } = {}) {
     state.goal.blocker = null;
     state.goal.updatedAt = timestamp();
     advanceGoal(state);
+    if (entry) {
+      // Validate the next state first so a rejected write never leaves a steering entry behind.
+      validateState(structuredClone({ ...state, revision: state.revision + 1 }));
+      await writeSteeringEntriesUnlocked(root, state.goal.id, [...entries, entry]);
+    }
     return state;
+  });
+}
+
+// Records a steering that does not change the task roadmap; only an active goal can be steered.
+export async function steerGoal({ root = process.cwd(), kind, reason } = {}) {
+  const normalizedKind = validSteerKind(kind);
+  const normalizedReason = steeringReason(reason);
+  return withGoalStateLock(root, async () => {
+    const state = await readGoalStateUnlocked(root);
+    if (!state) throw new Error("No Pota goal state exists; start a goal first");
+    if (state.goal.status !== "active") throw new Error(`Only an active goal can be steered (goal is ${state.goal.status})`);
+    const entries = readSteeringEntries(root, state.goal.id);
+    const entry = prepareSteeringEntry({ root, state, entries, kind: normalizedKind, reason: normalizedReason, replan: false });
+    await writeSteeringEntriesUnlocked(root, state.goal.id, [...entries, entry]);
+    return { goalId: state.goal.id, ...entry };
   });
 }
 

@@ -21,7 +21,7 @@ export const INDEX_LIMITS = Object.freeze({
 });
 export const INDEX_USAGE = Object.freeze({
   memory: "Usage: pota memory [check|index] [--root PATH] [--strict] [--dry-run]",
-  plan: "Usage: pota plan [check|index] [--root PATH] [--strict] [--dry-run] [--archive]",
+  plan: "Usage: pota plan [check|index|steering] [--root PATH] [--strict] [--dry-run] [--archive] [--limit N]",
 });
 
 const KINDS = Object.freeze({
@@ -320,6 +320,16 @@ export function parseIndexArgs(kind, args = []) {
   if (version) return { action: "version", root: repoRoot };
   const [command, ...flags] = rest;
   if (command.startsWith("-")) throw new Error(`unknown option: ${command}`);
+  if (kind === "plan" && command === "steering") {
+    let limit;
+    for (let index = 0; index < flags.length; index += 1) {
+      const flag = flags[index];
+      if (flag.startsWith("--limit=") && limit === undefined) limit = flag.slice("--limit=".length);
+      else if (flag === "--limit" && limit === undefined && flags[index + 1] !== undefined) limit = flags[(index += 1)];
+      else throw new Error(`unknown option: ${flag}`);
+    }
+    return { action: "steering", root: repoRoot, limit };
+  }
   if (command !== "check" && command !== "index") throw new Error(`unknown ${kind} command: ${command}`);
   const allowed = command === "check" ? ["--strict"] : kind === "plan" ? ["--dry-run", "--archive"] : ["--dry-run"];
   for (const flag of flags) {
