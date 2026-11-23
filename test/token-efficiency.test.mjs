@@ -567,6 +567,20 @@ test("model ceiling surfaces name the capsule line, the setting, and the user-on
   }
 });
 
+test("Antigravity routing surfaces document default invoke_subagent and optional swarm model selection", async () => {
+  for (const path of [
+    "skills/pota-plan/delegation.md",
+    "skills/pota-work/delegation.md",
+    "docs/model-guidance/README.md",
+  ]) {
+    const content = await readFile(path, "utf8");
+    assert.match(content, /Antigravity.*invoke_subagent.*fast `flash_lite`, balanced `flash`, stronger `pro`, strongest `pro`/s, `${path} default invoke_subagent`);
+    assert.match(content, /swarm\(action: "models"\)/, `${path} swarm models`);
+    assert.match(content, /swarm\(action: "add", model: "<model>"\)/, `${path} swarm add model`);
+    assert.match(content, /goal assign --model <value> --model-source host-option --host antigravity/, `${path} goal assign antigravity`);
+  }
+});
+
 async function withTempRoot(run) {
   const root = await mkdtemp(join(tmpdir(), "pota-token-efficiency-"));
   const stateHome = `${root}-home`;

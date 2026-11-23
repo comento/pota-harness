@@ -224,6 +224,7 @@ export async function runGoalCli(args, {
       timeoutMs: options["timeout-ms"] === undefined
         ? 600_000
         : positiveIntegerOption(options["timeout-ms"], "timeout-ms"),
+      effortWaiver: options["allow-inherited-effort"],
       mainModelWaiver,
       requestBriefWaiver,
       sessionId,
@@ -337,7 +338,7 @@ function allowedOptions(command) {
     assign: ["task", "agent", "effort", "effort-source", "route", "allow-inherited-effort", "kind", "model", "model-source", "allow-no-design-model", "effective-model", "host"],
     receipt: ["task", "kind", "scope", "command", "exitCode", "exit-code", "exit", "timestamp", "goalId", "goal-id", "plan"],
     verify: ["task", "kind", "scope", "watch", "timeout-ms"],
-    finish: ["watch", "timeout-ms", "allow-main-model", "allow-no-request-brief"],
+    finish: ["watch", "timeout-ms", "allow-inherited-effort", "allow-main-model", "allow-no-request-brief"],
     stats: ["history", "limit"],
     ready: [],
     pause: [],

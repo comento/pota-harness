@@ -36,16 +36,45 @@ function tokenMatcher(host, boundary) {
   };
 }
 
+const antigravityTiers = tierByValue("antigravity");
+const antigravityPatterns = [
+  ["fast", /^gemini-[\d.]+-flash-lite(?:-[a-z0-9-]+)?$/],
+  ["balanced", /^gemini-[\d.]+-flash(?:-(?:low|medium|high|xhigh))?$/],
+  ["balanced", /^gpt-oss-\d+b(?:-(?:low|medium|high|xhigh))?$/],
+  ["stronger", /^gemini-4-(?:hydrogen|neon)(?:-(?:tiered-)?(?:low|medium|high|xhigh))?$/],
+  ["stronger", /^gemini-pro-orchestrator(?:-[a-z0-9-]+)?$/],
+  ["strongest", /^gemini-4-argon(?:-(?:tiered-)?(?:low|medium|high|xhigh))?$/],
+];
+
+function matchAntigravity(text) {
+  const exact = antigravityTiers.get(text);
+  if (exact) return exact;
+  for (const [tier, pattern] of antigravityPatterns) {
+    if (pattern.test(text)) return tier;
+  }
+  return null;
+}
+
+function matchAntigravityClaude(text) {
+  if (!/^claude-(?:sonnet|opus)-/.test(text)) return null;
+  const tier = matchers["claude-code"](text);
+  return tier === "balanced" || tier === "stronger" ? tier : null;
+}
+
 const matchers = {
   "claude-code": tokenMatcher("claude-code", "a-z0-9"),
   codex: tokenMatcher("codex", "a-z0-9."),
-  antigravity: (text) => tierByValue("antigravity").get(text) ?? null,
+  antigravity: matchAntigravity,
 };
 
 export function classifyModel(value, host = null) {
   if (typeof value !== "string") return null;
   const text = value.trim().toLowerCase();
   if (text.length === 0 || text.length > MAX_MODEL_LENGTH) return null;
+  if (host === "antigravity") {
+    const tier = matchers.antigravity(text) ?? matchAntigravityClaude(text);
+    return tier ? { tier, host: "antigravity" } : null;
+  }
   const hosts = host === null || host === undefined ? HOST_ORDER : (Object.hasOwn(matchers, host) ? [host] : []);
   for (const name of hosts) {
     const tier = matchers[name](text);

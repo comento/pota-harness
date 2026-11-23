@@ -713,7 +713,7 @@ test("5. 보안 검증: SVG XSS 이스케이프, file:// URI 경로 검증 및 H
     }
 
     // 5-2. renderDagAppHtml() CSP, 프로토콜 메시지 및 안전 DOM 조작 검증
-    const html = renderDagAppHtml({ title: 'Pota <script>alert("x")</script>', version: "2.2.0" });
+    const html = renderDagAppHtml({ title: 'Pota <script>alert("x")</script>', version: "2.2.1" });
     assert.ok(html.startsWith("<!DOCTYPE html>"));
     for (const needle of [
       "ui/initialize",
