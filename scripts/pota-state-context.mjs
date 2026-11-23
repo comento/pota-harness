@@ -157,6 +157,33 @@ export function updateNoticeLine({ ko, notice }) {
   return null;
 }
 
+// The last npm release's notice (docs/plan/plugin-native-install.md §6.2): the install commands go only to the user's
+// systemMessage, and the model gets one line (160 characters) so it does not run them on its own.
+export function pluginNoticeLines({ ko, hosts, version }) {
+  const shown = clipText(plainText(version), contextLimits.noticeVersion);
+  const commands = {
+    claude: [
+      "Claude Code:",
+      "  claude plugin uninstall pota@pota --scope user",
+      "  claude plugin marketplace add comento/pota-harness",
+      "  claude plugin install pota@pota-harness",
+    ],
+    codex: [ko
+      ? "Codex: codex plugin marketplace add comento/pota-harness 실행 뒤 /plugins에서 pota를 설치하고 /hooks에서 hook을 승인하세요"
+      : "Codex: codex plugin marketplace add comento/pota-harness, install pota from /plugins, then approve its hooks in /hooks"],
+    antigravity: ["Antigravity: agy plugin install https://github.com/comento/pota-harness"],
+  };
+  const lines = ["claude", "codex", "antigravity"].filter((host) => hosts?.includes(host)).flatMap((host) => commands[host]);
+  if (lines.length === 0) return null;
+  const head = ko
+    ? `Pota는 이제 호스트 플러그인으로 설치합니다. 이 npm 설치본(${shown})이 마지막 버전입니다. 플러그인이 첫 세션에서 이 설치본을 제거합니다.`
+    : `Pota now installs as a host plugin; this npm install (${shown}) is the last one. The plugin removes this install on its first session.`;
+  const line = ko
+    ? "Pota 안내: 이 npm 설치본이 마지막 버전이며 사용자에게 호스트 플러그인 설치 명령을 보여 주었습니다. 요청이 없으면 실행하지 마세요."
+    : "Pota notice: this npm install is final; the user was shown host plugin install commands. Do not run them unless asked.";
+  return { line, systemMessage: [head, ...lines].join("\n") };
+}
+
 // A conditional SessionStart line outside the standing budgets (340 characters); the prefix stays English in both
 // locales because delegation.md names the line by it. threshold is the capped stronger tier under a model ceiling.
 export function mainModelLine({ ko, model, tier, host, threshold = "stronger" }) {
