@@ -503,6 +503,20 @@ test("delegation policy surfaces state model identity, new-dispatch, task-list, 
   }
 });
 
+test("subagent close policy preserves close-or-release while keeping Antigravity subagents idle", async () => {
+  for (const path of [
+    "skills/pota-plan/delegation.md",
+    "skills/pota-work/delegation.md",
+    "docs/model-guidance/README.md",
+  ]) {
+    const content = await readFile(path, "utf8");
+    assert.match(content, /final report before leaving.*close or release/is, `${path} close or release`);
+    assert.match(content, /non-destructive close\/release/i, `${path} non-destructive close/release`);
+    assert.match(content, /leave completed subagents idle instead of calling a destructive kill/i, `${path} leave idle`);
+    assert.match(content, /Antigravity.*manage_subagents\(kill\).*Cancelled/i, `${path} Antigravity manage_subagents kill`);
+  }
+});
+
 test("main-model gate surfaces name the capsule line, the review kind, and the bypass flag", async () => {
   const read = (path) => readFile(path, "utf8");
   for (const path of ["skills/pota-plan/delegation.md", "skills/pota-work/delegation.md"]) {
