@@ -3,7 +3,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   appendNotice, contextResult, foreignSessionContextResult, mainModelLine, mainModelNotice, modelCeilingInvalidNotice,
-  modelCeilingLine, prependContext, updateNoticeLine,
+  modelCeilingLine, pluginNoticeLines, prependContext, updateNoticeLine,
 } from "./pota-state-context.mjs";
 import { continuationReason, stopAllowedMessage, stopHookOutput } from "./pota-state-hook.mjs";
 import { initializeProject } from "./pota-state-init.mjs";
@@ -15,7 +15,7 @@ import { NO_MODEL_CEILING, resolveModelCeiling } from "./pota-model-ceiling.mjs"
 import { classifyModel, effectiveTier, isBelowTier } from "./pota-model-tier.mjs";
 import { hookIndexSnapshot } from "./pota-index.mjs";
 import { resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
-import { sessionStartUpdate } from "./pota-update-state.mjs";
+import { sessionStartPluginNotice, sessionStartUpdate } from "./pota-update-state.mjs";
 import { checkPostToolUse, startFetchWhenNeeded } from "./pota-comment-checker.mjs";
 
 const recoverableGoalStatuses = new Set(["active", "paused", "blocked"]);
@@ -72,7 +72,7 @@ export async function runStateResult(event = "manual", {
       floor: effectiveTier("stronger", modelCeiling?.ceiling ?? null),
     });
     if (event !== "session-start") return result;
-    const withNotice = withUpdateNotice(result, ko, update);
+    const withNotice = withPluginNotice(withUpdateNotice(result, ko, update), ko, update);
     startFetchWhenNeeded(commentCheckerOptions(update, commentChecker));
     return withNotice;
   }
@@ -254,6 +254,19 @@ function withUpdateNotice(result, ko, { env = process.env, now = new Date(), spa
   }
   if (!line) return result;
   return appendNotice(result, line, line);
+}
+
+// After the update notice and only from an installed runtime: the move-to-host-plugins notice. Errors are swallowed
+// like the update step's, so the capsule and exit code never depend on it.
+function withPluginNotice(result, ko, { env = process.env, now = new Date(), pluginRoot = resolvePluginRoot(import.meta.url) } = {}) {
+  let notice = null;
+  try {
+    const claimed = sessionStartPluginNotice({ env, now, pluginRoot });
+    notice = claimed ? pluginNoticeLines({ ko, ...claimed }) : null;
+  } catch {
+    notice = null;
+  }
+  return notice ? appendNotice(result, notice.line, notice.systemMessage) : result;
 }
 
 // SessionStart only: one capsule line while a ceiling is set, and a user notice while the setting is invalid. Without

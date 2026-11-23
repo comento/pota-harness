@@ -16,7 +16,7 @@ import {
   transitionGoal,
 } from "../scripts/pota-goal.mjs";
 import { runStateResult } from "../scripts/pota-state.mjs";
-import { updateNoticeLine } from "../scripts/pota-state-context.mjs";
+import { pluginNoticeLines, updateNoticeLine } from "../scripts/pota-state-context.mjs";
 import { message } from "../scripts/pota.mjs";
 
 const cliScript = resolve("scripts/pota.mjs");
@@ -40,6 +40,28 @@ test("recurring Codex instructions are a small stable recovery kernel", async ()
 
 // A one-time SessionStart line outside the standing budgets above; long versions are bounded by the registry check
 // (x.y.z, at most 32 characters) and by clipping an installed prerelease.
+// The last npm release's notice: the install commands go only to the user, and the model line stays within 160
+// characters whatever the hosts or the (clipped) version.
+test("the plugin notice puts one line of at most 160 characters into the model context", () => {
+  const longVersion = `${"1".repeat(14)}.${"2".repeat(8)}.${"3".repeat(8)}-prerelease.with.a.long.tail`;
+  for (const ko of [false, true]) {
+    for (const hosts of [["claude"], ["codex"], ["antigravity"], ["claude", "codex", "antigravity"]]) {
+      for (const version of ["1.5.0", longVersion]) {
+        const { line, systemMessage } = pluginNoticeLines({ ko, hosts, version });
+        assert.ok(line.length <= 160, `${ko ? "ko" : "en"} plugin notice line is ${line.length} characters; budget is 160`);
+        assert.doesNotMatch(line, /\n|claude plugin|codex plugin|agy plugin/);
+        assert.match(systemMessage, ko ? /^Pota는 이제 호스트 플러그인으로 설치합니다\. / : /^Pota now installs as a host plugin; /);
+        assert.ok(systemMessage.split("\n")[0].length <= 240);
+      }
+    }
+  }
+  assert.equal(pluginNoticeLines({ ko: false, hosts: [], version: "1.5.0" }), null);
+  assert.equal(
+    pluginNoticeLines({ ko: false, hosts: ["codex"], version: "1.5.0" }).line,
+    "Pota notice: this npm install is final; the user was shown host plugin install commands. Do not run them unless asked.",
+  );
+});
+
 test("update notice lines stay within 160 characters", () => {
   const longVersion = `${"1".repeat(14)}.${"2".repeat(8)}.${"3".repeat(8)}`;
   assert.equal(longVersion.length, 32);

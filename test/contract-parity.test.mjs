@@ -10,7 +10,7 @@ test("package and plugin metadata expose the same machine-consumed version", asy
   const packageJson = await readJson("package.json");
   const pluginJson = await readJson(".codex-plugin/plugin.json");
 
-  assert.equal(packageJson.version, "1.4.0");
+  assert.equal(packageJson.version, "1.5.0");
   assert.equal(pluginJson.version, packageJson.version);
   // The mod manifest in the repo is a dev manifest, but it ships in the package, so it carries the release version too.
   assert.equal((await readJson("claude-mod/.claude-plugin/plugin.json")).version, packageJson.version);

@@ -1,5 +1,7 @@
 # Pota Harness
 
+**Pota wird jetzt als Host-Plugin installiert.** `@comento/pota-harness` 1.5.0 ist die letzte npm-Version; installieren Sie Pota stattdessen mit den Plugin-Befehlen Ihres Hosts. Claude Code: `claude plugin uninstall pota@pota --scope user`, `claude plugin marketplace add comento/pota-harness`, `claude plugin install pota@pota-harness`. Codex: `codex plugin marketplace add comento/pota-harness`, danach pota unter `/plugins` installieren und seine hooks unter `/hooks` freigeben. Antigravity: `agy plugin install https://github.com/comento/pota-harness`. Details: https://github.com/comento/pota-harness#install.
+
 Pota Harness ist ein token-effizientes Multi-Agent-Harness-Plugin für Codex, Claude Code und Antigravity.
 
 [English](README.md)

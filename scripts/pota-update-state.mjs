@@ -11,6 +11,8 @@ export const UPDATE_PACKAGE_NAME = "@comento/pota-harness";
 export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export const NOTICE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 export const NOTICE_KINDS = ["updated", "failed", "manual"];
+export const PLUGIN_NOTICE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+const PLUGIN_NOTICE_HOSTS = ["claude", "codex", "antigravity"];
 // Exit codes of `pota-lifecycle.mjs upgrade --auto` besides 0 (done) and 1 (anything else). They are a contract
 // between versions: the runner is the installed version and the lifecycle it starts is the new one.
 // `manual`: the files are committed and only the Claude Code step (cache refresh, registration, a missing claude CLI)
@@ -31,6 +33,7 @@ export function updatePaths(env = process.env) {
     config: join(home, "config.json"),
     state: join(root, "state.json"),
     notice: join(root, "notice.json"),
+    pluginNotice: join(root, "plugin-notice.json"),
     log: join(root, "last-run.log"),
     lock: join(root, "update.lock"),
     stage: join(root, "stage"),
@@ -177,6 +180,55 @@ export function claimNotice(paths, { runningVersion, now = new Date() }) {
   }
 }
 
+// SessionStart of an installed runtime: the move-to-host-plugins notice for the hosts in the install manifest, at most
+// once per 7 days and to one session. Returns { hosts, version } or null; callers swallow errors.
+export function sessionStartPluginNotice({ env = process.env, now = new Date(), pluginRoot } = {}) {
+  const paths = updatePaths(env);
+  const running = runningInstall(pluginRoot, paths);
+  if (!running) return null;
+  const manifest = readJsonFile(paths.manifest, MANIFEST_FILE_LIMIT);
+  const recorded = manifest.status === "ok" && Array.isArray(manifest.value?.hosts) ? manifest.value.hosts : [];
+  const hosts = PLUGIN_NOTICE_HOSTS.filter((host) => recorded.includes(host));
+  if (hosts.length === 0 || !claimPluginNotice(paths, { now })) return null;
+  return { hosts, version: running.version };
+}
+
+// The claim is the exclusive creation of plugin-notice.json, so concurrent sessions cannot both win. A record at least
+// 7 days old is first renamed aside; a session that finds it fresh after the rename lost a race and puts it back.
+export function claimPluginNotice(paths, { now = new Date() } = {}) {
+  const read = readJsonFile(paths.pluginNotice);
+  if (read.status !== "missing") {
+    if (!pluginNoticeStale(paths.pluginNotice, read, now)) return false;
+    const aside = `${paths.pluginNotice}.${randomUUID()}.stale`;
+    try { renameSync(paths.pluginNotice, aside); } catch { return false; }
+    try {
+      if (!pluginNoticeStale(aside, readJsonFile(aside), now)) {
+        try { lstatSync(paths.pluginNotice); } catch { renameSync(aside, paths.pluginNotice); }
+        return false;
+      }
+    } finally {
+      rmSync(aside, { force: true });
+    }
+  }
+  mkdirSync(dirname(paths.pluginNotice), { recursive: true });
+  const record = { schemaVersion: UPDATE_SCHEMA_VERSION, shownAt: now.toISOString() };
+  try {
+    writeFileSync(paths.pluginNotice, `${JSON.stringify(record, null, 2)}\n`, { flag: "wx" });
+  } catch (error) {
+    if (error?.code === "EEXIST") return false;
+    throw error;
+  }
+  return true;
+}
+
+// An unreadable record (including one another session is still writing) ages by its modification time.
+function pluginNoticeStale(path, read, now) {
+  const value = read.status === "ok" ? read.value : null;
+  const recorded = isPlainObject(value) && value.schemaVersion === UPDATE_SCHEMA_VERSION ? Date.parse(value.shownAt ?? "") : NaN;
+  const shownAt = Number.isFinite(recorded) ? recorded : lstatSync(path).mtimeMs;
+  return now.getTime() - shownAt >= PLUGIN_NOTICE_INTERVAL_MS;
+}
+
 function noticeShownBy(notice, runningVersion) {
   return notice.kind !== "updated" || notice.to === runningVersion;
 }
@@ -196,7 +248,7 @@ export async function removeUpdateState(env = process.env) {
     if (error?.code === "ENOENT") return;
     throw error;
   }
-  for (const path of [paths.state, paths.notice, paths.log]) await rm(path, { force: true });
+  for (const path of [paths.state, paths.notice, paths.pluginNotice, paths.log]) await rm(path, { force: true });
   let locked = true;
   try { await lstat(paths.lock); } catch (error) { if (error?.code === "ENOENT") locked = false; else throw error; }
   if (!locked) await rm(paths.stage, { recursive: true, force: true });

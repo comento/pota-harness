@@ -1,16 +1,19 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn as spawnProcess, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { chmod, cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { startGoal } from "../scripts/pota-goal.mjs";
 import { targetDigest } from "../scripts/pota-lifecycle.mjs";
 import { createRuntimeLocator } from "../scripts/pota-paths.mjs";
 import { runStateResult } from "../scripts/pota-state.mjs";
-import { AUTO_UPGRADE_EXIT, checkDue, readInstallManifest, updatePaths } from "../scripts/pota-update-state.mjs";
+import {
+  AUTO_UPGRADE_EXIT, PLUGIN_NOTICE_INTERVAL_MS, checkDue, claimPluginNotice, readInstallManifest, updatePaths,
+} from "../scripts/pota-update-state.mjs";
 
 const root = resolve(".");
 const fakeClaudeCli = join(root, "test", "fixtures", "fake-claude.mjs");
@@ -523,7 +526,8 @@ test("install from a git checkout records origin checkout", async () => {
 });
 
 test("upgrade --auto without an existing schema 2 manifest is refused and installs nothing", async () => {
-  await withEnv(async ({ env }) => {
+  await withEnv(async ({ env, paths }) => {
+    await rm(paths.update, { recursive: true });
     const refused = runLifecycle(["upgrade", "--auto"], env);
     assert.equal(refused.status, 1);
     assert.equal(refused.stderr, "Pota lifecycle error: auto-upgrade requires an existing installation\n");
@@ -629,6 +633,7 @@ test("an auto-upgrade hook error never changes the capsule or the exit code", as
     assert.doesNotThrow(() => failing.children[0].emit("error", new Error("ENOENT")));
 
     await rm(paths.update, { recursive: true, force: true });
+    await quietPluginNotice(paths);
     await mkdir(paths.notice, { recursive: true });
     assert.deepEqual(await hookAt(env, paths, runtime, { spawn: spawnRecorder() }), baseline, "notice is a directory");
 
@@ -636,7 +641,7 @@ test("an auto-upgrade hook error never changes the capsule or the exit code", as
     await cp(join(root, "scripts"), join(runtime, "scripts"), { recursive: true });
     await cp(join(root, "package.json"), join(runtime, "package.json"));
     await rm(paths.update, { recursive: true, force: true });
-    await mkdir(paths.update, { recursive: true });
+    await quietPluginNotice(paths);
     await writeFile(paths.state, "{ corrupted");
     await writeFile(paths.notice, "not json");
     const input = JSON.stringify({ cwd: paths.project, session_id: sessionId });
@@ -704,6 +709,7 @@ test("uninstall removes update state and keeps config.json and projects", async 
     await writeJson(paths.state, updateState({ lastCheckedAt: daysAgo(1) }));
     await writeJson(paths.notice, notice("failed", olderVersion, releaseVersion));
     await writeFile(paths.log, "previous run\n");
+    await quietPluginNotice(paths);
     await mkdir(join(paths.stage, "node_modules"), { recursive: true });
     await writeJson(paths.config, { autoUpgrade: false });
     const projectMarker = join(env.POTA_HOME, "projects", "marker.json");
@@ -746,6 +752,145 @@ test("an installed runtime's SessionStart starts the runner and the next Session
   });
 });
 
+const pluginNoticeEn = [
+  `Pota now installs as a host plugin; this npm install (${releaseVersion}) is the last one. The plugin removes this install on its first session.`,
+  "Claude Code:",
+  "  claude plugin uninstall pota@pota --scope user",
+  "  claude plugin marketplace add comento/pota-harness",
+  "  claude plugin install pota@pota-harness",
+  "Codex: codex plugin marketplace add comento/pota-harness, install pota from /plugins, then approve its hooks in /hooks",
+  "Antigravity: agy plugin install https://github.com/comento/pota-harness",
+].join("\n");
+const pluginNoticeLineEn = "Pota notice: this npm install is final; the user was shown host plugin install commands. Do not run them unless asked.";
+
+test("the plugin notice shows from an installed runtime once per 7 days, for the recorded hosts", async () => {
+  await withEnv(async ({ env, paths }) => {
+    const runtime = await synthesizeInstall(env, { installedAt: new Date().toISOString() });
+    const baseline = await hookAt(env, paths, root);
+    await rm(paths.pluginNotice);
+
+    assert.deepEqual(await hookAt(env, paths, root), baseline, "a source checkout never shows it");
+    await assert.rejects(lstat(paths.pluginNotice), { code: "ENOENT" });
+
+    const shown = await hookAt(env, paths, runtime);
+    const lines = shown.hookOutput.hookSpecificOutput.additionalContext.split("\n");
+    assert.equal(lines.at(-1), pluginNoticeLineEn);
+    assert.match(lines.at(-2), /^Pota CLI: node /);
+    assert.equal(shown.message.split("\n").at(-1), pluginNoticeLineEn);
+    assert.equal(shown.hookOutput.systemMessage, pluginNoticeEn);
+    assert.equal(shown.status, 0);
+    const record = await readJson(paths.pluginNotice);
+    assert.equal(record.schemaVersion, 1);
+    assert.ok(Date.now() - Date.parse(record.shownAt) < 60_000);
+
+    assert.deepEqual(await hookAt(env, paths, runtime), baseline, "only once");
+    assert.deepEqual(await hookAt(env, paths, runtime, { now: new Date(Date.now() + 6 * DAY) }), baseline, "quiet for 7 days");
+    const week = new Date(Date.now() + PLUGIN_NOTICE_INTERVAL_MS + HOUR);
+    assert.equal((await hookAt(env, paths, runtime, { now: week })).hookOutput.systemMessage, pluginNoticeEn, "again after 7 days");
+    assert.equal((await readJson(paths.pluginNotice)).shownAt, week.toISOString());
+    assert.deepEqual(await hookAt(env, paths, runtime, { now: week }), baseline);
+
+    await rm(paths.pluginNotice);
+    const korean = await hookAt(env, paths, runtime, { locale: "ko-KR" });
+    assert.equal(
+      korean.hookOutput.hookSpecificOutput.additionalContext.split("\n").at(-1),
+      "Pota 안내: 이 npm 설치본이 마지막 버전이며 사용자에게 호스트 플러그인 설치 명령을 보여 주었습니다. 요청이 없으면 실행하지 마세요.",
+    );
+    const koMessage = korean.hookOutput.systemMessage.split("\n");
+    assert.equal(koMessage[0], `Pota는 이제 호스트 플러그인으로 설치합니다. 이 npm 설치본(${releaseVersion})이 마지막 버전입니다. 플러그인이 첫 세션에서 이 설치본을 제거합니다.`);
+    assert.deepEqual(koMessage.slice(1, 5), pluginNoticeEn.split("\n").slice(1, 5), "commands stay verbatim");
+    assert.equal(koMessage[5], "Codex: codex plugin marketplace add comento/pota-harness 실행 뒤 /plugins에서 pota를 설치하고 /hooks에서 hook을 승인하세요");
+    assert.equal(koMessage[6], "Antigravity: agy plugin install https://github.com/comento/pota-harness");
+
+    // Legacy Antigravity installs have no hooks, so its line rides along with any other recorded host.
+    for (const hosts of [["claude"], ["codex", "antigravity"], ["claude", "antigravity"]]) {
+      await synthesizeInstall(env, { hosts });
+      await rm(paths.pluginNotice);
+      const message = (await hookAt(env, paths, runtime)).hookOutput.systemMessage.split("\n");
+      for (const [host, label] of [["claude", "Claude Code:"], ["codex", "Codex:"], ["antigravity", "Antigravity:"]]) {
+        assert.equal(message.some((line) => line.startsWith(label)), hosts.includes(host), `${hosts.join(",")} ${label}`);
+      }
+    }
+
+    // With an update notice in the same session the plugin notice comes after it.
+    await synthesizeInstall(env);
+    await rm(paths.pluginNotice);
+    await writeJson(paths.notice, notice("failed", olderVersion, releaseVersion));
+    const both = await hookAt(env, paths, runtime);
+    const bothLines = both.hookOutput.hookSpecificOutput.additionalContext.split("\n");
+    assert.match(bothLines.at(-2), /^Pota update: auto-upgrade to .* failed\./);
+    assert.equal(bothLines.at(-1), pluginNoticeLineEn);
+    assert.equal(both.hookOutput.systemMessage, `${bothLines.at(-2)}\n${pluginNoticeEn}`);
+  });
+});
+
+test("the plugin notice record is claimed by exactly one of several concurrent sessions", async () => {
+  await withEnv(async ({ env, paths }) => {
+    const claimers = (count) => Promise.all(Array.from({ length: count }, () => new Promise((done, fail) => {
+      const source = `import { claimPluginNotice, updatePaths } from ${JSON.stringify(pathToFileURL(join(root, "scripts", "pota-update-state.mjs")).href)};\n`
+        + "process.stdout.write(String(claimPluginNotice(updatePaths())));";
+      const child = spawnProcess(process.execPath, ["--input-type=module", "-e", source], { env, stdio: ["ignore", "pipe", "pipe"] });
+      let output = "";
+      child.stdout.on("data", (chunk) => { output += chunk; });
+      child.on("error", fail);
+      child.on("close", (code) => (code === 0 ? done(output) : fail(new Error(`claimer exited ${code}`))));
+    })));
+    const winners = async (label) => {
+      const results = await claimers(8);
+      assert.equal(results.filter((value) => value === "true").length, 1, `${label}: ${results.join(",")}`);
+    };
+
+    await rm(paths.pluginNotice);
+    await winners("no record");
+    await quietPluginNotice(paths, daysAgo(8));
+    await winners("a record older than 7 days");
+    assert.ok(Date.now() - Date.parse((await readJson(paths.pluginNotice)).shownAt) < 60_000);
+    assert.deepEqual((await readdir(paths.update)).filter((name) => name.startsWith("plugin-notice")), ["plugin-notice.json"]);
+    assert.equal(claimPluginNotice(updatePaths(env)), false, "a fresh record");
+
+    // An unreadable record ages by its modification time.
+    await writeFile(paths.pluginNotice, "{ partial");
+    assert.equal(claimPluginNotice(updatePaths(env)), false);
+    const old = new Date(Date.now() - 8 * DAY);
+    await utimes(paths.pluginNotice, old, old);
+    assert.equal(claimPluginNotice(updatePaths(env)), true);
+    assert.equal((await readJson(paths.pluginNotice)).schemaVersion, 1);
+  });
+});
+
+test("a plugin notice error or missing host record never changes the capsule or the exit code", async () => {
+  await withEnv(async ({ env, paths }) => {
+    const runtime = await synthesizeInstall(env, { installedAt: new Date().toISOString() });
+    const baseline = await hookAt(env, paths, root);
+
+    await rm(paths.pluginNotice);
+    for (const hosts of [[], ["unknown"], "claude"]) {
+      await synthesizeInstall(env, { hosts });
+      assert.deepEqual(await hookAt(env, paths, runtime), baseline, JSON.stringify(hosts));
+      await assert.rejects(lstat(paths.pluginNotice), { code: "ENOENT" }, "nothing is claimed without a host");
+    }
+    await synthesizeInstall(env);
+
+    await mkdir(paths.pluginNotice);
+    assert.deepEqual(await hookAt(env, paths, runtime), baseline, "record is a directory");
+    await rm(paths.pluginNotice, { recursive: true });
+    await rm(paths.update, { recursive: true, force: true });
+    await writeFile(paths.update, "not a directory");
+    assert.deepEqual(await hookAt(env, paths, runtime), baseline, "update is a file");
+
+    await cp(join(root, "scripts"), join(runtime, "scripts"), { recursive: true });
+    await cp(join(root, "package.json"), join(runtime, "package.json"));
+    const input = JSON.stringify({ cwd: paths.project, session_id: sessionId });
+    const hook = spawnSync(process.execPath, [join(runtime, "scripts", "pota-state.mjs"), "session-start"], {
+      cwd: paths.project, env: { ...env, POTA_AUTO_UPGRADE: "0" }, input, encoding: "utf8",
+    });
+    assert.equal(hook.status, 0, hook.stderr);
+    const output = JSON.parse(hook.stdout);
+    assert.ok(output.hookSpecificOutput.additionalContext.startsWith("Pota kernel:"));
+    assert.equal(output.systemMessage, undefined);
+  });
+});
+
 async function withEnv(fn) {
   const temp = await mkdtemp(join(tmpdir(), "pota-auto-upgrade-"));
   const env = { ...process.env };
@@ -780,6 +925,7 @@ async function withEnv(fn) {
     source: join(install, "codex", "plugins", "pota"),
     state: join(update, "state.json"),
     notice: join(update, "notice.json"),
+    pluginNotice: join(update, "plugin-notice.json"),
     log: join(update, "last-run.log"),
     lock: join(update, "update.lock"),
     stage: join(update, "stage"),
@@ -787,7 +933,13 @@ async function withEnv(fn) {
     project: join(temp, "project"),
   };
   await mkdir(paths.project, { recursive: true });
+  // Tests of the update notice and the runner start inside the plugin notice's 7-day quiet period.
+  await quietPluginNotice(paths);
   try { await fn({ temp, env, paths }); } finally { await rm(temp, { recursive: true, force: true }); }
+}
+
+async function quietPluginNotice(paths, shownAt = new Date().toISOString()) {
+  await writeJson(paths.pluginNotice, { schemaVersion: 1, shownAt });
 }
 
 function hookAt(env, paths, pluginRoot, { spawn = spawnRecorder(), now = new Date(), locale = "en-US" } = {}) {
@@ -821,11 +973,11 @@ function noticeOf(result) {
 }
 
 // A manifest and canonical runtime locator are all the hook reads; no lifecycle run is needed for the hook tests.
-async function synthesizeInstall(env, { version = releaseVersion, installedAt, origin = "package" } = {}) {
+async function synthesizeInstall(env, { version = releaseVersion, installedAt, origin = "package", hosts = ["codex", "claude", "antigravity"] } = {}) {
   const runtime = await synthesizeRuntime(env, version);
   await writeJson(join(env.POTA_HOME, "install", "lifecycle.json"), {
     schemaVersion: 2, plugin: "pota", version, transactionId: randomUUID(), installedAt: installedAt ?? new Date().toISOString(),
-    origin, hosts: ["codex", "claude", "antigravity"], targets: [], retained: [],
+    origin, hosts, targets: [], retained: [],
   });
   return runtime;
 }
