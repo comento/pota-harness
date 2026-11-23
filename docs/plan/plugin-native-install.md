@@ -880,6 +880,8 @@ writeScope와 검증 명령 두 개는 §10의 T1~T6에 있다. 모든 구현 ta
   - `npm deprecate`: 사용자가 터미널에서 실행했다. 레지스트리에서 9개 버전(`0.0.0-stage`, 1.0.0~1.5.0) 모두 deprecated로 확인. 메시지: "Pota now installs as a host plugin. See https://github.com/comento/pota-harness#install".
 - 후속: README는 Codex 설치를 TUI `/plugins`로 안내한다. CI에서 `codex plugin add pota@pota-harness`가 동작했으므로 README에 추가할 수 있다. DAG 실행 중 항목 상세 보기(Request Brief의 후속 항목).
 
+- Memory promotion: `docs/memory/lifecycle-install.md`(플러그인 설치와 1.x 이전), `hook-context.md`, `policy-surfaces.md`, `release-process.md`를 이 작업의 `docs` task에서 갱신했다. 릴리스 중 알게 된 CI 사실(npm 12의 설치 스크립트 차단, `CODEX_HOME` 선생성, Node 18의 unref 자식 대기, Windows 8.3 경로)은 위 `release` 증거에 적었다.
+
 ## Status
 
 - [x] Planned
