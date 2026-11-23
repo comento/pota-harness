@@ -12,6 +12,8 @@
 
 최신 항목이 위에 오며 계획당 한 줄입니다. `pota plan index --archive`는 오래된 항목을 `docs/plan/ARCHIVE.md`로 옮깁니다.
 
+- [Antigravity 모델 분류·라우팅 확장 및 `goal finish` effort 우회](docs/plan/antigravity-model-routing.md): Antigravity 실모델 4-tier 분류·설계 게이트, 선택적 `swarm` 지침, `goal finish --allow-inherited-effort`를 추가했습니다.
+
 - [Antigravity Pota DAG 사이드바/보조 패널 (MCP App)](docs/plan/antigravity-dag-panel.md): `mcp_config.json`, zero-dep MCP App 서버·HTML UI(`aux_pane`/`global`), 워크스페이스 레지스트리, 완료 서브에이전트 유휴 정책 추가.
 
 - [DAG 창에서 실행 중인 task 열기, Pota 2.1.0 릴리스](docs/plan/dag-open-running-task.md): Claude Code DAG 창의 실행 중 카드를 누르면 에이전트 대화가 열리며 `main` 병합과 태그 `v2.1.0`으로 릴리스했습니다.
@@ -32,4 +34,3 @@
 - [Pota 0.7.0 릴리스](docs/plan/release-0.7.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 0.7.0으로 게시해 digest와 격리 설치를 확인했습니다.
 - [자동 업그레이드와 `~/.pota` 설치 루트](docs/plan/auto-upgrade-pota-home.md): `~/.pota/install` 이전, Claude 캐시 갱신, runtime 3일 유예, `--hosts` 호스트 선택, SessionStart 자동 업그레이드.
 - [Pota 0.6.0 릴리스](docs/plan/release-0.6.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 0.6.0으로 게시해 digest와 격리 설치를 확인했습니다.
-- [메모리·계획 인덱스 재활용과 측정·감사 잔여 수정](docs/plan/memory-plan-index-reuse.md): 메모리·계획 인덱스 CLI와 hook 주입, goal 이력 집계, 감사 잔여 F6·F10·F11 수정, 이 저장소 `docs/memory` 노트 6개.

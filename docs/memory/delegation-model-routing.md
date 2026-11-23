@@ -20,7 +20,7 @@ Summary: 작업별 모델 4-tier·호스트별 값, effort 라우팅, dispatch �
 출처: `skills/pota-plan/delegation.md` "Model and Reasoning Effort Routing". 코드 정본은 `scripts/pota-model-tier.mjs`의 `MODEL_TIER_BY_HOST`이고, `STRONGEST_MODEL_BY_HOST`는 그 strongest 열에서 파생돼 `scripts/pota-goal-state-validation.mjs`가 re-export한다. 두 `delegation.md`의 4-tier 전체는 `test/main-model-gate.test.mjs` "the code tier table matches both delegation.md routing sections"가, strongest 값은 `test/goal-effort.test.mjs` "the code strongest table matches…"가 검사한다.
 
 - effort: Light 계획·구현·검증 `medium`, Heavy 계획·리뷰·구현 `high`, 최종 검증·리뷰 `xhigh`. 허용 값은 `low|medium|high|xhigh|max`와 `inherited`다. 출처: 같은 절, `pota-goal-state-validation.mjs:25-27`.
-- 모든 새 dispatch는 effort와 model을 host 옵션으로 넘긴다. Claude Code는 Agent `effort`·`model`이다. `subagent_type: "fork"`는 둘 다 무시하므로 라우팅된 작업에 쓰지 않는다. Antigravity는 model tier만 있고 effort 옵션이 없어 effort가 `inherited`다.
+- 모든 새 dispatch는 effort와 model을 host 옵션으로 넘긴다. Claude Code는 Agent `effort`·`model`이다. `subagent_type: "fork"`는 둘 다 무시하므로 라우팅된 작업에 쓰지 않는다. Antigravity 기본 위임은 `invoke_subagent`(`Model` tier enum만 있고 effort 옵션이 없어 effort가 `inherited`)이며, `swarm` 도구가 있는 환경에서 구체 모델·effort 접미사(`-medium`, `-high`, `-xhigh`) 지정이 필요할 때는 선택적으로 `swarm(action: "models")` 확인 후 `swarm(action: "add", model: ...)`로 dispatch하고 `goal assign --model <value> --model-source host-option --host antigravity`로 기록할 수 있다.
 - Effective 판정: 넘기고 거부되지 않았으면 요청값이다. 넘기지 않았으면 `not-applied: <reason>`이다. `inherited`는 호스트에 옵션이 없을 때만 쓴다.
 - Effective model은 넘긴 값과 worker가 자기 시스템 프롬프트에서 보고한 정확한 모델 ID로 기록한다(예: `opus (claude-opus-5-5)`). ID가 없으면 `unreported`이고 추측하지 않는다.
 - 모델이나 effort를 바꾸는 재위임(한 tier 상향, Light→Heavy 승격, 경로 변경)은 반드시 새 dispatch다. 기존 subagent를 `SendMessage`로 이어 쓰면 처음 값이 유지된다.
@@ -31,9 +31,9 @@ Summary: 작업별 모델 4-tier·호스트별 값, effort 라우팅, dispatch �
 ### 기록 명령과 게이트(코드가 강제)
 
 - 기록: `goal assign --task <id> --agent <id> --effort <v> --effort-source host-option|inherited|not-applied [--route heavy]`. 설계 task는 `--kind design --model <v> --model-source host-option --host claude-code|codex|antigravity`, 실제 ID는 `--effective-model <id|unreported>`로 기록한다. 생략한 옵션은 기존 값을 유지한다. 출처: `pota-goal-cli.mjs:273`, `pota-goal-operations.mjs:236-280`.
-- Heavy effort 게이트: 배정된 Heavy task가 effort 없음, `not-applied`, `inherited`이면 `goal task --status completed`와 `goal finish`를 거부한다. 우회는 `--allow-inherited-effort <reason>`이다. Light와 미배정(main 직접) task는 검사하지 않는다. 출처: `pota-goal-operations.mjs:207-214`, `test/goal-effort.test.mjs` 77·101·127행.
+- Heavy effort 게이트: 배정된 Heavy task가 effort 없음, `not-applied`, `inherited`이면 `goal task --status completed`와 `goal finish`를 거부한다. 우회는 두 명령 모두 `--allow-inherited-effort <reason>`이다. Light와 미배정(main 직접) task는 검사하지 않는다. 출처: `pota-goal-operations.mjs:207-214`, `pota-goal-operations-evidence.mjs`, `test/goal-effort.test.mjs` 77·101·127행.
 - 설계 게이트:
-  - `kind: "design"` task는 `--model-source host-option`으로 기록된 strongest 값이어야 완료된다. `--host`를 주면 그 호스트의 값만, 생략하면 세 값 중 하나를 허용한다.
+  - `kind: "design"` task는 `--model-source host-option`으로 기록된 strongest 값이어야 완료된다. `--host`를 주면 그 호스트의 값만, 생략하면 세 값 중 하나를 허용한다. Antigravity(`--host antigravity` 또는 `--host` 생략 시 Antigravity 분류)에서는 `pro`뿐 아니라 `classifyModel(model, "antigravity")?.tier`가 요구 floor(상한 없으면 `strongest`=`gemini-4-argon*`, 상한 `stronger`이면 `stronger` 이상)에 도달한 Antigravity 모델도 통과한다(`--host claude-code`와 `--host codex`는 기존 정확 일치 유지).
   - 배정된 Heavy task는 goal 안에 완료된 design task가 있어야 완료된다.
   - 둘 다 `--allow-no-design-model <reason>`으로 우회한다.
   - 출처: `pota-goal-operations.mjs:216-233`, `test/goal-effort.test.mjs` 248·279·450·474행.
@@ -46,7 +46,7 @@ Summary: 작업별 모델 4-tier·호스트별 값, effort 라우팅, dispatch �
 
 ### main 모델 게이트
 
-- 분류: `classifyModel(value, host)`(`scripts/pota-model-tier.mjs`)가 ID를 tier로 바꾼다. Claude Code는 family 토큰(`haiku|sonnet|opus|fable`)이 영숫자 경계로 정확히 1개일 때, Codex는 slug가 `[a-z0-9.]` 밖 경계로 정확히 1개일 때, Antigravity는 enum 완전 일치(`pro`는 strongest)일 때만 분류한다. `opusplan`·`default`·두 토큰·표에 없는 값은 `null`이다. 출처: `test/main-model-gate.test.mjs` "model tiers classify…".
+- 분류: `classifyModel(value, host)`(`scripts/pota-model-tier.mjs`)가 ID를 tier로 바꾼다. Claude Code는 family 토큰(`haiku|sonnet|opus|fable`)이 영숫자 경계로 정확히 1개일 때, Codex는 slug가 `[a-z0-9.]` 밖 경계로 정확히 1개일 때, Antigravity는 enum(`flash_lite`·`flash`·`pro`, `pro`는 strongest)과 실제 Antigravity 세션/swarm 모델 ID(`fast`: `gemini-*-flash-lite`, `balanced`: `gemini-*-flash`·`gpt-oss-*`, `stronger`: `gemini-4-hydrogen*`·`gemini-4-neon*`·`gemini-pro-orchestrator*`, `strongest`: `gemini-4-argon*`, `--host antigravity`일 때 `claude-sonnet-*`→`balanced`·`claude-opus-*`→`stronger`)를 분류한다. `gemini-3-pro`·`opusplan`·`default`·두 토큰·표에 없는 값은 `null`이며 `parseModelCeiling("pro")`도 계속 무효다. 출처: `test/main-model-gate.test.mjs` "model tiers classify…".
 - 기록: SessionStart(Codex는 UPS도) payload `model`이 fast·balanced면 hook이 payload `session_id` 키로 세션별 파일 `main-model-<sha256 앞 16자>.json`에 남긴다. stronger 이상·미지의 값은 그 세션 파일을 지우고, `model` 필드가 없으면 아무것도 하지 않는다. `agent_id`가 있는 payload는 무시한다. 출처: `scripts/pota-state.mjs` `observeMainModel`.
 - G-plan: 그 기록이 있는 세션에서 `requiredEvidence`에 `triageDecision`이 있는 task를 완료(`goal task --status completed`, `goal finish`의 active task 완료)하려면 그 task에 `--model-source host-option`이고 `--host` 기준 stronger 이상인 model 기록이 있어야 한다.
 - G-review: 같은 세션에서 `goal finish`·`goal complete`는 `kind: "review"` task 중 같은 조건의 기록이 하나 있어야 한다. `goal finish`는 검증 명령 실행 전에 먼저 검사하고, "tasks remain" 오류가 게이트보다 먼저다. 기록 명령은 `goal assign <task> --kind review --agent <id> --model <v> --model-source host-option --host <h>`다.
