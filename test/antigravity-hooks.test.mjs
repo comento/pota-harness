@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -17,6 +17,9 @@ import {
   statePayload,
   stopOutput,
 } from "../scripts/pota-state-antigravity.mjs";
+import { runLegacyRemoval } from "../scripts/pota-legacy-migration.mjs";
+import { runStateResult } from "../scripts/pota-state.mjs";
+import { createLegacyInstall } from "./support/legacy-install.mjs";
 
 const adapter = resolve("scripts/pota-state-antigravity.mjs");
 const conversationId = "agy-conversation-1";
@@ -307,6 +310,50 @@ test("session files are pruned after 14 days and never written through a symlink
     assert.deepEqual(await runAntigravityHook("post-tool-use", { conversationId, workspacePaths: [repo], toolCall }, { env: linkedEnv, run }), {});
     assert.deepEqual(await readdir(outside), []);
   });
+});
+
+// The legacy install, every host home, and POTA_HOME live in one temp directory (test/support/legacy-install.mjs). The
+// runner is never started: in-process runs record the spawn, and the CLI run sees no manifest.
+test("SessionStart injects the legacy-migration notice for the antigravity host", async () => {
+  const install = await createLegacyInstall({ hosts: ["antigravity"] });
+  const repo = join(install.temp, "repo");
+  const previous = { HOME: process.env.HOME, POTA_HOME: process.env.POTA_HOME };
+  process.env.HOME = install.env.HOME;
+  process.env.POTA_HOME = install.env.POTA_HOME;
+  try {
+    await mkdir(repo);
+    assert.equal(spawnSync("git", ["init", "-q"], { cwd: repo, encoding: "utf8" }).status, 0);
+    const pluginRoot = join(install.temp, "plugin");
+    const calls = [];
+    const spawn = (command, args) => {
+      calls.push(args);
+      return { on() {}, unref() {} };
+    };
+    const run = (event, options) => runStateResult(event, { ...options, migration: { ...options.migration, spawn, pluginRoot } });
+    const input = { conversationId, workspacePaths: [repo] };
+
+    const started = await runAntigravityHook("session-start", input, { env: install.env, run });
+    const text = started.injectSteps[0].systemMessage.systemMessage;
+    const lines = text.split("\n");
+    assert.match(lines.at(-2), /^Pota CLI: node /);
+    assert.equal(lines.at(-1), "Pota: removing the legacy npm install in the background. Legacy Pota hooks and commands stop working in this session; restart it when convenient.");
+    assert.equal(lines.filter((line) => line.startsWith("Pota: removing")).length, 1, "the systemMessage copy is folded in once");
+    assert.deepEqual(calls, [[join(pluginRoot, "scripts", "pota-legacy-migration.mjs"), "run", "--host", "antigravity"]]);
+
+    assert.equal((await runLegacyRemoval({ env: install.env, host: "antigravity" })).status, "completed");
+    assert.equal(existsSync(install.manifestPath), false);
+    const { status, output } = runHook(install.env, "session-start", input);
+    assert.equal(status, 0);
+    const doctor = `node "${join(resolve("."), "scripts", "pota.mjs")}" doctor`;
+    assert.equal(output.injectSteps[0].systemMessage.systemMessage.split("\n").at(-1), `Pota: removed the legacy npm install (1.4.0). Details: ${doctor}`);
+    assert.match(runHook(install.env, "session-start", input).output.injectSteps[0].systemMessage.systemMessage.split("\n").at(-1), /^Pota CLI: /, "shown once");
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await install.cleanup();
+  }
 });
 
 function runHook(env, event, input) {

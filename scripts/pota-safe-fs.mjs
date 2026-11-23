@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { lstatSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
@@ -8,6 +9,32 @@ const DEFAULT_LOCK_TIMEOUT_MS = 5_000;
 const DEFAULT_RETRY_MS = 25;
 const DEFAULT_MALFORMED_STALE_MS = 30_000;
 const TRANSIENT_LOCK_ERROR_CODES = new Set(["EACCES", "EBUSY", "EPERM"]);
+const SMALL_FILE_LIMIT = 64 * 1024;
+
+// A regular file at most `limit` bytes, parsed as JSON. Symlinks, directories, oversized and malformed files are
+// "invalid"; only a missing file is "missing".
+export function readJsonFile(path, limit = SMALL_FILE_LIMIT) {
+  let info;
+  try { info = lstatSync(path); } catch (error) { return { status: error?.code === "ENOENT" ? "missing" : "invalid" }; }
+  if (!info.isFile() || info.size > limit) return { status: "invalid" };
+  try { return { status: "ok", value: JSON.parse(readFileSync(path, "utf8")) }; } catch { return { status: "invalid" }; }
+}
+
+export function writeJsonAtomic(path, value) {
+  writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+export function writeFileAtomic(path, text) {
+  mkdirSync(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, text, { flag: "wx" });
+    renameSync(temporary, path);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
+  }
+}
 
 export function stateLockPath(root = process.cwd()) {
   return safePath(root, ".pota/state.lock");

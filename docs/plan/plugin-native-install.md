@@ -43,6 +43,8 @@ Pota를 npm 설치 프로그램(`pota install`)이 아니라 각 호스트(Claud
   - S3 (addition): "../collabo 프로젝트에서 svg로 된 pota icon이 있어." → 그 아이콘을 `assets/logo.svg`로 넣고 플러그인 manifest의 로고로 쓴다(§13 R10). task는 그대로이고 `layout-cutover`가 manifest에 연결한다.
 - Current request (as of S3): Pota 2.0.0에서 npm 설치 프로그램을 없애고 Claude Code, Codex, Antigravity CLI 각각의 플러그인 설치 명령으로 설치·업데이트하게 한다. 플러그인은 호스트가 설치한 자리의 스크립트를 runtime으로 쓰고, 호스트마다 버전이 달라도 된다. 기존 npm 설치본은 플러그인의 첫 SessionStart hook이 제거한다. 2.0.0은 npm에 게시하지 않고, 1.x에서 안내 문구만 바꾼 1.5.0을 마지막으로 게시한 뒤 패키지를 deprecated로 표시한다. 릴리스는 dev PR·main PR 병합, 1.5.0 게시, 이 컴퓨터의 설치본 교체까지 포함한다. 플러그인 로고는 collabo 프로젝트의 pota 아이콘을 쓴다.
 
+- 후속(2.0.0 릴리스 뒤 별도 계획, 2026-11-23 사용자 결정 "2.0.0 뒤에 진행"): DAG 창에서 실행 중인 항목을 누르면 그 task의 내용을 볼 수 있게 한다. 지금 API로 되는 것은 "실행 중" 카드의 버튼으로 상세(계약, 수정 범위, 배정 모델·effort, 증거, 최근 활동)를 펼치는 것이다. 그래프 노드 직접 클릭(`isInteractive` Svg, Desktop 2.1.326에서 빈 상자)과 서브에이전트 대화 내용 열기는 가능 여부를 먼저 확인한다.
+
 ## Whole Work
 
 - Outcome: 위 Interpreted outcome.

@@ -32,9 +32,12 @@ export async function runAntigravityHook(event, input, { env = process.env, now 
     const payload = statePayload(input);
     const session = sessionStore(input.conversationId, { env, now });
     if (event === "session-start") {
+      // The legacy-migration notice arrives in the result like any other SessionStart notice and is folded into the
+      // injected text by contextText.
       const result = await run("session-start", {
         payload,
         host: "antigravity",
+        migration: { env, now },
         commentChecker: { autoFetch: true },
         modelCeiling: resolveModelCeiling({ env, home: potaHome(env) }),
       });

@@ -1,18 +1,16 @@
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-
-export const RUNTIME_LOCATOR_SCHEMA_VERSION = 1;
 
 export function potaHome(env = process.env) {
   const userHome = env.HOME ?? env.USERPROFILE ?? homedir();
   return resolve(env.POTA_HOME ?? join(userHome, ".pota"));
 }
 
-// Lifecycle-managed files (ownership manifest, journal, lock, canonical runtime, marketplaces) live under
-// <potaHome>/install so they stay separate from goal state under <potaHome>/projects.
+// The legacy npm (1.x) installer kept its files (ownership manifest, lock, runtime, marketplaces) under <potaHome>/install;
+// the migration that removes them and `pota doctor` still read these paths.
 export function installRoot(env = process.env) {
   return join(potaHome(env), "install");
 }
@@ -119,73 +117,4 @@ export function discoverRepositoryRoot(start = process.cwd()) {
     if (parent === current) return null;
     current = parent;
   }
-}
-
-export function createRuntimeLocator(pluginRoot) {
-  const root = resolve(pluginRoot);
-  return {
-    schemaVersion: RUNTIME_LOCATOR_SCHEMA_VERSION,
-    plugin: "pota",
-    pluginRoot: root,
-    entrypoints: {
-      cli: join(root, "scripts", "pota.mjs"),
-      lifecycle: join(root, "scripts", "pota-lifecycle.mjs"),
-      state: join(root, "scripts", "pota-state.mjs"),
-      toolcheck: join(root, "scripts", "pota-toolcheck.mjs"),
-    },
-    resources: {
-      agents: join(root, "agents"),
-      commands: join(root, "commands"),
-      modelGuidance: join(root, "docs", "model-guidance"),
-      skills: join(root, "skills"),
-      templates: join(root, "templates"),
-    },
-  };
-}
-
-const runtimeEntryRelativePaths = [
-  join("scripts", "pota.mjs"),
-  join("scripts", "pota-lifecycle.mjs"),
-  join("scripts", "pota-state.mjs"),
-  join("scripts", "pota-toolcheck.mjs"),
-  join("scripts", "pota-goal.mjs"),
-  join("scripts", "pota-cleanup.mjs"),
-  // Spawned by path from the SessionStart hook, so they are entrypoints of their own.
-  join("scripts", "pota-auto-upgrade.mjs"),
-  join("scripts", "pota-comment-checker.mjs"),
-];
-const localModuleSpecifier = /^(?:import|export)\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|[\w$]+)(?:\s*,\s*(?:\{[^}]*\}|\*\s+as\s+\w+))?\s+from\s+)?["'](\.[^"']+)["']/gm;
-
-export function runtimeRequiredRelativePaths(pluginRoot) {
-  const root = resolve(pluginRoot);
-  const pending = runtimeEntryRelativePaths.map((path) => join(root, path));
-  const closure = new Set();
-
-  while (pending.length > 0) {
-    const path = pending.pop();
-    if (closure.has(path)) continue;
-    closure.add(path);
-    const source = readFileSync(path, "utf8");
-    for (const match of source.matchAll(localModuleSpecifier)) pending.push(resolve(dirname(path), match[1]));
-  }
-
-  return [...closure].map((path) => relative(root, path)).sort();
-}
-
-export function runtimeRequiredPaths(locator) {
-  if (!locator || locator.schemaVersion !== RUNTIME_LOCATOR_SCHEMA_VERSION || locator.plugin !== "pota"
-      || typeof locator.pluginRoot !== "string") return [];
-  const root = locator.pluginRoot;
-  return [
-    join(root, "package.json"),
-    join(root, ".codex-plugin", "plugin.json"),
-    join(root, "hooks", "hooks.json"),
-    ...runtimeRequiredRelativePaths(root).map((path) => join(root, path)),
-    locator.resources?.commands,
-    locator.resources?.agents,
-    locator.resources?.skills,
-    join(locator.resources?.templates ?? "", "work-plan.md"),
-    join(locator.resources?.modelGuidance ?? "", "README.md"),
-    join(locator.resources?.modelGuidance ?? "", "codex.md"),
-  ].filter(Boolean);
 }
