@@ -75,13 +75,19 @@ DAG 창의 "실행 중" 카드를 누르면 그 task를 맡은 서브에이전�
 
 ## Evidence
 
-- (기록 예정)
+- 구현: `58db744`, 리뷰 반영: `ba5c383`. `npm run check` 477 pass, `tsc -p tsconfig.json` 통과, `claude plugin validate .` 통과, `claude plugin test .` 22 pass.
+- 리뷰(읽기 전용, opus/medium): blocker 없음. 반영 3건 — 긴 제목이 다시 잘리도록 버튼 안에 `Text`를 둠, main과 subagent가 한 task에 함께 연결돼도 subagent가 열기 대상으로 유지됨, atom shape를 `ui-2`로 유지해 업그레이드 때 창 상태가 초기화되지 않음.
+- 반영하지 않은 지적: 끝난 에이전트도 열기 대상이 될 수 있음(거절되면 toast), `assignedAgentId`만 있고 보고된 에이전트가 없는 task는 창 안 상세로 열림, 보이지 않는 `expandedTaskId`는 그릴 때만 걸러짐.
+- 릴리스: comento/pota-harness#23 → `dev` (`3b7abe2`), comento/pota-harness#24 → `main` (`6a7d276`), 태그 `v2.1.0`. 두 PR 모두 CI 8개 통과.
+- 이 컴퓨터: `claude plugin update pota@pota-harness`로 2.0.0 → 2.1.0, `agy plugin install`로 재설치, `pota doctor` 버전 표면 2.1.0.
+- 확인하지 못한 것: 실제 세션에서 카드를 눌렀을 때 `$.ui.view`가 대화를 바꾸는 동작. 테스트로만 확인했고, 2.1.0이 적용된 새 세션에서 사람이 눌러 봐야 한다.
+- Memory promotion: none: 창 동작은 코드와 테스트에 있고, 새로 남길 저장소 규칙이 없다.
 
 ## Status
 
 - [x] Planned
-- [ ] Implemented
-- [ ] Module acceptance passed
-- [ ] Surface integration passed
-- [ ] Reviewed
-- [ ] Goal completed, or an explicit paused/blocked/cancelled reason was recorded
+- [x] Implemented
+- [x] Module acceptance passed
+- [x] Surface integration passed
+- [x] Reviewed
+- [x] Goal completed, or an explicit paused/blocked/cancelled reason was recorded
