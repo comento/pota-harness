@@ -237,7 +237,10 @@ export function detailSections(snapshot, agentTask, agents, ctx) {
   const byRecent = (a, b) => (a.status === b.status ? b.activityAt - a.activityAt : a.status === "running" ? -1 : 1);
   const running = snapshot.tasks.filter((item) => item.status === "active").map((task) => {
     const since = ctx.timeline?.[task.id]?.activeAt ?? (task.updatedAt > 0 ? task.updatedAt : undefined);
-    const agent = agents.filter((item) => agentTask[item.id] === task.id).sort(byRecent)[0];
+    const linked = agents.filter((item) => agentTask[item.id] === task.id).sort(byRecent);
+    const agent = linked[0];
+    // A subagent stays the open target while main also touches the task, so the button does not flip.
+    const subagent = linked.find((item) => item.id !== "main");
     const who = agent
       ? agent.id === "main" ? "main" : `@${agent.name ?? task.assignedAgentId ?? agent.id.slice(0, 8)}`
       : task.assignedAgentId ? `@${task.assignedAgentId}` : "main";
@@ -245,7 +248,7 @@ export function detailSections(snapshot, agentTask, agents, ctx) {
       id: task.id,
       title: task.title,
       // The engine's id of the subagent on it, which `$.ui.view` opens; null when main works on it.
-      agentId: agent && agent.id !== "main" ? agent.id : null,
+      agentId: subagent ? subagent.id : null,
       who,
       activity: agent?.activity ?? "",
       calls: agent?.calls ?? 0,

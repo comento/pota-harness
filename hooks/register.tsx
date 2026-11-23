@@ -63,7 +63,7 @@ const dag = atom({ plugin: "pota", key: "dag" } as const, {
 }, { shape: "dag-2" });
 const dagUi = atom({ plugin: "pota", key: "dagUi" } as const, {
   view: "all", epoch: 0, minute: 0, autoOpenedPlanKey: null, closedGoalId: null, expandedTaskId: null,
-}, { shape: "ui-3" });
+}, { shape: "ui-2" });
 const dagAgents = atom({ plugin: "pota", key: "dagAgents" } as const, [], { shape: "agents-1" });
 
 // Scheduling state: a reload drops it with the old environment's timers, which is what it describes.
@@ -649,7 +649,11 @@ export const register: Register = on => {
             {sections.running.map(task => (
               <Box key={`run-${task.id}`} flexDirection="column">
                 <Box flexDirection="row" justifyContent="space-between" columnGap={1}>
-                  <Button key={`task-${task.id}`} label={task.title} {...(isMarked(task) ? { variant: "primary" as const } : {})} onPress={openTask(task)} />
+                  <Box flexShrink={1} minWidth={0}>
+                    <Button key={`task-${task.id}`} label={task.title} {...(isMarked(task) ? { variant: "primary" as const } : {})} onPress={openTask(task)}>
+                      <Text weight="semibold" wrap="truncate-end">{task.title}</Text>
+                    </Button>
+                  </Box>
                   <Text size="footnote" dimColor>{task.elapsed}</Text>
                 </Box>
                 <Text size="footnote" dimColor wrap="truncate-end">

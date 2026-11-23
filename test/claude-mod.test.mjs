@@ -690,7 +690,7 @@ test("default view is all: an unset or unknown view builds the all model and reg
   const dagUi = register.slice(register.indexOf("const dagUi = atom("), register.indexOf("const dagAgents"));
   assert.match(dagUi, /view: "all"/);
   assert.match(dagUi, /expandedTaskId: null/);
-  assert.match(dagUi, /\{ shape: "ui-3" \}/);
+  assert.match(dagUi, /\{ shape: "ui-2" \}/);
 });
 
 test("a running task names the subagent's engine id to open, and none when main works on it", () => {
@@ -710,6 +710,9 @@ test("a running task names the subagent's engine id to open, and none when main 
   // A task assigned in the plan with no agent heard yet has nothing to open either.
   const quiet = detailSections(snap, {}, [], { locale: "en", minute: 0, timeline: {}, snapshot: snap }).running;
   assert.deepEqual(quiet.map((item) => item.agentId), [null, null]);
+  // When main touched the task last, the subagent on it is still what opens.
+  const both = detailSections(snap, { "agent-7f3": "sub", main: "sub" }, [agents[0], { ...agents[1], activityAt: 9 }], { locale: "en", minute: 0, timeline: {}, snapshot: snap }).running;
+  assert.deepEqual([both[0].agentId, both[0].who], ["agent-7f3", "main"]);
   // The rows a text-only surface draws are unchanged by the id.
   assert.deepEqual(runningRows(snap, linked, agents, { locale: "en", minute: 0, timeline: {}, snapshot: snap }).slice(0, 2).map((row) => row.text), ["● Task sub", "  @worker-sub · Read x · 2 calls"]);
 });
