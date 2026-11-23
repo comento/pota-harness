@@ -4,8 +4,6 @@
 
 ## Active Plans
 
-- [plugin-native-install](docs/plan/plugin-native-install.md): 호스트 플러그인 설치로 전환, Pota 2.0.0
-- [handoff-notice-1x](docs/plan/handoff-notice-1x.md): notice-1x (Pota 1.5.0)
 
 ## Superseded Plans
 
@@ -15,6 +13,8 @@
 
 최신 항목이 위에 오며 계획당 한 줄입니다. `pota plan index --archive`는 오래된 항목을 `docs/plan/ARCHIVE.md`로 옮깁니다.
 
+- [호스트 플러그인 설치 전환, Pota 2.0.0 릴리스](docs/plan/plugin-native-install.md): npm 설치 프로그램을 없애고 저장소 루트를 Claude Code·Codex·Antigravity CLI 플러그인으로 배포했으며 `main` 병합과 태그 `v2.0.0`으로 릴리스했습니다.
+- [Pota 1.5.0 안내 릴리스 인계](docs/plan/handoff-notice-1x.md): 플러그인 설치를 안내하는 마지막 npm 버전 1.5.0을 `release/1.x`에서 게시하고 패키지를 deprecate했습니다.
 - [요청 계약과 스티어링 기록, Pota 1.4.0 릴리스](docs/plan/request-brief-steering.md): 요청 계약 게이트·스티어링 기록·`pota plan steering`을 넣고 npm `latest` 1.4.0으로 게시했습니다.
 - [`--tasks` 쉼표 목록 거부와 Pota 1.3.2 릴리스](docs/plan/release-1.3.2.md): 쉼표 목록·깨진 JSON을 오류로 거부하고 mod manifest 버전을 맞춰 npm `latest` 1.3.2로 게시했습니다.
 - [Pota 1.3.1 릴리스](docs/plan/release-1.3.1.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.3.1로 게시해 digest와 격리 설치를 확인했습니다.
@@ -33,5 +33,3 @@
 - [메모리·계획 인덱스 재활용과 측정·감사 잔여 수정](docs/plan/memory-plan-index-reuse.md): 메모리·계획 인덱스 CLI와 hook 주입, goal 이력 집계, 감사 잔여 F6·F10·F11 수정, 이 저장소 `docs/memory` 노트 6개.
 - [Pota 0.5.0 릴리스](docs/plan/release-0.5.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 0.5.0으로 게시해 digest·격리 설치를 확인한 뒤 로컬 설치본을 올렸습니다.
 - [모델 위임 규칙 4가지 개선](docs/plan/delegation-model-identity-rules.md): 실제 모델 ID 기록(`--effective-model`), 모델·effort 변경 시 새 dispatch, task list main 전담, 설계 strongest 게이트(`--host`)를 반영.
-- [Pota 0.4.1 릴리스](docs/plan/release-0.4.1.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 0.4.1로 게시해 registry digest와 격리 설치를 확인했습니다.
-- [Heavy Path 설계 모델 위임](docs/plan/heavy-design-model-routing.md): Heavy Path 설계를 strongest 모델 위임 task로 분리하고 모델 기록 누락을 완료 게이트로 차단; `npm run check` 통과.

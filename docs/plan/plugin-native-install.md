@@ -865,14 +865,27 @@ writeScope와 검증 명령 두 개는 §10의 T1~T6에 있다. 모든 구현 ta
 
 ## Evidence
 
-- (triage 뒤 기록)
+- 구현 task(`legacy-migration`, `antigravity-adapter`, `notice-1x`, `runtime-cutover`, `migration-hardening`, `layout-cutover`, `docs`, `verify`)의 두 검증은 goal receipt로 기록했다. 마지막 로컬 `npm run check`: 475개 통과.
+- 검토: 설계 검토(R1~R10), 이전 모듈 독립 검토(R11), 최종 검토(R13). 모두 `opus`, 읽기 전용. blocker 없음.
+- `release`:
+  - `dev-pr`: comento/pota-harness#19(`feat/plugin-native-install` → `dev`). 첫 CI에서 Node 18 테스트 1건(unref된 자식을 기다리는 테스트가 조기 종료)과 Windows 테스트 2건(임시 경로의 8.3 짧은 이름 비교)이 실패해 테스트를 고쳤다. head `aa984e6`의 `check` 6개 환경과 `host-validate` 통과 후 head SHA 고정 병합 → `41a4394`.
+  - `host-validate`(필수 아님): `claude plugin validate`(2.1.327) 통과. `@openai/codex@0.171.0`에서 `codex plugin marketplace add`와 `codex plugin add pota@pota-harness`가 2.0.0을 설치하고 cache에 `hooks/codex.json`이 있다. Codex의 첫 실제 실행이다. npm 12가 설치 스크립트를 막아 `--allow-scripts`가, Codex에는 `CODEX_HOME` 디렉터리가 먼저 필요했다.
+  - `main-pr`: comento/pota-harness#21(`dev` → `main`), CI 8개 통과 후 head SHA 고정 병합 → `9613174`. 태그 `v2.0.0`(이 저장소의 첫 버전 태그).
+  - `notice-1x`: `release/1.x`를 `122b031`에서 만들고 comento/pota-harness#20(`chore/plugin-notice-1.5.0` → `release/1.x`)을 CI 6개 통과 후 병합 → `2722411`. 그 커밋의 detached worktree에서 pack 1회(prepack의 `npm run check` 통과). tarball `comento-pota-harness-1.5.0.tgz`, 279,723 bytes, 120 files, sha1 `94f42ca12f1456f9ad46b123c485c757f9a21d7e`, sha256 `837d5c187fd24e9790d612fb21711dcfc7c4a44189c2edf2d437acec1cb9474e`. `npm publish --dry-run` 통과 뒤 사용자가 터미널에서 게시했다(첫 시도는 2단계 인증 승인 전에 끝나 레지스트리에 반영되지 않았고, 다시 실행해 게시됨).
+  - registry: `latest`는 `1.5.0`, shasum이 tarball과 일치한다.
+  - 이 컴퓨터(1.4.0, hosts `claude,antigravity`): `pota auto-upgrade run` → `updated 1.4.0 → 1.5.0`. 1.5.0의 SessionStart가 안내 문구(Claude 명령 3줄, Antigravity 1줄)를 냈다.
+  - 이 컴퓨터 교체: `claude plugin uninstall pota@pota --scope user` → `claude plugin marketplace add comento/pota-harness` → `claude plugin install pota@pota-harness`(2.0.0, GitHub에서), `agy plugin install https://github.com/comento/pota-harness`(2.0.0). 새 `claude -p` 세션의 컨텍스트에 `Pota CLI: node "~/.claude/plugins/cache/pota-harness/pota/2.0.0/scripts/pota.mjs" …`와 제거 중 알림이 들어왔고 Claude 몫 13개가 지워졌다(kept 0). 새 `agy -p` 세션에도 `Pota CLI: node "~/.gemini/config/plugins/pota/scripts/pota.mjs" …`와 알림이 들어왔고 Antigravity 몫 34개와 core·manifest가 지워졌다. doctor: `legacy install: none`. `~/.pota/projects/`는 그대로이고 새 CLI로 이 goal 상태를 읽었다.
+  - 이로써 확인된 가정: 호스트 세션 안의 hook 호출(Claude, agy 1.5.14), agy 입력의 `workspacePaths`와 `injectSteps` 주입, `pota@pota` 제거 뒤 설치 순서.
+  - 확인하지 못한 것: Codex의 `/hooks` 승인과 세션 안 hook 실행, 사람이 쓰는 Windows 환경(CI의 Windows 테스트는 통과), Antigravity의 Stop·PostToolUse 동작.
+  - `npm deprecate`: 사용자가 터미널에서 실행했다. 레지스트리에서 9개 버전(`0.0.0-stage`, 1.0.0~1.5.0) 모두 deprecated로 확인. 메시지: "Pota now installs as a host plugin. See https://github.com/comento/pota-harness#install".
+- 후속: README는 Codex 설치를 TUI `/plugins`로 안내한다. CI에서 `codex plugin add pota@pota-harness`가 동작했으므로 README에 추가할 수 있다. DAG 실행 중 항목 상세 보기(Request Brief의 후속 항목).
 
 ## Status
 
-- [ ] Planned
-- [ ] Dry-run or check passed, or not applicable was recorded
-- [ ] Implemented
-- [ ] Module acceptance passed
-- [ ] Surface integration passed
-- [ ] Reviewed
-- [ ] Goal completed, or an explicit paused/blocked/cancelled reason was recorded
+- [x] Planned
+- [x] Dry-run or check passed, or not applicable was recorded
+- [x] Implemented
+- [x] Module acceptance passed
+- [x] Surface integration passed
+- [x] Reviewed
+- [x] Goal completed, or an explicit paused/blocked/cancelled reason was recorded
