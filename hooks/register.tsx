@@ -104,22 +104,14 @@ async function localeOf($: Engine): Promise<Locale> {
   return locale;
 }
 
-/** The installed runtime's CLI from the locator, else the checkout this folder sits in. */
+/** The CLI of this plugin copy: the plugin root is the Pota runtime. */
 async function findCli($: Engine): Promise<string | null> {
   if (cli !== null) return cli;
+  const path = `${$.plugin.root}/scripts/pota.mjs`;
   try {
-    const locator = JSON.parse(await $.fs.read(`${$.plugin.root}/pota-runtime.json`)) as { entrypoints?: { cli?: unknown } };
-    if (typeof locator.entrypoints?.cli === "string") cli = locator.entrypoints.cli;
+    if (await $.fs.exists(path)) cli = path;
   } catch {
-    // No locator: a development checkout.
-  }
-  if (cli === null) {
-    const checkout = `${$.plugin.root}/../scripts/pota.mjs`;
-    try {
-      if (await $.fs.exists(checkout)) cli = checkout;
-    } catch {
-      // Treated as not found.
-    }
+    // Treated as not found.
   }
   return cli;
 }

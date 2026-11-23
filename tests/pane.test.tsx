@@ -55,13 +55,12 @@ type EngineOptions = {
   wait?: () => Promise<void>;
 };
 
-/** The engine beneath the plugin: a runtime locator, `goal status` answering `status(root)`, panes kept in memory. */
+/** The engine beneath the plugin: `goal status` answering `status(root)`, panes kept in memory. */
 function engine(on: On, status: (root: string) => string, options: EngineOptions = {}) {
   const world = { opens: 0, isOpen: false, runs: 0, calls: [] as { argv: readonly string[]; cwd: string | undefined }[] };
   const clock = mock.clock(on, { now: NOW });
   const exists = options.exists ?? (() => true);
   mock.env(on, { LANG: "en_US.UTF-8" });
-  on("fs.read", () => ({ value: JSON.stringify({ entrypoints: { cli: "/pota/scripts/pota.mjs" } }) }));
   on("fs.exists", async (_, e) => {
     await options.wait?.();
     return { value: exists(e.path) };

@@ -21,7 +21,7 @@ import { isWide } from "./dag-layout.mjs";
 const MESSAGES = {
   ko: {
     noGoal: "활성 Pota goal이 없습니다. `pota-plan`으로 계획을 세우면 여기에 DAG가 표시됩니다.",
-    noRuntime: "Pota runtime을 찾지 못했습니다. `pota doctor`를 실행하세요.",
+    noRuntime: "Pota runtime을 찾지 못했습니다. Pota 플러그인을 다시 설치하세요.",
     refreshFailed: "상태 갱신 실패: ",
     loading: "Pota goal 상태를 읽는 중…",
     ended: { completed: "종료됨 · 완료", cancelled: "종료됨 · 취소", unknown: "종료됨" },
@@ -60,7 +60,7 @@ const MESSAGES = {
   },
   en: {
     noGoal: "No active Pota goal. Plan one with `pota-plan` and its DAG appears here.",
-    noRuntime: "Pota runtime not found. Run `pota doctor`.",
+    noRuntime: "Pota runtime not found. Reinstall the Pota plugin.",
     refreshFailed: "Refresh failed: ",
     loading: "Reading the Pota goal…",
     ended: { completed: "ended · completed", cancelled: "ended · cancelled", unknown: "ended" },

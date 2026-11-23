@@ -1,0 +1,19 @@
+{
+  "$schema": "https://antigravity.google/schemas/v1/plugin.json",
+  "name": "pota",
+  "displayName": "Pota Harness",
+  "version": "2.0.0",
+  "description": "Memory, planning, tool readiness, and two-gate verification harness for agent work.",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "Plan this change with pota-plan before implementing it",
+    "Continue the active Pota goal in this repository"
+  ],
+  "author": {
+    "name": "WkNam"
+  },
+  "homepage": "https://github.com/comento/pota-harness",
+  "repository": "https://github.com/comento/pota-harness",
+  "license": "MIT",
+  "keywords": ["agent", "harness", "planning", "memory", "verification"]
+}

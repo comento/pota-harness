@@ -7,7 +7,7 @@ The goal is not to make prompts long by model. The goal is to stabilize the same
 ## Application Order
 
 1. Identify the active model name. If the model name is not directly exposed, infer it from the user's default model setting and agent role frontmatter.
-2. Resolve this installed guidance root from the active skill's `references/pota-runtime.json` or the source skill's location. Never look for Pota model guidance in the target repository. If the shared runtime or locator is missing, unreadable, or inconsistent, stop using every dependent mirror; run published/global `pota doctor`, then `pota upgrade` for recovery, rather than repairing through another mirror.
+2. Resolve this guidance through `pluginRoot`: the parent of the `scripts` directory in the session-start `Pota CLI:` line, or the active skill's `../..` without that line (then tell the user Pota hooks are inactive). Never look for Pota model guidance in the target repository. If `pluginRoot` is missing or unreadable, stop and have the user reinstall or update the Pota plugin with the host's plugin command rather than repairing from another copy.
 3. For Claude-family models, apply `pota://docs/model-guidance/claude.md`.
 4. For Codex-family models, apply `pota://docs/model-guidance/codex.md`.
 5. If the model is not clearly classified, apply only the common rules and skip model-specific adjustment.

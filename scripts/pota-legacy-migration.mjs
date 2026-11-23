@@ -42,6 +42,11 @@ const UPDATE_FILES = ["state.json", "notice.json", "last-run.log", "plugin-notic
 const PATH_ENV = ["HOME", "USERPROFILE", "POTA_HOME", "CODEX_HOME", "CODEX_CONFIG_PATH", "CLAUDE_HOME", "CLAUDE_CONFIG_DIR", "ANTIGRAVITY_HOME", "ANTIGRAVITY_CLI_HOME"];
 const CLAUDE_MANUAL = ["claude plugin uninstall pota@pota --scope user", "claude plugin marketplace remove pota"];
 const LOCK_TIMEOUT_MESSAGE = "Timed out waiting for Pota lifecycle lock";
+const TOML_KEY = String.raw`(?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*')`;
+const TOML_DOTTED_KEY = String.raw`\s*${TOML_KEY}(?:\s*\.\s*${TOML_KEY})*\s*`;
+const TOML_HEADER = new RegExp(String.raw`^\s*(?:\[\[(${TOML_DOTTED_KEY})\]\]|\[(${TOML_DOTTED_KEY})\])\s*(?:#.*)?$`);
+// Deliberately looser than the exact Pota section names: a line it matches must be a recognised Pota header.
+const POTA_HEADER_HINT = /^\s*\[\s*(?:marketplaces\s*\.\s*["']?pota["']?\s*\]|plugins\s*\.\s*["']pota@pota["']\s*\]|hooks\s*\.\s*state\s*\.\s*["']pota@pota:)/;
 
 const MESSAGES = {
   en: {
@@ -54,6 +59,7 @@ const MESSAGES = {
       return `Pota: removed the legacy npm install (${version}).${clause} Details: ${doctor}`;
     },
     blocked: ({ reason, doctor }) => `Pota: could not remove the legacy npm install (${reason}). Run npx @comento/pota-harness@1.5.0 uninstall, then restart. Details: ${doctor}`,
+    symlinked: ({ doctor }) => `Pota: left this host's legacy npm install untouched (a symlinked directory). Remove what doctor lists by hand, then restart. Details: ${doctor}`,
   },
   ko: {
     removing: () => "Pota: 기존 npm 설치본을 백그라운드에서 제거하는 중입니다. 이 세션에서는 기존 Pota hook과 명령이 더 이상 동작하지 않으니 편할 때 세션을 다시 시작하세요.",
@@ -65,6 +71,7 @@ const MESSAGES = {
       return `Pota: 기존 npm 설치본(${version})을 제거했습니다.${clause} 자세히: ${doctor}`;
     },
     blocked: ({ reason, doctor }) => `Pota: 기존 npm 설치본을 제거하지 못했습니다(${reason}). npx @comento/pota-harness@1.5.0 uninstall을 실행한 뒤 다시 시작하세요. 자세히: ${doctor}`,
+    symlinked: ({ doctor }) => `Pota: 경로의 디렉터리가 symlink라서 이 호스트의 기존 npm 설치본을 아무것도 지우지 않고 남겼습니다. doctor가 보여 주는 항목을 직접 정리한 뒤 다시 시작하세요. 자세히: ${doctor}`,
   },
 };
 
@@ -133,9 +140,12 @@ export function sessionStartMigration({
       const states = readStatesSync(layout);
       const decision = runDecision(states[host], key, report?.key === key ? report : null, now);
       if (decision.run) {
-        spawn(process.execPath, [join(pluginRoot, "scripts", "pota-legacy-migration.mjs"), "run", "--host", host], {
-          detached: true, stdio: "ignore", windowsHide: true,
-        }).unref();
+        const child = spawn(process.execPath, [join(pluginRoot, "scripts", "pota-legacy-migration.mjs"), "run", "--host", host], {
+          detached: true, stdio: "ignore", windowsHide: true, env,
+        });
+        // A failed start is reported asynchronously; without a listener it would crash the hook process.
+        child.on("error", () => {});
+        child.unref();
         spawned = true;
         writeJsonSync(layout, layout.statePath, {
           schemaVersion: MIGRATION_SCHEMA_VERSION,
@@ -264,11 +274,18 @@ async function removeUnderLock(context) {
       Object.assign(result, { status: "deferred", reason: "time-limit" });
       continue;
     }
+    // A host whose target sits below a symlinked directory is left entirely alone, unregistration included, so it is
+    // never half removed.
+    const symlinked = await symlinkedTargets(name, manifest, layout);
+    if (symlinked.length > 0) {
+      Object.assign(result, { status: "blocked", reason: "symlinked-path" });
+      result.manual.push(...unregisterManual(name, manifest, layout), ...symlinked.map((path) => `Remove by hand (below a symlinked directory): ${path}`));
+      continue;
+    }
     const unregistered = await unregisterHost(name, manifest, context);
     if (unregistered.status === "failed") {
       Object.assign(result, { status: "blocked", reason: "host-unregister-failed", error: unregistered.reason });
-      if (name === "claude") result.manual.push(...CLAUDE_MANUAL);
-      if (name === "codex") result.manual.push(`Remove the [marketplaces.pota], [plugins."pota@pota"], and [hooks.state."pota@pota:…"] sections from ${layout.configPath}`);
+      result.manual.push(...unregisterManual(name, manifest, layout));
       continue;
     }
     if (unregistered.status === "changed") {
@@ -318,8 +335,18 @@ async function removeUnderLock(context) {
   return { status, version: manifest.version, results, remainingHosts, legacyRemoved };
 }
 
+function unregisterManual(host, manifest, layout) {
+  if (host === "claude" && manifest.targets.some((record) => record.id === "claude-plugin")) return CLAUDE_MANUAL;
+  if (host === "codex" && manifest.targets.some((record) => record.id === "codex-config")) {
+    return [`Remove the [marketplaces.pota], [plugins."pota@pota"], and [hooks.state."pota@pota:…"] sections from ${layout.configPath}`];
+  }
+  return [];
+}
+
+// `outcome` is "removed", "modified", "missing", or `{ kept: path }` for an interrupted removal copy that was kept.
 function tally(result, record, outcome) {
-  if (outcome === "removed") result.removed.push(record.path);
+  if (isPlainObject(outcome)) result.modified.push(outcome.kept);
+  else if (outcome === "removed") result.removed.push(record.path);
   else if (outcome === "modified") result.modified.push(record.path);
   else result.missing += 1;
 }
@@ -504,7 +531,9 @@ async function hostTargetsGone(manifest, layout, include) {
         if (await pathExists(path)) return false;
       }
     }
-    if (name === "codex" && manifest.targets.some((record) => record.id === "codex-config") && await codexConfigState(layout) === "owned") return false;
+    // A config that could not be read or parsed safely may still hold Pota sections.
+    if (name === "codex" && manifest.targets.some((record) => record.id === "codex-config")
+        && ["owned", "invalid"].includes(await codexConfigState(layout))) return false;
   }
   return true;
 }
@@ -515,29 +544,55 @@ function checkingPath(path, transactionId) { return `${path}.pota-checking-${tra
 function removingPath(path, transactionId) { return `${path}.pota-removing-${transactionId}`; }
 
 async function assessRecord(record, transactionId, layout) {
-  if (!(await ancestorsSafe(record.path, layout))) return "modified";
+  if (!(await ancestorsSafe(record.path, layout))) return await anyRecordPathExists(record, transactionId) ? "symlinked" : "missing";
   if (await pathExists(removingPath(record.path, transactionId)) || await pathExists(checkingPath(record.path, transactionId))) return "leftover";
   const digest = await targetDigest(record.path, record.type);
   if (digest === "missing") return "missing";
   return digest === record.installedDigest ? "verified" : "modified";
 }
 
+async function anyRecordPathExists(record, transactionId) {
+  for (const path of [record.path, checkingPath(record.path, transactionId), removingPath(record.path, transactionId)]) {
+    if (await pathExists(path)) return true;
+  }
+  return false;
+}
+
+// The paths of this host's records (or interrupted removals of them) that exist below a symlinked directory.
+async function symlinkedTargets(host, manifest, layout) {
+  const found = [];
+  for (const record of hostRecords(host, manifest, layout)) {
+    if (await ancestorsSafe(record.path, layout)) continue;
+    for (const path of [record.path, checkingPath(record.path, manifest.transactionId), removingPath(record.path, manifest.transactionId)]) {
+      if (await pathExists(path)) found.push(path);
+    }
+  }
+  return found;
+}
+
 // A target is renamed aside first and its digest is computed again on the renamed copy, so a change made between the
 // check and the rename is caught. `.pota-checking-*` is an unverified copy (restored on the next run), and
-// `.pota-removing-*` a verified one (deleted on the next run).
+// `.pota-removing-*` a verified one (deleted on the next run once its digest still matches; otherwise kept).
 async function removeOwned(record, transactionId, context) {
   const { layout, hook } = context;
-  if (!(await ancestorsSafe(record.path, layout))) return "modified";
   const checking = checkingPath(record.path, transactionId);
   const removing = removingPath(record.path, transactionId);
+  if (!(await ancestorsSafe(record.path, layout))) return await anyRecordPathExists(record, transactionId) ? "modified" : "missing";
   let resumed = false;
   if (await pathExists(removing)) {
+    if (await targetDigest(removing, record.type) !== record.installedDigest) return { kept: removing };
     await rm(removing, { recursive: true, force: true });
     resumed = true;
   }
   if (await pathExists(checking)) {
-    if (await pathExists(record.path)) return "modified";
-    await rename(checking, record.path);
+    if (await pathExists(record.path)) {
+      // Something reappeared at the original name: an unchanged copy is finished like a removing one, and the new
+      // entry is then judged on its own digest.
+      if (await targetDigest(checking, record.type) !== record.installedDigest) return { kept: checking };
+      await rename(checking, removing);
+      if (await targetDigest(removing, record.type) !== record.installedDigest) return { kept: removing };
+      await rm(removing, { recursive: true, force: true });
+    } else await rename(checking, record.path);
   }
   const before = await targetDigest(record.path, record.type);
   if (before === "missing") return resumed ? "removed" : "missing";
@@ -733,10 +788,15 @@ async function unregisterCodex(layout) {
   } catch (error) {
     return { status: "failed", reason: error.message };
   }
-  if (!snapshot.exists || configOwnership(snapshot.text, layout) !== "owned") return { status: "none" };
+  if (!snapshot.exists) return { status: "none" };
+  const ownership = configOwnership(snapshot.text, layout);
+  if (ownership === "invalid") return { status: "failed", reason: `Pota sections in ${layout.configPath} could not be identified safely` };
+  if (ownership !== "owned") return { status: "none" };
+  const rewritten = removePotaConfig(snapshot.text);
+  if (!otherHeadersKept(snapshot.text, rewritten)) return { status: "failed", reason: `Removing the Pota sections would change other sections of ${layout.configPath}` };
   const temporary = join(dirname(layout.configPath), `.${basename(layout.configPath)}.pota-${randomUUID()}.tmp`);
   try {
-    await writeFile(temporary, removePotaConfig(snapshot.text), { flag: "wx", mode: snapshot.mode });
+    await writeFile(temporary, rewritten, { flag: "wx", mode: snapshot.mode });
     await chmod(temporary, snapshot.mode);
     const current = await readConfigSnapshot(layout);
     if (!current.exists || current.text !== snapshot.text) return { status: "changed" };
@@ -774,19 +834,25 @@ async function readConfigSnapshot(layout) {
   return { exists: true, text: await readRegularFile(path), mode: (info.mode & 0o777) || 0o600 };
 }
 
+// "owned", "foreign", "none", or "invalid" (fail-closed): a line that looks like a Pota header but is not the header of
+// a recognised Pota section, or a `[marketplaces.pota]` whose `source` cannot be read.
 function configOwnership(text, layout) {
   const sections = splitSections(text);
-  const marketplace = sections.find((section) => section.header === "marketplaces.pota");
-  if (marketplace) {
+  const potaLines = new Set(sections.filter(isPotaConfigSection).map((section) => section.line));
+  if (text.split("\n").some((line, index) => POTA_HEADER_HINT.test(line) && !potaLines.has(index))) return "invalid";
+  let foreign = false;
+  for (const marketplace of sections.filter((section) => section.header === "marketplaces.pota")) {
     const source = tomlStringValue(marketplace.text, "source");
-    if (source === null || resolve(source) !== resolve(layout.codexMarketplaceRoot)) return "foreign";
+    if (source === null) return "invalid";
+    if (resolve(source) !== resolve(layout.codexMarketplaceRoot)) foreign = true;
   }
-  return sections.some(isPotaConfigSection) ? "owned" : "none";
+  if (foreign) return "foreign";
+  return potaLines.size > 0 ? "owned" : "none";
 }
 
 function tomlStringValue(text, key) {
   for (const line of text.split("\n")) {
-    const match = line.match(new RegExp(`^\\s*${key}\\s*=\\s*("(?:[^"\\\\]|\\\\.)*"|'[^']*')\\s*(?:#.*)?$`));
+    const match = line.replace(/\r$/, "").match(new RegExp(`^\\s*${key}\\s*=\\s*("(?:[^"\\\\]|\\\\.)*"|'[^']*')\\s*(?:#.*)?$`));
     if (!match) continue;
     if (match[1].startsWith("'")) return match[1].slice(1, -1);
     try { return JSON.parse(match[1]); } catch { return null; }
@@ -794,10 +860,24 @@ function tomlStringValue(text, key) {
   return null;
 }
 
+// Drops the Pota sections and keeps every other byte, including line endings; a file without a final newline keeps
+// none.
 function removePotaConfig(config) {
-  return splitSections(config).map((section) => (isPotaConfigSection(section)
+  const output = splitSections(config).map((section) => (isPotaConfigSection(section)
     ? splitTrailingTomlTrivia(section.text).trivia
     : section.text)).join("");
+  return config.endsWith("\n") ? output : output.replace(/[\r\n]+$/, "");
+}
+
+// Post-condition of the rewrite: every line of the original that opens a section, other than a Pota header, is still
+// there and in the same order, and nothing else that opens a section is.
+function otherHeadersKept(original, rewritten) {
+  const potaLines = new Set(splitSections(original).filter(isPotaConfigSection).map((section) => section.line));
+  const headerLines = (text, skip) => text.split("\n").map((line) => line.replace(/\r$/, ""))
+    .filter((line, index) => /^\s*\[/.test(line) && !skip.has(index));
+  const before = headerLines(original, potaLines);
+  const after = headerLines(rewritten, new Set());
+  return before.length === after.length && before.every((line, index) => line === after[index]);
 }
 
 function isPotaConfigSection(section) {
@@ -817,31 +897,57 @@ function splitTrailingTomlTrivia(text) {
   return { body: lines.slice(0, boundary).join(""), trivia: lines.slice(boundary).join("") };
 }
 
+// Sections in order; `line` is the index of the header line (-1 for the text before the first header). A header is
+// only recognised outside a multiline string, and its keys may be quoted (so `[` and `]` may appear inside them).
 function splitSections(config) {
   const result = [];
-  let current = { header: null, text: "" };
+  let current = { header: null, text: "", line: -1 };
   let multiline = null;
-  for (const line of config.split(/(?<=\n)/)) {
-    const delimiterCount = (delimiter) => line.split(delimiter).length - 1;
-    if (multiline) {
-      current.text += line;
-      if (delimiterCount(multiline) % 2 === 1) multiline = null;
-      continue;
-    }
-    const doubleCount = delimiterCount('"""');
-    const singleCount = delimiterCount("'''");
-    const trimmed = line.trim();
-    const arrayMatch = trimmed.match(/^\[\[([^[\]]+)\]\]\s*(?:#.*)?$/);
-    const match = arrayMatch ? null : trimmed.match(/^\[([^[\]]+)\]\s*(?:#.*)?$/);
-    if (arrayMatch || match) {
+  config.split(/(?<=\n)/).forEach((line, index) => {
+    const content = line.replace(/\r?\n$/, "");
+    const match = multiline ? null : content.match(TOML_HEADER);
+    if (match) {
       if (current.text.length > 0) result.push(current);
-      current = { header: arrayMatch ? `[${arrayMatch[1].trim()}]` : match[1].trim(), text: line };
-    } else current.text += line;
-    if (doubleCount % 2 === 1) multiline = '"""';
-    else if (singleCount % 2 === 1) multiline = "'''";
-  }
+      current = { header: match[1] !== undefined ? `[${match[1].trim()}]` : match[2].trim(), text: line, line: index };
+      return;
+    }
+    current.text += line;
+    multiline = openMultiline(content, multiline);
+  });
   if (current.text.length > 0) result.push(current);
   return result;
+}
+
+// Scans one line (without its line break) and returns the multiline string delimiter still open at its end, if any.
+// Comments and single-line strings are skipped, so a `"""` inside them opens nothing.
+function openMultiline(line, open) {
+  let state = open;
+  let index = 0;
+  while (index < line.length) {
+    if (state) {
+      if (state === '"""' && line[index] === "\\") index += 2;
+      else if (line.startsWith(state, index)) {
+        index += 3;
+        while (line[index] === state[0]) index += 1;
+        state = null;
+      } else index += 1;
+      continue;
+    }
+    const char = line[index];
+    if (char === "#") break;
+    if (line.startsWith('"""', index) || line.startsWith("'''", index)) {
+      state = line.slice(index, index + 3);
+      index += 3;
+    } else if (char === '"') {
+      index += 1;
+      while (index < line.length && line[index] !== '"') index += line[index] === "\\" ? 2 : 1;
+      index += 1;
+    } else if (char === "'") {
+      const end = line.indexOf("'", index + 1);
+      index = end === -1 ? line.length : end + 1;
+    } else index += 1;
+  }
+  return state;
 }
 
 // ---- SessionStart state, reports, and notices ----
@@ -898,6 +1004,7 @@ function claimReportNotice(layout, host, report, now, doctor, manifestPresent) {
     if (!name.startsWith(claimPrefix) || old === claim) continue;
     try { if (now.getTime() - lstatSync(old).mtimeMs > CLAIM_KEEP_MS) rmSync(old, { force: true }); } catch { /* already gone */ }
   }
+  if (report.status === "blocked" && report.reason === "symlinked-path") return { kind: "symlinked", doctor };
   if (report.status === "blocked") return { kind: "blocked", reason: report.reason ?? "unknown", doctor };
   return {
     kind: "removed",

@@ -104,7 +104,7 @@ test("a legacy manifest starts one runner and appends the notice after the CLI l
     assert.deepEqual(calls[0], {
       command: process.execPath,
       args: [join(pluginRoot, "scripts", "pota-legacy-migration.mjs"), "run", "--host", "claude"],
-      options: { detached: true, stdio: "ignore", windowsHide: true },
+      options: { detached: true, stdio: "ignore", windowsHide: true, env },
     });
 
     assert.deepEqual(await sessionStart({ repo, env, pluginRoot, spawn, host: "claude", now: at(MINUTE) }), baseline);

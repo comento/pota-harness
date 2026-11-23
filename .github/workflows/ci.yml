@@ -31,16 +31,12 @@ jobs:
       - run: node scripts/pota.mjs
         env:
           npm_config_cache: ${{ runner.temp }}/npm-cache
-      # claude-mod/ holds TypeScript (register.tsx, types/index.d.ts), so toolcheck asks for the TypeScript tools.
+      # hooks/ and types/ hold the Claude mod's TypeScript (register.tsx, types/index.d.ts), so toolcheck asks for the TypeScript tools.
       # Pinned to versions that still run on Node 18.
       - run: npm install --global typescript@5.9.3 typescript-language-server@4.4.1
         env:
           npm_config_cache: ${{ runner.temp }}/npm-cache
       - run: node scripts/pota.mjs toolcheck --json
-        env:
-          npm_config_cache: ${{ runner.temp }}/npm-cache
-      # prepack is npm run check (content-neutral) and already ran above.
-      - run: npm pack --dry-run --ignore-scripts
         env:
           npm_config_cache: ${{ runner.temp }}/npm-cache
   # Branch protection requires a single "check" context; matrix jobs report "check (<os>, <node>)".
@@ -55,3 +51,29 @@ jobs:
       - run: test "$MATRIX_RESULT" = "success"
         env:
           MATRIX_RESULT: ${{ needs.check.result }}
+  # Not a required check (not in check-summary's needs): the only place Codex installs the plugin for real.
+  # Whether these CLIs run here without authentication is unverified; a failure shows red without blocking merges.
+  host-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: current
+      - run: npm install --global @anthropic-ai/claude-code@2.1.327
+        env:
+          npm_config_cache: ${{ runner.temp }}/npm-cache
+      - run: claude plugin validate .
+        env:
+          CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude
+      - run: npm install --global @openai/codex@0.171.0
+        env:
+          npm_config_cache: ${{ runner.temp }}/npm-cache
+      - run: |
+          codex plugin marketplace add "$GITHUB_WORKSPACE"
+          codex plugin add pota@pota-harness
+          codex plugin list --json
+          ls "$CODEX_HOME"/plugins/cache/pota-harness/pota/*/hooks/codex.json
+        env:
+          CODEX_HOME: ${{ runner.temp }}/codex

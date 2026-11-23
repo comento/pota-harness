@@ -16,7 +16,6 @@ import {
   transitionGoal,
 } from "../scripts/pota-goal.mjs";
 import { runStateResult } from "../scripts/pota-state.mjs";
-import { updateNoticeLine } from "../scripts/pota-state-context.mjs";
 import { message } from "../scripts/pota.mjs";
 
 const cliScript = resolve("scripts/pota.mjs");
@@ -36,35 +35,6 @@ test("recurring Codex instructions are a small stable recovery kernel", async ()
   assert.match(prompt, /external-state changes.*dry-run\/check/i);
   assert.match(prompt, /side questions.*resume the current task/i);
   assert.doesNotMatch(prompt, /update_plan|create_goal|package lifecycle|--ignore-scripts|progress-reporting channel/i);
-});
-
-// A one-time SessionStart line outside the standing budgets above; long versions are bounded by the registry check
-// (x.y.z, at most 32 characters) and by clipping an installed prerelease.
-test("update notice lines stay within 160 characters", () => {
-  const longVersion = `${"1".repeat(14)}.${"2".repeat(8)}.${"3".repeat(8)}`;
-  assert.equal(longVersion.length, 32);
-  for (const ko of [false, true]) {
-    for (const kind of ["updated", "failed", "manual"]) {
-      for (const [from, to] of [["0.6.0", "0.7.0"], [`${longVersion}-prerelease.with.a.long.tail`, longVersion]]) {
-        const line = updateNoticeLine({ ko, notice: { schemaVersion: 1, kind, from, to, at: new Date().toISOString() } });
-        assert.ok(line.length <= 160, `${ko ? "ko" : "en"} ${kind} notice is ${line.length} characters; budget is 160`);
-        assert.doesNotMatch(line, /\n/);
-        assert.match(line, ko ? /^Pota 업데이트: / : /^Pota update: /);
-      }
-    }
-  }
-  assert.equal(
-    updateNoticeLine({ ko: false, notice: { kind: "updated", from: "0.6.0", to: "0.7.0" } }),
-    "Pota update: auto-upgraded 0.6.0 → 0.7.0; this session runs 0.7.0. Mention it to the user once.",
-  );
-  assert.equal(
-    updateNoticeLine({ ko: true, notice: { kind: "failed", from: "0.6.0", to: "0.7.0" } }),
-    'Pota 업데이트: 0.7.0 자동 업그레이드가 실패했습니다. 사용자에게 "npx @comento/pota-harness@latest upgrade" 실행 또는 "pota auto-upgrade status" 확인을 안내하세요.',
-  );
-  assert.equal(
-    updateNoticeLine({ ko: false, notice: { kind: "manual", from: "0.6.0", to: "0.7.0" } }),
-    'Pota update: 0.7.0 is installed but the Claude Code plugin cache was not refreshed. Tell the user to run "claude plugin update pota@pota".',
-  );
 });
 
 test("hook context is a compact phase capsule without dropping recovery state", async () => {
@@ -327,7 +297,7 @@ test("work guidance spends reasoning on tests and trusts bounded tool evidence",
 
 test("work, review, and memory guidance protect the judge and close defects with evidence", async () => {
   const read = (path) => readFile(path, "utf8");
-  const workSurfaces = ["skills/pota-work/SKILL.md", "commands/pota-work.md", ".agents/workflows/pota-work.md", "agents/worker.md"];
+  const workSurfaces = ["skills/pota-work/SKILL.md", "claude/agents/worker.md"];
   for (const path of workSurfaces) {
     const content = await read(path);
     assert.match(content, /never edit, weaken, skip, or delete existing tests.*verification commands/is, `${path} judge protection`);
@@ -343,13 +313,13 @@ test("work, review, and memory guidance protect the judge and close defects with
   assert.match(verification, /feasibility.*experiment/is);
   assert.match(verification, /never edit, weaken, skip, or delete existing tests.*verification commands/is);
 
-  for (const path of ["skills/pota-review/SKILL.md", "commands/pota-review.md", ".agents/workflows/pota-review.md"]) {
+  for (const path of ["skills/pota-review/SKILL.md"]) {
     const content = await read(path);
     assert.match(content, /test, fixture, and verification-command diffs/i, `${path} judge diff review`);
     assert.match(content, /same-rule sweep/i, `${path} same-rule sweep review`);
   }
 
-  for (const path of ["skills/pota-memory/SKILL.md", "commands/pota-memory.md", ".agents/workflows/pota-memory.md"]) {
+  for (const path of ["skills/pota-memory/SKILL.md"]) {
     const content = await read(path);
     assert.match(content, /machine-checkable.*(?:test|lint|script|hook)/is, `${path} executable lessons`);
   }
@@ -357,8 +327,8 @@ test("work, review, and memory guidance protect the judge and close defects with
 
 test("agents and phase guidance restore required references and fail closed", async () => {
   const surfaces = await Promise.all([
-    "agents/explorer.md",
-    "agents/worker.md",
+    "claude/agents/explorer.md",
+    "claude/agents/worker.md",
     "skills/pota-plan/SKILL.md",
     "skills/pota-work/SKILL.md",
     "skills/pota-review/SKILL.md",
@@ -418,7 +388,7 @@ test("plan and work skills stay slim and load detailed procedures on demand", as
 
 test("plan and work guidance define the Quick Path and the finish/stats CLI contract", async () => {
   const read = (path) => readFile(path, "utf8");
-  for (const path of ["skills/pota-plan/SKILL.md", "commands/pota-plan.md", ".agents/workflows/pota-plan.md"]) {
+  for (const path of ["skills/pota-plan/SKILL.md"]) {
     const content = await read(path);
     assert.match(content, /Quick Path/, `${path} Quick Path`);
     assert.match(content, /unambiguous/i, `${path} unambiguous requirements`);
@@ -429,7 +399,7 @@ test("plan and work guidance define the Quick Path and the finish/stats CLI cont
     assert.match(content, /escalate to Light Path \(.*plan \+ goal\) before further edits/i, `${path} escalation`);
     assert.match(content, /routine known-target Git\/GitHub operations?/i, `${path} Git ops stay plan-free`);
   }
-  for (const path of ["skills/pota-work/SKILL.md", "commands/pota-work.md", ".agents/workflows/pota-work.md"]) {
+  for (const path of ["skills/pota-work/SKILL.md"]) {
     const content = await read(path);
     assert.match(content, /Quick Path/, `${path} Quick Path`);
     assert.match(content, /goal finish/, `${path} goal finish`);
@@ -504,7 +474,7 @@ test("delegation policy surfaces state model identity, new-dispatch, task-list, 
   const delegations = ["skills/pota-plan/delegation.md", "skills/pota-work/delegation.md"];
   const heavyPaths = ["skills/pota-plan/heavy-path.md", "skills/pota-work/heavy-path.md"];
   const guidance = ["docs/model-guidance/README.md", "docs/model-guidance/claude.md"];
-  const identity = [...delegations, ...guidance, "templates/work-plan.md", "agents/worker.md"];
+  const identity = [...delegations, ...guidance, "templates/work-plan.md", "claude/agents/worker.md"];
 
   for (const path of identity) {
     const content = await read(path);
@@ -512,16 +482,16 @@ test("delegation policy surfaces state model identity, new-dispatch, task-list, 
     assert.match(content, /unreported/, `${path} R1 unreported`);
     assert.match(content, /never guess/i, `${path} R1 never guess`);
   }
-  for (const path of [...identity.filter((path) => path !== "agents/worker.md"), ...heavyPaths]) {
+  for (const path of [...identity.filter((path) => path !== "claude/agents/worker.md"), ...heavyPaths]) {
     const content = await read(path);
     assert.match(content, /new dispatch/i, `${path} R2 new dispatch`);
     assert.match(content, /SendMessage/, `${path} R2 SendMessage`);
   }
-  assert.match(await read("agents/worker.md"), /new dispatch.*SendMessage|SendMessage.*new dispatch/is, "agents/worker.md R2");
-  for (const path of ["agents/worker.md", "skills/pota-plan/planning-rules.md", "skills/pota-plan/SKILL.md", "commands/pota-plan.md", ".agents/workflows/pota-plan.md", ...delegations]) {
+  assert.match(await read("claude/agents/worker.md"), /new dispatch.*SendMessage|SendMessage.*new dispatch/is, "claude/agents/worker.md R2");
+  for (const path of ["claude/agents/worker.md", "skills/pota-plan/planning-rules.md", "skills/pota-plan/SKILL.md", ...delegations]) {
     assert.match(await read(path), /main agent only/i, `${path} R3 main agent only`);
   }
-  for (const path of ["agents/worker.md", "skills/pota-plan/planning-rules.md", ...delegations]) {
+  for (const path of ["claude/agents/worker.md", "skills/pota-plan/planning-rules.md", ...delegations]) {
     const content = await read(path);
     for (const name of ["update_plan", "create_goal", "wrap_up"]) assert.ok(content.includes(`\`${name}\``), `${path} R3 ${name}`);
   }
@@ -542,7 +512,7 @@ test("main-model gate surfaces name the capsule line, the review kind, and the b
       assert.ok(content.includes(phrase), `${path} ${phrase}`);
     }
   }
-  for (const path of ["skills/pota-review/SKILL.md", "commands/pota-review.md", ".agents/workflows/pota-review.md"]) {
+  for (const path of ["skills/pota-review/SKILL.md"]) {
     const content = await read(path);
     assert.ok(content.includes("--kind review"), `${path} --kind review`);
     assert.ok(content.includes("--allow-main-model"), `${path} --allow-main-model`);

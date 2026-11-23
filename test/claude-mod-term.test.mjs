@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildDagModel } from "../claude-mod/hooks/dag-model.mjs";
-import { cellWidth, textRows, waveHeader } from "../claude-mod/hooks/dag-text.mjs";
-import * as dagTerm from "../claude-mod/hooks/dag-term.mjs";
-import { termBoxLayout, termGraph } from "../claude-mod/hooks/dag-term.mjs";
+import { buildDagModel } from "../hooks/dag-model.mjs";
+import { cellWidth, textRows, waveHeader } from "../hooks/dag-text.mjs";
+import * as dagTerm from "../hooks/dag-term.mjs";
+import { termBoxLayout, termGraph } from "../hooks/dag-term.mjs";
 
 const task = (id, dependsOn = [], status = "pending", extra = {}) => ({
   id,

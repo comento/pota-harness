@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { spawn as spawnProcess, spawnSync } from "node:child_process";
+import { chmod, lstat, mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -20,6 +20,8 @@ const pluginRoot = join("/Users", "someone", ".claude", "plugins", "cache", "pot
 const doctor = `node "${join(pluginRoot, "scripts", "pota.mjs")}" doctor`;
 // Entries a run is expected to change even when it removes nothing.
 const VOLATILE = ["home/.pota/migration", "home/.claude/fake-claude.log"];
+const CLAUDE_MANUAL = ["claude plugin uninstall pota@pota --scope user", "claude plugin marketplace remove pota"];
+const symlinkedNotice = `Pota: left this host's legacy npm install untouched (a symlinked directory). Remove what doctor lists by hand, then restart. Details: ${doctor}`;
 
 function at(offsetMs) {
   return new Date(NOW.getTime() + offsetMs);
@@ -28,8 +30,9 @@ function at(offsetMs) {
 function fakeSpawn() {
   const calls = [];
   const spawn = (command, args, options) => {
-    calls.push({ command, args, options });
-    return { unref() {} };
+    const call = { command, args, options, listeners: {} };
+    calls.push(call);
+    return { on(event, listener) { call.listeners[event] = listener; }, unref() {} };
   };
   return { calls, spawn };
 }
@@ -252,6 +255,222 @@ test("Codex config: only pota@pota sections owned by the legacy marketplace are 
   }
 });
 
+test("Codex config variants: Pota sections go, every other section stays, and anything unclear fails closed", async (t) => {
+  const removed = (source) => [
+    ["a quoted key with brackets right after the Pota sections",
+      `model = "x"\n[marketplaces.pota]\nsource = ${source}\n[plugins."pota@pota"]\nenabled = true\n[projects."/Users/me/[work]/repo"]\ntrust_level = "trusted"\n[profiles.work]\nmodel = "o3"\n`,
+      `model = "x"\n[projects."/Users/me/[work]/repo"]\ntrust_level = "trusted"\n[profiles.work]\nmodel = "o3"\n`],
+    ['a comment and a single-line string containing """ and \'\'\'',
+      `model = "x" # use """ for long text\nnote = "a ''' b"\n[marketplaces.pota]\nsource = ${source}\n[plugins."pota@pota"]\nenabled = true\n[profiles.work]\nmodel = "o3"\n`,
+      `model = "x" # use """ for long text\nnote = "a ''' b"\n[profiles.work]\nmodel = "o3"\n`],
+    ["CRLF line endings and a comment after source",
+      `model = "x"\n[marketplaces.pota]\nsource = ${source} # pota\n[plugins."pota@pota"]\nenabled = true\n[profiles.work]\nmodel = "o3"\n`.replace(/\n/g, "\r\n"),
+      'model = "x"\r\n[profiles.work]\r\nmodel = "o3"\r\n'],
+    ["no trailing newline",
+      `model = "x"\n[marketplaces.pota]\nsource = ${source}\n[plugins."pota@pota"]\nenabled = true`,
+      'model = "x"'],
+    ["a plugin section without a marketplace section",
+      'model = "x"\n[plugins."pota@pota"]\nenabled = true\n[plugins."other@x"]\nenabled = true\n',
+      'model = "x"\n[plugins."other@x"]\nenabled = true\n'],
+    ["a single-quoted source",
+      `[marketplaces.pota]\nsource = '${JSON.parse(source)}'\n[plugins."pota@pota"]\nenabled = true\n[profiles.work]\nmodel = "o3"\n`,
+      '[profiles.work]\nmodel = "o3"\n'],
+  ];
+  const failClosed = (source) => [
+    ["a Pota header inside a multiline string", `prompt = """\n[plugins."pota@pota"]\n"""\n[marketplaces.pota]\nsource = ${source}\n`],
+    ["a header line that is not a valid key after a Pota section", `[marketplaces.pota]\nsource = ${source}\n[plugins."pota@pota"]\nenabled = true\n[not a bare key]\nx = 1\n`],
+    ["a source that is not a string", '[marketplaces.pota]\nsource = ["x"]\n[plugins."pota@pota"]\nenabled = true\n'],
+  ];
+  const sourceOf = (install) => JSON.stringify(join(install.env.POTA_HOME, "install", "codex"));
+  for (const index of removed('"x"').keys()) {
+    await t.test(removed('"x"')[index][0], () => withLegacyInstall({ hosts: ["codex"] }, async (install) => {
+      const [, before, after] = removed(sourceOf(install))[index];
+      await writeFile(install.env.CODEX_CONFIG_PATH, before);
+      const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "codex" });
+      assert.equal(result.status, "completed", JSON.stringify(result.hosts.codex));
+      assert.equal(await readFile(install.env.CODEX_CONFIG_PATH, "utf8"), after);
+      for (const record of install.hostTargets("codex")) assert.equal(pathExists(record.path), false, record.path);
+      assert.equal(pathExists(install.manifestPath), false);
+    }));
+  }
+  for (const index of failClosed('"x"').keys()) {
+    await t.test(`${failClosed('"x"')[index][0]} blocks the Codex part`, () => withLegacyInstall({ hosts: ["codex"] }, async (install) => {
+      const [, before] = failClosed(sourceOf(install))[index];
+      await writeFile(install.env.CODEX_CONFIG_PATH, before);
+      const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "codex" });
+      assert.equal(result.status, "blocked");
+      assert.equal(result.hosts.codex.reason, "host-unregister-failed");
+      assert.equal(await readFile(install.env.CODEX_CONFIG_PATH, "utf8"), before);
+      for (const record of install.hostTargets("codex")) assert.equal(pathExists(record.path), true, record.path);
+      assert.equal(pathExists(install.manifestPath), true);
+    }));
+  }
+  if (process.platform !== "win32") {
+    for (const mode of [0o600, 0o644]) {
+      await t.test(`config.toml keeps mode ${mode.toString(8)}`, () => withLegacyInstall({ hosts: ["codex"] }, async (install) => {
+        await chmod(install.env.CODEX_CONFIG_PATH, mode);
+        assert.equal((await runLegacyRemoval({ env: install.env, now: NOW, host: "codex" })).status, "completed");
+        assert.equal(await readFile(install.env.CODEX_CONFIG_PATH, "utf8"), install.config.after);
+        assert.equal((await stat(install.env.CODEX_CONFIG_PATH)).mode & 0o777, mode);
+      }));
+    }
+  }
+  await t.test("CODEX_CONFIG_PATH outside CODEX_HOME", async () => {
+    const outer = await mkdtemp(join(tmpdir(), "pota-legacy-config-"));
+    try {
+      const configPath = join(outer, "codex-config", "config.toml");
+      await withLegacyInstall({ hosts: ["codex"], env: { CODEX_CONFIG_PATH: configPath } }, async (install) => {
+        assert.equal(install.target("codex-config").path, configPath);
+        const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "codex" });
+        assert.equal(result.status, "completed", JSON.stringify(result.hosts.codex));
+        assert.equal(await readFile(configPath, "utf8"), install.config.after);
+        assert.equal(pathExists(join(install.env.CODEX_HOME, "config.toml")), false);
+        assert.equal(pathExists(install.manifestPath), false);
+      });
+    } finally {
+      await rm(outer, { recursive: true, force: true });
+    }
+  });
+  if (canSymlink()) {
+    await t.test("an unreadable config.toml keeps the runtime and manifest when another host finishes", () => withLegacyInstall({ hosts: ["codex", "antigravity"] }, async (install) => {
+      for (const record of install.hostTargets("codex")) await rm(record.path, { recursive: true, force: true });
+      const real = join(install.temp, "real-config.toml");
+      await rename(install.env.CODEX_CONFIG_PATH, real);
+      await symlink(real, install.env.CODEX_CONFIG_PATH);
+      const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "antigravity" });
+      assert.equal(result.status, "completed");
+      assert.deepEqual(result.hosts.antigravity.remainingHosts, ["codex"]);
+      assert.equal(pathExists(install.target("runtime").path), true);
+      assert.equal(pathExists(install.manifestPath), true);
+      assert.equal(await readFile(real, "utf8"), install.config.before);
+    }));
+  }
+});
+
+test("symlinks: a host below a symlinked directory is left alone, a symlinked target or tree entry is kept", { skip: !canSymlink() }, async (t) => {
+  await t.test("a symlinked ~/.claude/commands blocks Claude before unregistration", () => withLegacyInstall({}, async (install) => {
+    const commands = join(install.env.CLAUDE_HOME, "commands");
+    const dotfiles = join(install.temp, "dotfiles", "claude-commands");
+    await mkdir(join(install.temp, "dotfiles"), { recursive: true });
+    await rename(commands, dotfiles);
+    await symlink(dotfiles, commands);
+    const stateBefore = await readFile(install.claudeState, "utf8");
+    const dotfilesBefore = await snapshot(dotfiles);
+    const { spawn } = fakeSpawn();
+    sessionStartMigration({ env: install.env, now: NOW, spawn, pluginRoot, host: "claude" });
+
+    const plan = await planLegacyRemoval({ env: install.env, host: "claude" });
+    const underLink = install.hostTargets("claude").filter((record) => record.path.startsWith(`${commands}/`)).map((record) => record.path);
+    assert.ok(underLink.length > 0);
+    assert.ok(plan.targets.filter((target) => underLink.includes(target.path)).every((target) => target.state === "symlinked"));
+
+    const result = await runLegacyRemoval({ env: install.env, now: at(MINUTE), host: "claude" });
+    assert.equal(result.status, "blocked");
+    assert.equal(result.hosts.claude.reason, "symlinked-path");
+    assert.deepEqual(result.hosts.claude.removed, []);
+    assert.deepEqual(result.hosts.claude.modified, []);
+    assert.deepEqual(result.hosts.claude.manual, [...CLAUDE_MANUAL, ...[...underLink].reverse().map((path) => `Remove by hand (below a symlinked directory): ${path}`)]);
+    assert.deepEqual(await readClaudeLog(install), [], "the claude CLI is never called");
+    assert.equal(await readFile(install.claudeState, "utf8"), stateBefore);
+    for (const record of install.hostTargets("claude")) assert.equal(pathExists(record.path), true, record.path);
+    assert.deepEqual(await snapshot(dotfiles), dotfilesBefore);
+    assert.equal(pathExists(install.manifestPath), true);
+
+    const shown = sessionStartMigration({ env: install.env, now: at(2 * MINUTE), spawn, pluginRoot, host: "claude" });
+    assert.equal(migrationNoticeLine({ notice: shown.notice }), symlinkedNotice);
+  }));
+
+  await t.test("a symlinked CODEX_HOME blocks Codex and leaves config.toml alone", () => withLegacyInstall({ hosts: ["codex"] }, async (install) => {
+    const real = join(install.temp, "dot-codex");
+    await rename(install.env.CODEX_HOME, real);
+    await symlink(real, install.env.CODEX_HOME);
+    const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "codex" });
+    assert.equal(result.hosts.codex.reason, "symlinked-path");
+    assert.equal(await readFile(join(real, "config.toml"), "utf8"), install.config.before);
+    for (const record of install.hostTargets("codex")) assert.equal(pathExists(record.path), true, record.path);
+    assert.match(result.hosts.codex.manual[0], /^Remove the \[marketplaces\.pota\]/);
+  }));
+
+  await t.test("a symlinked target is kept and its referent untouched", () => withLegacyInstall({ hosts: ["claude"] }, async (install) => {
+    const command = install.target("claude-command-plan").path;
+    const outside = join(install.temp, "outside.md");
+    await writeFile(outside, await readFile(command));
+    await rm(command);
+    await symlink(outside, command);
+    const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "claude" });
+    assert.equal(result.status, "completed");
+    assert.deepEqual(result.hosts.claude.modified, [command]);
+    assert.equal((await lstat(command)).isSymbolicLink(), true);
+    assert.equal(await readFile(outside, "utf8"), "legacy claude-command-plan\n");
+    assert.equal(pathExists(install.manifestPath), true);
+  }));
+
+  await t.test("a target tree containing a symlink is kept", () => withLegacyInstall({ hosts: ["antigravity"] }, async (install) => {
+    const skill = install.target("ide-skill-pota-plan").path;
+    const outside = join(install.temp, "outside.txt");
+    await writeFile(outside, "outside\n");
+    await symlink(outside, join(skill, "nested", "link"));
+    const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "antigravity" });
+    assert.deepEqual(result.hosts.antigravity.modified, [skill]);
+    assert.equal((await lstat(join(skill, "nested", "link"))).isSymbolicLink(), true);
+    assert.equal(await readFile(outside, "utf8"), "outside\n");
+    assert.equal(pathExists(install.manifestPath), true);
+  }));
+});
+
+test("retained runtimes and interrupted removal copies are removed only while their digest matches", async (t) => {
+  await t.test("a changed retained Codex runtime is kept", () => withLegacyInstall({ hosts: ["codex"], retained: [{ id: "codex-runtime", version: "1.3.2" }] }, async (install) => {
+    const retained = install.manifest.retained[0].path;
+    await writeFile(join(retained, "README.md"), "edited\n");
+    const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "codex" });
+    assert.deepEqual(result.hosts.codex.modified, [retained]);
+    assert.equal(await readFile(join(retained, "README.md"), "utf8"), "edited\n");
+    assert.equal(pathExists(install.manifestPath), true);
+  }));
+  await t.test("a changed retained core runtime is kept with the manifest", () => withLegacyInstall({ hosts: ["antigravity"], retained: [{ id: "runtime", version: "1.3.2" }] }, async (install) => {
+    const retained = install.manifest.retained[0].path;
+    await writeFile(join(retained, "README.md"), "edited\n");
+    const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "antigravity" });
+    assert.deepEqual(result.hosts.antigravity.modified, [retained]);
+    assert.equal(pathExists(install.target("runtime").path), false);
+    assert.equal(await readFile(join(retained, "README.md"), "utf8"), "edited\n");
+    assert.equal(pathExists(install.manifestPath), true);
+  }));
+  await t.test("a .pota-removing copy with other content is kept and reported, run after run", () => withLegacyInstall({ hosts: ["antigravity"] }, async (install) => {
+    const skill = install.target("ide-skill-pota-plan").path;
+    const removing = `${skill}.pota-removing-${install.manifest.transactionId}`;
+    await mkdir(removing, { recursive: true });
+    await writeFile(join(removing, "unrelated.txt"), "not pota content\n");
+    for (const now of [NOW, at(MINUTE)]) {
+      const result = await runLegacyRemoval({ env: install.env, now, host: "antigravity" });
+      assert.ok(result.hosts.antigravity.modified.includes(removing), JSON.stringify(result.hosts.antigravity));
+      assert.equal(await readFile(join(removing, "unrelated.txt"), "utf8"), "not pota content\n");
+      assert.equal(pathExists(install.manifestPath), true);
+    }
+  }));
+  await t.test("a verified .pota-checking copy next to a re-created file is finished; the new file is judged on its own", () => withLegacyInstall({ hosts: ["antigravity"] }, async (install) => {
+    const workflow = install.target("ide-workflow-plan").path;
+    const checking = `${workflow}.pota-checking-${install.manifest.transactionId}`;
+    await rename(workflow, checking);
+    await writeFile(workflow, "re-created\n");
+    const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "antigravity" });
+    assert.deepEqual(result.hosts.antigravity.modified, [workflow]);
+    assert.equal(pathExists(checking), false);
+    assert.equal(await readFile(workflow, "utf8"), "re-created\n");
+  }));
+  await t.test("a changed .pota-checking copy next to a re-created file is kept", () => withLegacyInstall({ hosts: ["antigravity"] }, async (install) => {
+    const workflow = install.target("ide-workflow-plan").path;
+    const checking = `${workflow}.pota-checking-${install.manifest.transactionId}`;
+    await rename(workflow, checking);
+    await writeFile(checking, "edited\n");
+    await writeFile(workflow, "re-created\n");
+    const result = await runLegacyRemoval({ env: install.env, now: NOW, host: "antigravity" });
+    assert.ok(result.hosts.antigravity.modified.includes(checking));
+    assert.equal(await readFile(checking, "utf8"), "edited\n");
+    assert.equal(pathExists(install.manifestPath), true);
+  }));
+});
+
 test("a lifecycle lock held by a live process or a running auto-upgrade defers the run; a dead owner's lock is reclaimed", async (t) => {
   const record = (pid) => `${JSON.stringify({ schemaVersion: 1, pid, hostname: hostname(), nonce: "other-owner", acquiredAt: NOW.toISOString() })}\n`;
   await t.test("live lifecycle lock", () => withLegacyInstall({}, async (install) => {
@@ -394,17 +613,28 @@ test("SessionStart starts one detached runner per manifest, host, and environmen
     assert.equal(first.spawned, true);
     assert.deepEqual(first.notice, { kind: "removing", doctor });
     assert.equal(migrationNoticeLine({ notice: first.notice }), "Pota: removing the legacy npm install in the background. Legacy Pota hooks and commands stop working in this session; restart it when convenient.");
-    assert.deepEqual(calls[0], {
-      command: process.execPath,
-      args: [join(pluginRoot, "scripts", "pota-legacy-migration.mjs"), "run", "--host", "claude"],
-      options: { detached: true, stdio: "ignore", windowsHide: true },
-    });
+    assert.equal(calls[0].command, process.execPath);
+    assert.deepEqual(calls[0].args, [join(pluginRoot, "scripts", "pota-legacy-migration.mjs"), "run", "--host", "claude"]);
+    assert.deepEqual(calls[0].options, { detached: true, stdio: "ignore", windowsHide: true, env: install.env }, "the runner gets the hook's environment");
+    assert.equal(typeof calls[0].listeners.error, "function", "an async spawn failure has a listener");
+    assert.doesNotThrow(() => calls[0].listeners.error(new Error("spawn ENOENT")));
     assert.deepEqual(detect(at(MINUTE)), { notice: null, spawned: false });
     assert.deepEqual(detect(at(9 * MINUTE)), { notice: null, spawned: false });
     assert.deepEqual(detect(at(10 * MINUTE)), { notice: null, spawned: true }, "no report 10 minutes after the spawn");
     const codex = detect(at(11 * MINUTE), "codex");
     assert.equal(codex.notice.kind, "removing", "another host has its own run");
     assert.equal(calls.length, 3);
+  }));
+
+  await t.test("a runner that fails to start does not crash the hook process", () => withLegacyInstall({}, async (install) => {
+    const missing = join(install.temp, "no-such-node");
+    let child = null;
+    const spawn = (command, args, options) => { child = spawnProcess(missing, args, options); return child; };
+    const result = sessionStartMigration({ env: install.env, now: NOW, spawn, pluginRoot, host: "claude" });
+    assert.equal(result.spawned, true);
+    // The ENOENT 'error' event arrives asynchronously; an unhandled one would fail this test file.
+    await new Promise((resolve) => { setTimeout(resolve, 200); });
+    assert.ok(child.listenerCount("error") > 0);
   }));
 
   await t.test("a completed report is announced once in that host's session", () => withLegacyInstall({}, async (install) => {
@@ -440,6 +670,7 @@ test("notice lines stay within 240 characters in English and Korean", () => {
     { kind: "removed", version: "1.4.0", kept: 0, hosts: [], doctor },
     { kind: "blocked", reason: "manifest-unsupported-schema", doctor },
     { kind: "blocked", reason: "host-unregister-failed", doctor },
+    { kind: "symlinked", doctor },
   ];
   for (const ko of [false, true]) {
     for (const notice of notices) {
@@ -453,6 +684,7 @@ test("notice lines stay within 240 characters in English and Korean", () => {
   assert.equal(migrationNoticeLine({ notice: { kind: "removed", version: "1.4.0", kept: 0, hosts: [], doctor } }),
     `Pota: removed the legacy npm install (1.4.0). Details: ${doctor}`);
   assert.equal(migrationNoticeLine({ notice: null }), "");
+  assert.equal(migrationNoticeLine({ notice: { kind: "symlinked", doctor } }), symlinkedNotice);
 });
 
 test("hostOfId in the test support agrees with the fixture's phases", async () => {

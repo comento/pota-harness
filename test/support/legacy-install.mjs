@@ -115,6 +115,8 @@ export async function createLegacyInstall({ hosts = ALL_HOSTS, retained = [], cl
   const config = codexConfig(codexMarketplaceRoot);
   for (const record of manifest.targets) {
     if (record.type === "config") {
+      // The 1.4.0 installer recorded CODEX_CONFIG_PATH when it was set.
+      record.path = env.CODEX_CONFIG_PATH;
       if (configMode === "absent") continue;
       await mkdir(dirname(record.path), { recursive: true });
       await writeFile(record.path, configMode === "foreign" ? codexConfig(join(temp, "elsewhere")).before : config.before);
