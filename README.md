@@ -21,6 +21,97 @@ Before a task mutates external state, Pota records and runs the closest availabl
 
 Pota also treats tool readiness as part of the work. LSP, typecheck, lint, dry-run, and verification tools are checked against the repository stack. A missing tool is installed only after explicit approval and only when a pinned, supported installer exists; otherwise Pota reports a blocker.
 
+## Install
+
+Pota is a plugin for Claude Code, Codex, and the Antigravity CLI. The root of this repository is the plugin, and the `main` branch is the released version. Each host installs, updates, and removes its own copy with its own plugin commands, and that copy is the host's runtime: its hooks, skills, and CLI run from it. Copies on different hosts may be at different versions; Pota does not compare them. Goal state in `~/.pota/projects/` is shared by every host.
+
+### Claude Code
+
+```sh
+claude plugin marketplace add comento/pota-harness
+claude plugin install pota@pota-harness
+```
+
+Inside a session the same steps are `/plugin marketplace add comento/pota-harness` and `/plugin install pota@pota-harness`. Claude Code does not auto-update third-party marketplaces by default, so update by hand and restart the session:
+
+```sh
+claude plugin marketplace update pota-harness
+claude plugin update pota@pota-harness
+```
+
+Uninstall:
+
+```sh
+claude plugin uninstall pota@pota-harness
+claude plugin marketplace remove pota-harness
+```
+
+### Codex
+
+```sh
+codex plugin marketplace add comento/pota-harness
+```
+
+Then, in the Codex TUI:
+
+1. Open `/plugins`, pick the `pota-harness` marketplace, install `pota`, and start a new session.
+2. Open `/hooks` and approve Pota's five hooks. Codex does not run plugin hooks until you approve them, and the approval is bound to the hook content, so approve them again in `/hooks` after every update. Without approval no session gets the `Pota CLI:` line, and the Pota skills tell you that Pota's hooks are inactive.
+
+Update with `codex plugin marketplace upgrade pota-harness`, then approve the hooks in `/hooks` again. To uninstall, open the plugin in `/plugins` and choose "Uninstall plugin". These Codex steps follow the Codex documentation and source; they have not yet been run against a real Codex installation.
+
+### Antigravity CLI
+
+```sh
+agy plugin install https://github.com/comento/pota-harness
+```
+
+Run the same command again to update; the Antigravity documentation describes a reinstall as replacing the installed copy. Uninstall with `agy plugin uninstall pota`. `agy` 1.5.6 or later is recommended. Only the Antigravity CLI is supported; the Antigravity IDE is not.
+
+### What each host gets
+
+| | Claude Code | Codex | Antigravity CLI |
+| --- | --- | --- | --- |
+| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` |
+| Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | the same five, after approval in `/hooks` | SessionStart, PreInvocation (prompt context), PostToolUse, Stop; no SubagentStop |
+| Agents `explorer`, `worker` | yes | no | no |
+| DAG panel (mod) | yes | no | no |
+
+### Coming from the npm install (1.x)
+
+Pota 2.x is not published to npm and has no global `pota` command. The npm package `@comento/pota-harness` ends at 1.5.0, which only shows these install instructions, and the package is deprecated.
+
+1. Claude Code only: remove the 1.x plugin first with `claude plugin uninstall pota@pota --scope user`.
+2. Install the plugin on every host you use. The removal below works one host at a time, so a host without the plugin keeps running the 1.x install until you install the plugin there.
+3. Start a session. When the plugin's session start finds the 1.x ownership manifest (`~/.pota/install/lifecycle.json`), it removes that host's part of the 1.x install in a background process and says so; restart the session once. The next session reports the result once. The shared 1.x runtime, `~/.pota/update/`, and the manifest go only after no host's part is left.
+
+The removal deletes only files and directories that the 1.x manifest records and whose digest is unchanged, plus Pota's own sections of Codex's `config.toml`. It keeps `~/.pota/projects/` (goal state), `~/.pota/config.json`, `~/.pota/tools/comment-checker/`, every file you changed (listed as kept), anything the manifest does not record, and the global npm package (remove it with `npm uninstall -g @comento/pota-harness`). It refuses, removes nothing for that host, and tells you why when:
+
+- a directory on one of the host's paths is a symlink (`symlinked-path`; remove the listed paths by hand);
+- the host registration cannot be removed safely (`host-unregister-failed`): the `claude` CLI is missing or fails, or Codex's `config.toml` has Pota sections that cannot be identified safely or a rewrite would change other sections;
+- the manifest is invalid, has an unsupported schema, points outside the expected paths, or a 1.x install transaction was interrupted (`manifest-invalid`, `manifest-unsupported-schema`, `target-outside-allowlist`, `transaction-pending`). If you installed 1.x with `CODEX_HOME`, `CLAUDE_HOME`, `ANTIGRAVITY_HOME`, `ANTIGRAVITY_CLI_HOME`, or `CODEX_CONFIG_PATH` set, set the same values for the host. Otherwise run `npx @comento/pota-harness@1.5.0 uninstall`, then restart.
+
+A refused removal is retried after 24 hours and announced at most once every 7 days. An install from before 1.3 has no ownership manifest and is never touched; remove it with `npx @comento/pota-harness@1.5.0 uninstall` before you install the plugin. To see the state, or to run the removal yourself (`<pluginRoot>` is explained below):
+
+```sh
+node "<pluginRoot>/scripts/pota.mjs" doctor
+node "<pluginRoot>/scripts/pota.mjs" migrate status
+node "<pluginRoot>/scripts/pota.mjs" migrate run --host claude --dry-run
+node "<pluginRoot>/scripts/pota.mjs" migrate run --host claude
+```
+
+`POTA_LEGACY_MIGRATION=0` (also `false`, `off`, or `no`) turns the automatic removal off. 1.x names map to 2.x as follows:
+
+| 1.x | 2.x |
+| --- | --- |
+| `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` | the host's skill names in the table above |
+| `/pota-toolcheck` | ask the agent to run `pota toolcheck` |
+| `/pota-doctor` | `pota doctor` |
+| the CLI's `install`, `upgrade`, and `uninstall` commands and automatic upgrades | the host plugin commands above; the CLI now prints a pointer to this section and exits 2 |
+
+### Running the Pota CLI
+
+Each session start prints a `Pota CLI:` line with the absolute path of `scripts/pota.mjs` in that host's plugin copy, and the agent runs Pota commands with that path. `<pluginRoot>` is the parent of that `scripts` directory; the path changes when the host installs a new version. In this README, `pota <command>` means `node "<pluginRoot>/scripts/pota.mjs" <command>`.
+
 ## Complexity Triage
 
 Every implementation task passes complexity triage first, before agent, plugin, or delegated workflow guidance. Triage is decided from repository exploration, expected change scope, and risk signals without asking the user.
@@ -94,37 +185,14 @@ At `SessionStart`, the hook tells the agent which memory notes exist (name and `
 
 Before `goal finish`, `pota-work` records one memory promotion decision per goal in the plan's Evidence: `Memory promotion: docs/memory/<domain>.md` when the goal produced reusable repository knowledge, otherwise `Memory promotion: none: <reason>`. The decision is required; writing a note is optional. When a goal completes and its plan file has no filled `Memory promotion:` line, `goal finish` and `goal complete` print a one-line reminder on stderr without changing the exit code or stdout.
 
-Runtime scripts, templates, commands, agents, and model guidance stay in the installed canonical runtime, `~/.pota/install/runtime/<version>/`. Runtime locator files let Codex, Claude Code, and Antigravity share that installed copy without copying Pota internals into the target repository. If the shared runtime or a locator is missing, unreadable, or inconsistent, stop using every mirror that points to it. Run `bunx @comento/pota-harness@latest doctor` from the published package, then `bunx @comento/pota-harness@latest upgrade` to recover it; do not repair one host from another mirror or search the target repository for runtime files.
+Scripts, templates, agents, and model guidance stay in the host's plugin copy; nothing of Pota is copied into the target repository. If that copy is missing or unreadable, reinstall or update it with the host's plugin command; do not repair it from another host's copy or search the target repository for Pota files.
 
 ## Commands
 
-The published package can be executed with `bunx` or globally installed `pota` commands.
+`pota <command>` below means `node "<pluginRoot>/scripts/pota.mjs" <command>`, with the path from the session-start `Pota CLI:` line (see [Running the Pota CLI](#running-the-pota-cli)).
 
-```sh
-bunx @comento/pota-harness@latest install
-bunx @comento/pota-harness@latest upgrade
-bunx @comento/pota-harness@latest doctor
-bunx @comento/pota-harness@latest uninstall
-bunx @comento/pota-harness@latest toolcheck
-```
-
-After global installation, short commands are also available.
-
-```sh
-bun add -g @comento/pota-harness
-pota install
-pota upgrade
-pota doctor
-pota uninstall
-pota toolcheck
-pota auto-upgrade status
-```
-
-- `pota install [--hosts all|codex,claude,antigravity]`: transactionally installs the canonical runtime under `~/.pota/install/` and, for the selected hosts, the Codex marketplace source, versioned Codex runtime cache, and Pota-owned config sections, the Claude Code mirrors and plugin, and the current Antigravity IDE/CLI skill surfaces. Without `--hosts`, a first install at a terminal asks which hosts to use; non-interactive runs and CI install every host.
-- `pota upgrade [--hosts all|codex,claude,antigravity]`: replaces only ownership-manifest entries whose installed digests still match, with staged validation and reverse-order rollback on failure. It keeps the recorded hosts unless `--hosts` changes them and refreshes a Claude Code plugin cache that still holds another version. When the installed version is newer than this CLI, `install` and `upgrade` refuse without changing anything; `--allow-downgrade` installs this CLI's version anyway.
-- `pota doctor`: prints `Hosts: <ids>` first, then validates the ownership manifest, managed digests, effective Codex features, actual installed/enabled/version plugin state (including `Claude plugin cache version`), and mirror/runtime locators of the selected hosts without repairing them.
-- `pota uninstall`: verifies every non-config ownership-manifest entry against its installed digest first and refuses the whole uninstall, changing nothing, if any managed artifact was modified or removed. Otherwise it removes or restores the managed entries and retained runtimes, prunes empty managed scaffolds, preserves unmanaged targets and their parent directories, and rolls back pre-commit failures. It also removes `~/.pota/update/` and keeps `~/.pota/config.json` and `~/.pota/projects/`. A legacy-layout installation is removed in place without migrating.
-- `pota auto-upgrade status|on|off|run`: `status` prints the setting, installed version, last check, and pending notice as JSON; `on` and `off` write `autoUpgrade` to `~/.pota/config.json` and print the same report; `run` checks npm now, ignoring the daily interval and backoff, and prints the result. Exit 0 is success, 1 an execution error or a failed run, 2 a usage error.
+- `pota doctor [--json]`: read-only diagnostics of this plugin copy and `~/.pota`: version, `pluginRoot`, Node.js (18 or later), whether `POTA_HOME` is writable, whether the four version surfaces of this copy agree, required files, the 1.x install (`none`, `present <version>`, or `blocked <reason>`), the last removal report per host with kept paths and manual commands, and the comment-checker state. It never compares the copies of other hosts. Exit 1 when a check fails, 2 for a usage error.
+- `pota migrate status|run [--host claude|codex|antigravity] [--all] [--dry-run] [--json]`: runs the 1.x install removal by hand. `status` shows what a run would do and the last reports; `run` needs `--host <host>` or `--all` (every host, including hosts that do not have the plugin yet), and `--dry-run` shows the plan without changing anything. Exit 1 when the removal is refused, 2 for a usage error.
 - `pota toolcheck`: detects repository stacks and checks required LSP and verification tools; installation runs only for an approved supported installer.
 - `pota cleanup --root <repo>`: reports legacy project-local `.pota` residue without changing it; `--yes` migrates/reconciles valid active state into the user-home store, removes only known Pota state/lock/tool residue, preserves unknown files, and prunes the directory only when empty. A `state.lock` is removed only when it holds a valid lock record whose owner process on this host is dead, and a quarantined `state.lock.stale.*` file only when its valid record's nonce matches its name; live-owner, foreign-host, and unparsable locks are preserved and listed with a reason in `preservedReasons`. `--help` and `--version` exit 0; usage errors exit 2 and runtime errors exit 1 with one `Pota cleanup error:` line.
 - `pota goal ...`: starts, inspects, pauses, resumes, blocks, cancels, and completes a persisted repository goal. `goal claim --session <id>` hands an unfinished goal to the session that continues the same work (resume, compaction, handoff, fork); new work that arrives during an unfinished goal is folded in with `goal replan` instead of cancelling it. State lives under user-home `.pota`, separated by repository and Git worktree; state without `worktreeId` and state copied from another worktree are stale and removed on the next hook/goal start. Successful completion or cancellation removes active state because completed evidence already lives in the plan document, while paused/blocked state remains resumable. The default tool-bound policy records successful evidence by executing `goal verify -- <argv>`. The legacy `goal receipt` command imports declared evidence only. `--root` is optional for every `goal` subcommand (it resolves via `HARNESS_REPO_ROOT`, else the nearest ancestor containing `.git`). `goal verify --kind "moduleAcceptance|surfaceIntegration" -- <argv>` records one receipt per kind from one run; evidence scopes are `task` and `goal`. `goal finish [--watch "<path|path>"] [--timeout-ms N] -- <argv>` completes the active task (its evidence must be fresh), runs the argv once, records every goal requiredEvidence kind (default `finalReview`) at goal scope, and completes the goal; once that goal-scope evidence is recorded after every task receipt, earlier task checks are not rerun. `goal stats` prints JSON receipt counts, reruns, and stale receipts for the current goal. `goal stats --history [--limit N]` aggregates the repository's finished goals across worktrees: completed/cancelled counts, median and p90 duration, task and receipt medians, rerun rate, memory promotion decisions, an older/newer `trend` once 4 goals have completed, and the most recent goals; with no history it prints `{"schemaVersion":1,"scope":"repository","goals":0}`. `completionCriteria` (`goal start --criteria`) is `advisory`: Pota records it but does not enforce it, and completion is gated only by required evidence. Tasks declare `dependsOn` (omitted = previous task) and `writeScope`; `goal ready` prints active/ready/blocked task ids, and up to 4 ready tasks with disjoint write scopes can be active in parallel in the same worktree.
@@ -139,38 +207,24 @@ On every `UserPromptSubmit`, Pota injects model-visible guidance that non-trivia
 
 For token-efficient execution, Pota puts reasoning into a focused executable test contract—requirements, invariants, boundaries, and failure modes—before implementation. Implementation receives the failing contract and bounded file scope, then makes the minimum passing change. Tool exit codes and machine summaries decide success; successful output stays concise and only failures expand context. Verification climbs from focused tests to one final full check. With no explicit `--watch`, a Git workspace fingerprint covers tracked and non-ignored untracked files; ignored artifacts are excluded. Any ignored artifact needed by the claim must be named with an explicit `--watch <path>` (or an explicit containing directory). Before package verification, inspect lifecycle scripts and run normal `npm pack --dry-run` by default: content-producing or unknown scripts must never use `--ignore-scripts`; only absent or proven content-neutral scripts may use it while the full-check evidence remains fresh. Successful state mutations support `--quiet` so growing goal JSON does not consume the conversation budget.
 
-Install and upgrade keep the custom marketplace lifecycle; they do not invoke `codex plugin add`. Candidates are staged and validated before commit, every current managed destination and digest is recorded in an ownership manifest, and committed phases roll back in reverse order on failure. Artifacts that are modified or not recorded in the ownership manifest are preserved and rejected. Pota edits only its own TOML sections and never forces public feature or agent settings. The source plugin manifest stays validator-friendly; only the installed copies get a `hooks` field. Lifecycle commands must run from the published/global package, not from an installed copy under `~/.pota/install/` or the Codex plugin cache that they replace.
+Pota writes only under `POTA_HOME` (default `~/.pota`) and never inside its plugin copy. Codex binds hook approval to the plugin's content, so a copy that changed itself would lose its approval. Host plugin files are installed, updated, and removed only by the host's own plugin commands.
 
-Clean uninstall removes `~/.pota/install/` and the Codex cache root `$CODEX_HOME/plugins/cache/pota` only when every managed scaffold is empty, using empty-directory removal rather than recursive deletion. It does not delete the source repository, repository `MEMORY.md`/`PLAN.md`, user-home Pota goal state, the global `@comento/pota-harness` package, package-manager download caches, legacy backups, or legacy shared settings outside the current ownership manifest; those require a separate explicit cleanup decision.
+## Pota Home And Settings
 
-Codex uses `skills/` and `commands/`. Claude Code uses mirrored commands and agent definitions under `~/.claude/` plus a Claude Code plugin, `pota@pota`. Antigravity uses `.agents/workflows` and global skills mirrors.
-
-The Claude Code plugin is generated in a Pota-owned local marketplace at `~/.pota/install/claude` and carries the four Pota skills and the SessionStart, UserPromptSubmit, PostToolUse, Stop, and SubagentStop hooks, which call the canonical runtime by absolute path. After the files commit, `pota install`/`upgrade` registers it through `claude plugin marketplace add` and `claude plugin install pota@pota --scope user`, so it appears in the Claude Code terminal, desktop app, and IDE plugin lists from the next session. Registration is skipped with a manual command when the `claude` CLI is missing, and a different marketplace already named `pota` is never touched. `pota uninstall` unregisters only Pota's own marketplace before removing files, and re-registers it if the uninstall rolls back. When the Claude Code plugin cache holds a different version, `pota upgrade` refreshes it with `claude plugin marketplace update pota` and `claude plugin update pota@pota --scope user`; if the refresh fails, the upgrade stays installed, prints those commands to finish by hand, and exits 1. `pota doctor` reports `Claude plugin files`, `Claude plugin registered`, `Claude plugin enabled`, and `Claude plugin cache version`.
-
-## Install Layout And Auto-Upgrade
-
-Pota keeps its installation under `POTA_HOME` (default `~/.pota`). `CODEX_HOME`, `CLAUDE_HOME`, `ANTIGRAVITY_HOME`, `ANTIGRAVITY_CLI_HOME`, and `CODEX_CONFIG_PATH` still set the host paths independently.
+Pota keeps its data under `POTA_HOME` (default `~/.pota`), shared by the plugin copies of every host.
 
 ```text
 ~/.pota/
-  install/                  lifecycle-managed files
-    lifecycle.json          ownership manifest (schema 2: hosts, origin, retained runtimes)
-    lifecycle.lock, transaction.json, transactions/
-    runtime/<version>/      canonical runtime used by every runtime locator and the Claude Code hooks
-    codex/                  Codex local marketplace source
-    claude/                 Claude Code local marketplace
   projects/                 goal state
-  config.json               user settings ("autoUpgrade", "commentChecker", "modelCeiling")
-  update/                   auto-upgrade state
+  config.json               user settings ("commentChecker", "modelCeiling")
   tools/comment-checker/    comment-checker binary (pinned release)
-$CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (only when Codex is selected)
+  migration/                reports and state of the 1.x install removal
+  hosts/antigravity/        Antigravity session files (hook messages waiting for the next prompt)
+  install/, update/         left by the 1.x npm install until its removal finishes
 ```
 
-- Hosts: `--hosts` takes `all` or a comma list of `codex`, `claude`, and `antigravity`, on `install` and `upgrade` only. The selection is recorded in the ownership manifest, and `upgrade`, `doctor`, and `uninstall` follow it; `pota upgrade --hosts <list>` adds hosts and removes deselected ones (a modified artifact of a deselected host is refused). The interactive prompt offers all hosts (default), Claude Code only, Codex only, Antigravity only, or a comma list, and appears only when nothing is installed yet.
-- Retention: an upgrade that changes the version keeps the previous canonical runtime and Codex cache copy for 3 days (at most 3 of each) so sessions started before it keep working. The next install or upgrade removes expired ones, and uninstall removes all of them. A Codex cache copy at or above the new version is never kept, because Codex loads the highest cached version.
-- Auto-upgrade: on by default. At most once every 24 hours (and not within 24 hours of an install or upgrade), `SessionStart` starts a detached process that reads the latest `@comento/pota-harness` version from npm, installs that exact version into `~/.pota/update/stage/` with `--ignore-scripts`, verifies the staged package, and runs its `pota-lifecycle.mjs upgrade --auto`. Every newer release is applied, major versions included, and it never downgrades. The next `SessionStart` shows one line, once: `updated`, `failed`, or `manual` (installed, but the Claude Code plugin cache still needs `claude plugin update pota@pota`). npm lookup and install failures back off silently; a failed upgrade backs off and is announced once per version. It never runs for an installation from a git checkout (`origin: "checkout"`) or from a source checkout.
-- Turning it off: `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0` (also `false`, `off`, or `no`), or `"autoUpgrade": false` in `~/.pota/config.json`. A `config.json` that cannot be read also turns it off. State and the last run's output live in `~/.pota/update/` (`state.json`, `notice.json`, `last-run.log`, `update.lock`, `stage/`).
-- Comment checker: after a successful edit (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` and edit tools), the PostToolUse hook runs [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) on the changed text and, when it reports needless comments, returns `decision: "block"` so the agent removes them or explains why they are needed. No npm dependency is added: `pota install` and `pota upgrade` (auto-upgrade included) download the pinned v0.8.2 release for the current platform (darwin/linux x64 and arm64, windows x64) after the installation commits, verify its pinned SHA256, extract it with the OS `tar` into `~/.pota/tools/comment-checker/`, and print the result on one line. A failed download keeps the installation and its exit code; `SessionStart` from the installed runtime retries it in a detached process with a backoff. Until a download succeeds, edits pass unchecked; a checker error or a check over 7 seconds also passes. `pota doctor` prints its state on one line, `pota uninstall` removes it, and `POTA_COMMENT_CHECKER=0` (also `false`, `off`, or `no`) or `"commentChecker": false` in `~/.pota/config.json` turns off both the check and the download.
+- 1.x settings: `"autoUpgrade"` in `config.json` is ignored; Pota no longer upgrades itself.
+- Comment checker: after a successful edit (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` and edit tools), the PostToolUse hook runs [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) on the changed text and, when it reports needless comments, returns `decision: "block"` so the agent removes them or explains why they are needed. No npm dependency is added: a session start of a host hook downloads the pinned v0.8.2 release for the current platform (darwin/linux x64 and arm64, windows x64) in a detached process, verifies its pinned SHA256, and extracts it with the OS `tar` into `~/.pota/tools/comment-checker/`. A failed download is retried at a later session start with a backoff. Until a download succeeds, edits pass unchecked; a checker error or a check over 7 seconds also passes. `pota doctor` prints its state on one line, and `POTA_COMMENT_CHECKER=0` (also `false`, `off`, or `no`) or `"commentChecker": false` in `~/.pota/config.json` turns off both the check and the download.
 - Main model check: when the session's main model is below the stronger tier, `SessionStart` adds a `Pota main model:` line and a one-time notice. Planning/triage and the final review must then be dispatched to the stronger tier or above and recorded (`goal assign … --kind review` for the review); otherwise completing `triage-plan` and `goal finish` are refused unless `--allow-main-model <reason>` is passed. An absent or unrecognized model value never triggers this. Set `POTA_MAIN_MODEL_GATE=0` to turn it off.
 - Model ceiling: when the account cannot or should not use the higher tiers (subscription, organization policy, usage credits), set `POTA_MODEL_CEILING=stronger` (or `balanced`; a model name such as `opus` or `sonnet` also works), or `"modelCeiling": "stronger"` in `~/.pota/config.json`. The environment variable wins, and `config.json` is the one place every hook and CLI call reads. `SessionStart` then adds a `Pota model ceiling:` line, tiers above the ceiling use the ceiling tier's model, the Heavy design gate accepts that model, and the main model check uses the capped stronger tier. Without a setting nothing changes; an invalid value applies no ceiling and is reported.
 - Request brief and steering: a Light or Heavy Path plan carries a `## Request Brief` (original request, interpreted outcome, scope, prior records (`Prior records`, from `pota plan steering`), assumptions, implicit requirements, open questions, steering log), and completing `triage-plan` is refused until it is filled unless `--allow-no-request-brief <reason>` is passed. User corrections, additions, and redirects are recorded with `goal steer --kind <correction|addition|redirect> --reason <text>`, or with `goal replan --steer <correction|addition|redirect|none> --reason <text>` when tasks change; the second steering or a redirect also needs a rewritten `Current request (as of S<n>)`.
@@ -186,12 +240,14 @@ Claude Code desktop shows the current Pota goal as a DAG panel, one column per w
 
 ## Antigravity Compatibility
 
-Antigravity supports `SKILL.md`-based Agent Skills and Workflows invoked as `/workflow-name`. Pota installs these paths for that surface.
+Pota supports the Antigravity CLI (`agy`); the Antigravity IDE is not supported. The plugin's manifest is the root `plugin.json`, and its hooks are the root `hooks.json`, which runs `scripts/pota-state-antigravity.mjs` from the plugin folder. That adapter maps Antigravity's events onto Pota's hooks:
 
-- Antigravity IDE: `~/.gemini/config/skills/pota-*/SKILL.md`.
-- Antigravity CLI: flat `~/.gemini/antigravity-cli/skills/pota-*.md` skill files.
+- `SessionStart` adds the session capsule and the `Pota CLI:` line.
+- Antigravity has no prompt event, so the first `PreInvocation` of each prompt adds the prompt context.
+- `PostToolUse` on `write_to_file`, `replace_file_content`, and `multi_replace_file_content` runs the comment checker and the goal reminder; its result is added at the next `PreInvocation`.
+- `Stop` keeps the agent working while the active goal has an unfinished task. There is no `SubagentStop`.
 
-Codex-only hooks are not ported to Antigravity. Instead, the same planning, memory, complexity triage, and two-gate verification procedures run through Skills and Workflows. Set `ANTIGRAVITY_HOME` or `ANTIGRAVITY_CLI_HOME` to override paths.
+Skills are called as `/pota-plan`, `/pota-work`, `/pota-review`, and `/pota-memory`; workflows are not part of Antigravity plugins. The adapter follows the Antigravity hook documentation; its behaviour inside a real `agy` session has not been verified yet.
 
 ## Locale Policy
 

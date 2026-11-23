@@ -138,8 +138,8 @@ test("the installer-era command, workflow, mirror, and mod folders are gone", ()
 test("no shipped file carries the runtime locator", () => {
   const listed = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { cwd: root, encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
-  // Plan records and tests describe the retired locator on purpose; docs/memory is rewritten with the README task.
-  const files = listed.stdout.split("\n").filter((path) => path && !/^(?:docs\/plan|docs\/memory|test)\//.test(path) && existsSync(join(root, path)));
+  // Plan records and tests describe the retired locator on purpose.
+  const files = listed.stdout.split("\n").filter((path) => path && !/^(?:docs\/plan|test)\//.test(path) && existsSync(join(root, path)));
   assert.ok(files.includes("skills/pota-plan/SKILL.md"));
   for (const path of files) {
     const content = readFileSync(join(root, path), "latin1");

@@ -13,6 +13,97 @@ Pota 的核心思路是保留有用的 agent harness 行为：hooks、persistent
 
 Pota 也把 tool readiness 视为工作的一部分。它会根据 repository stack 检查 LSP、typecheck、lint、dry-run 和 verification tools。只有在获得明确批准且存在固定版本的受支持 installer 时才安装，否则报告 blocker。
 
+## Install
+
+Pota 是 Claude Code、Codex 和 Antigravity CLI 的 plugin。本 repository 的根目录就是 plugin，`main` branch 就是发布版本。每个 host 用自己的 plugin 命令安装、更新和删除自己的副本，这个副本就是该 host 的 runtime：hooks、skills 和 CLI 都从它运行。不同 host 上的版本可以不同，Pota 不会互相比较。`~/.pota/projects/` 中的 goal state 由所有 host 共享。
+
+### Claude Code
+
+```sh
+claude plugin marketplace add comento/pota-harness
+claude plugin install pota@pota-harness
+```
+
+在 session 内，相同的步骤是 `/plugin marketplace add comento/pota-harness` 和 `/plugin install pota@pota-harness`。Claude Code 默认不会自动更新第三方 marketplace，因此需要手动更新并重启 session：
+
+```sh
+claude plugin marketplace update pota-harness
+claude plugin update pota@pota-harness
+```
+
+删除：
+
+```sh
+claude plugin uninstall pota@pota-harness
+claude plugin marketplace remove pota-harness
+```
+
+### Codex
+
+```sh
+codex plugin marketplace add comento/pota-harness
+```
+
+然后在 Codex TUI 中：
+
+1. 打开 `/plugins`，从 `pota-harness` marketplace 安装 `pota`，然后开始新的 session。
+2. 打开 `/hooks`，批准 Pota 的 5 个 hook。Codex 在批准之前不会运行 plugin hook，而且批准与 hook 内容绑定，所以每次更新后都要在 `/hooks` 中重新批准。未批准时 session 中不会出现 `Pota CLI:` 行，Pota skills 会告诉你 Pota hooks 未生效。
+
+更新：运行 `codex plugin marketplace upgrade pota-harness`，然后在 `/hooks` 中重新批准。删除：在 `/plugins` 中打开该 plugin，选择 "Uninstall plugin"。这些 Codex 步骤依据 Codex 文档和源码，尚未在真实的 Codex 安装上运行过。
+
+### Antigravity CLI
+
+```sh
+agy plugin install https://github.com/comento/pota-harness
+```
+
+更新时再次运行同一命令；Antigravity 文档说明重新安装会替换已安装的副本。删除用 `agy plugin uninstall pota`。建议使用 `agy` 1.5.6 或更高版本。只支持 Antigravity CLI，不支持 Antigravity IDE。
+
+### What each host gets
+
+| | Claude Code | Codex | Antigravity CLI |
+| --- | --- | --- | --- |
+| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` |
+| Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | 同样 5 个(在 `/hooks` 中批准后) | SessionStart, PreInvocation(prompt context), PostToolUse, Stop；没有 SubagentStop |
+| Agents `explorer`, `worker` | 有 | 无 | 无 |
+| DAG 面板(mod) | 有 | 无 | 无 |
+
+### Coming from the npm install (1.x)
+
+Pota 2.x 不发布到 npm，也没有全局 `pota` 命令。npm package `@comento/pota-harness` 的最后版本是只显示这些安装说明的 1.5.0，该 package 已标记为 deprecated。
+
+1. 仅 Claude Code：先用 `claude plugin uninstall pota@pota --scope user` 删除 1.x plugin。
+2. 在你使用的每个 host 上安装 plugin。下面的删除按 host 进行，所以没有安装 plugin 的 host 会继续使用 1.x 安装，直到你在那里安装 plugin。
+3. 开始一个 session。plugin 的 session start 找到 1.x ownership manifest(`~/.pota/install/lifecycle.json`)时，会在后台进程中删除该 host 那一部分 1.x 安装，并给出提示；请重启一次 session。下一个 session 会报告一次结果。共享的 1.x runtime、`~/.pota/update/` 和 manifest 只在所有 host 的部分都删除后才删除。
+
+删除只针对 1.x manifest 记录且 digest 未变的文件和目录，以及 Codex `config.toml` 中 Pota 自己的 sections。保留 `~/.pota/projects/`(goal state)、`~/.pota/config.json`、`~/.pota/tools/comment-checker/`、你修改过的文件(作为保留项报告)、manifest 未记录的一切，以及全局 npm package(用 `npm uninstall -g @comento/pota-harness` 删除)。以下情况不会删除该 host 的任何内容，并说明原因：
+
+- host 路径上的某个目录是 symlink(`symlinked-path`；手动删除报告中列出的路径)；
+- 无法安全地注销 host 注册(`host-unregister-failed`)：`claude` CLI 不存在或失败，或 Codex `config.toml` 中的 Pota sections 无法安全识别、重写会改变其他 sections；
+- manifest 无效、schema 不受支持、指向预期路径之外，或 1.x 安装 transaction 被中断(`manifest-invalid`、`manifest-unsupported-schema`、`target-outside-allowlist`、`transaction-pending`)。如果安装 1.x 时设置了 `CODEX_HOME`、`CLAUDE_HOME`、`ANTIGRAVITY_HOME`、`ANTIGRAVITY_CLI_HOME` 或 `CODEX_CONFIG_PATH`，请为 host 设置相同的值。否则运行 `npx @comento/pota-harness@1.5.0 uninstall` 后重启。
+
+被拒绝的删除会在 24 小时后重试，提示最多每 7 天一次。1.3 之前的安装没有 ownership manifest，不会被处理；请在安装 plugin 之前用 `npx @comento/pota-harness@1.5.0 uninstall` 删除它。查看状态或手动执行删除(`<pluginRoot>` 见下文)：
+
+```sh
+node "<pluginRoot>/scripts/pota.mjs" doctor
+node "<pluginRoot>/scripts/pota.mjs" migrate status
+node "<pluginRoot>/scripts/pota.mjs" migrate run --host claude --dry-run
+node "<pluginRoot>/scripts/pota.mjs" migrate run --host claude
+```
+
+`POTA_LEGACY_MIGRATION=0`(也可用 `false`、`off`、`no`)关闭自动删除。1.x 名称在 2.x 中对应如下：
+
+| 1.x | 2.x |
+| --- | --- |
+| `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` | 上表中各 host 的 skill 名称 |
+| `/pota-toolcheck` | 请 agent 运行 `pota toolcheck` |
+| `/pota-doctor` | `pota doctor` |
+| CLI 的 `install`、`upgrade`、`uninstall` 命令和自动升级 | 上面的 host plugin 命令；CLI 现在输出指向本节的提示并以 exit 2 结束 |
+
+### Running the Pota CLI
+
+每次 session 开始时都会输出一行 `Pota CLI:`，其中是该 host plugin 副本里 `scripts/pota.mjs` 的绝对路径，agent 用这个路径运行 Pota 命令。`<pluginRoot>` 是那个 `scripts` 目录的上级目录；host 安装新版本时路径会改变。本 README 中的 `pota <command>` 指 `node "<pluginRoot>/scripts/pota.mjs" <command>`。
+
 ## Complexity Triage
 
 每个 implementation task 都先经过 complexity triage，然后才应用 agent、plugin 或 delegated workflow guidance。triage 根据 repository exploration、expected change scope 和 risk signals 判断，不向用户询问可发现的信息。
@@ -77,33 +168,10 @@ root files 保持简短，细节移到 `docs/` 下，让 agents 只读取当前�
 
 ## Commands
 
-发布后的 package 可以通过 `bunx` 或全局安装的 `pota` commands 执行。
+下面的 `pota <command>` 指用 session start 的 `Pota CLI:` 行中的路径运行的 `node "<pluginRoot>/scripts/pota.mjs" <command>`(见 [Running the Pota CLI](#running-the-pota-cli))。
 
-```sh
-bunx @comento/pota-harness@latest install
-bunx @comento/pota-harness@latest upgrade
-bunx @comento/pota-harness@latest doctor
-bunx @comento/pota-harness@latest uninstall
-bunx @comento/pota-harness@latest toolcheck
-```
-
-全局安装后也可以使用短命令。
-
-```sh
-bun add -g @comento/pota-harness
-pota install
-pota upgrade
-pota doctor
-pota uninstall
-pota toolcheck
-pota auto-upgrade status
-```
-
-- `pota install [--hosts all|codex,claude,antigravity]`: 以事务方式安装 custom marketplace source、versioned runtime、Pota-owned config sections 和当前 host mirrors。 canonical runtime 位于 `~/.pota/install/`，其余内容只为所选 host 安装。未提供 `--hosts` 时，在 terminal 中首次安装会询问 host，非交互运行和 CI 会安装所有 host。
-- `pota upgrade [--hosts all|codex,claude,antigravity]`: staged validation 后只替换 ownership manifest 中未修改的 entry，失败时 rollback。 除非用 `--hosts` 修改，否则沿用已记录的 hosts，并更新仍为其他版本的 Claude Code plugin cache。 已安装版本比当前 CLI 更新时，`install` 和 `upgrade` 不做任何更改并拒绝；如仍要安装当前 CLI 的版本，加 `--allow-downgrade`。
-- `pota doctor`: 只读验证 ownership digests、effective Codex features、真实 plugin status 和 runtime locators。 第一行输出 `Hosts: <ids>`，只检查所选 host(包括 `Claude plugin cache version`)。
-- `pota uninstall`: 先将 config 以外的所有 ownership manifest entry 与 installed digest 对照，只要有任何 managed artifact 被修改或删除，就不做任何更改并拒绝整个 uninstall。否则删除或恢复 managed entry 和 retained runtimes，清理空的 managed scaffold，preserve unmanaged target 及其父目录，并 rollback commit 前的失败。 同时删除 `~/.pota/update/`，保留 `~/.pota/config.json` 和 `~/.pota/projects/`。legacy layout 的安装不经迁移直接原地删除。
-- `pota auto-upgrade status|on|off|run`: `status` 以 JSON 输出设置、已安装版本、上次检查时间和待显示的 notice；`on`/`off` 将 `autoUpgrade` 写入 `~/.pota/config.json` 并输出同样的报告；`run` 忽略 24 小时周期和 backoff，立即检查 npm。exit 0 表示成功，1 表示执行错误或运行失败，2 表示用法错误。
+- `pota doctor [--json]`: 对此 plugin 副本和 `~/.pota` 的只读诊断：版本、`pluginRoot`、Node.js(18 或更高)、`POTA_HOME` 是否可写、此副本的 4 个版本表面是否一致、必需文件、1.x 安装(`none`、`present <version>` 或 `blocked <reason>`)、每个 host 的最后一次删除报告(含保留路径和手动命令)以及 comment-checker 状态。不与其他 host 的副本比较。检查失败时 exit 1，用法错误 exit 2。
+- `pota migrate status|run [--host claude|codex|antigravity] [--all] [--dry-run] [--json]`: 手动执行 1.x 安装的删除。`status` 显示运行时会做什么以及最后的报告；`run` 需要 `--host <host>` 或 `--all`(所有 host，包括尚未安装 plugin 的 host)，`--dry-run` 只显示计划而不做任何改变。删除被拒绝时 exit 1，用法错误 exit 2。
 - `pota toolcheck`: 检测 repository stacks 和 required tools；只执行已批准的 supported installer，否则返回 `installer-unavailable`。
 - `pota cleanup --root <repo>`: 默认只读报告 legacy project-local `.pota` residue。`--yes` 将 valid active state 迁移/协调到 user-home store，只删除 known state/lock/tool residue，保留 unknown files，并且仅在目录为空时清理目录。
 - `pota memory check|index [--root <repo>]`: `check` 对照 `MEMORY.md` 与 `docs/memory/*.md` 并输出一个 JSON 报告；存在 unindexed notes、dead links、duplicates、stale summaries、summary 中的控制字符或 unsafe paths 时 exit 1，warnings 仅在 `--strict` 下失败。条目是 `## Domain Knowledge` 下的列表行(没有该 section 的旧文件则为所有列表行)；其他 section 中的 note 链接只是提及，`index` 不会改写。`index` 添加缺失的 notes，`Summary:` 变化时只替换链接后的 summary 部分(含多个链接的行保持原样)；只删除该 section 内完全匹配的 Pota placeholder 行，不删除条目或 dead links，其余内容逐字节保留。可用 `--dry-run` 预览。插入位置位于未闭合的 code fence 内时，`index` 不写入任何内容，并以 `unclosed-fence` exit 1。用法错误 exit 2；不带子命令的 `pota memory` 仍输出原有指引。
@@ -114,37 +182,24 @@ pota auto-upgrade status
 - `pota-work`: 执行当前 `PLAN.md` 中的下一个 module task，并收集两个 verification gates。
 - `pota-review`: 根据 plan、memory 和 evidence review completed tasks。
 
-custom marketplace lifecycle 将 source 与 versioned runtime 分离。每次 commit 前执行 staged validation，ownership manifest 绑定全部 managed digests，失败时执行 reverse-order rollback。modified 或 unmanaged artifacts 会 preserve 并报告 conflict。Pota 只修改自身 TOML sections，不强制 public feature/agent settings。
+Pota 只在 `POTA_HOME`(默认 `~/.pota`)下写入，从不写入自己的 plugin 副本。Codex 把 hook 批准绑定到 plugin 内容，修改了自身的副本会失去批准。host 的 plugin 文件只由 host 自己的 plugin 命令安装、更新和删除。
 
-Clean uninstall 仅在所有 managed scaffold directory 均为空时删除 `~/.pota/install/` 和 Codex cache root `$CODEX_HOME/plugins/cache/pota`，并保留任何 unmanaged content。它不会自动删除 source repository、repository `MEMORY.md`/`PLAN.md`、user-home Pota goal state、全局 `@comento/pota-harness` package、package-manager cache，或当前 ownership manifest 之外的 legacy backup/settings。
+## Pota Home And Settings
 
-Codex 使用 `skills/` 和 `commands/`。Claude Code 使用 `.claude/` 下的 mirrored commands 和 agent definitions。Antigravity 使用 `.agents/workflows` 和 global skills mirrors。
-
-## Install Layout And Auto-Upgrade
-
-Pota 将安装内容放在 `POTA_HOME`(默认 `~/.pota`)下。各 host 的路径仍分别由 `CODEX_HOME`、`CLAUDE_HOME`、`ANTIGRAVITY_HOME`、`ANTIGRAVITY_CLI_HOME`、`CODEX_CONFIG_PATH` 决定。
+Pota 把数据放在 `POTA_HOME`(默认 `~/.pota`)下，由所有 host 的 plugin 副本共享。
 
 ```text
 ~/.pota/
-  install/                  lifecycle 管理的文件
-    lifecycle.json          ownership manifest (schema 2: hosts, origin, retained runtimes)
-    lifecycle.lock, transaction.json, transactions/
-    runtime/<version>/      所有 runtime locator 和 Claude Code hooks 使用的 canonical runtime
-    codex/                  Codex local marketplace source
-    claude/                 Claude Code local marketplace
   projects/                 goal state
-  config.json               用户设置 ("autoUpgrade", "commentChecker", "modelCeiling")
-  update/                   auto-upgrade 状态
+  config.json               user settings ("commentChecker", "modelCeiling")
   tools/comment-checker/    comment-checker 二进制(固定 release)
-$CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex plugin cache copy (仅在选择 Codex 时)
+  migration/                1.x 安装删除的报告和状态
+  hosts/antigravity/        Antigravity session 文件(等待下一个 prompt 的 hook 消息)
+  install/, update/         1.x npm 安装留下的内容，删除完成后消失
 ```
 
-- Hosts: 只有 `install` 和 `upgrade` 接受 `--hosts`，值为 `all` 或 `codex`、`claude`、`antigravity` 的逗号列表。选择会记录在 ownership manifest 中，`upgrade`、`doctor`、`uninstall` 都遵循它。用 `pota upgrade --hosts <list>` 修改；被移除 host 的 managed file 若已被修改则拒绝。交互式 prompt(全部(默认)、仅 Claude Code、仅 Codex、仅 Antigravity、逗号列表)只在尚未安装任何内容时出现。
-- 保留期: 改变版本的 upgrade 会把上一个 canonical runtime 和 Codex cache copy 保留 3 天(每类最多 3 个)，让 upgrade 前启动的 session 继续工作。过期的由下一次 install/upgrade 删除，uninstall 会全部删除。不低于新版本的 Codex cache copy 不会保留，因为 Codex 会加载 cache 中最高的版本。
-- Claude Code plugin cache: 若仍为其他版本，`pota upgrade` 会用 `claude plugin marketplace update pota` 和 `claude plugin update pota@pota --scope user` 更新。更新失败时保留已升级的安装，输出手动完成的命令并以 exit 1 结束。
-- Auto-upgrade: 默认开启。`SessionStart` 每 24 小时最多一次(install 或 upgrade 后 24 小时内不检查)启动一个 detached process：从 npm 读取最新的 `@comento/pota-harness` 版本，以该确切版本加 `--ignore-scripts` 安装到 `~/.pota/update/stage/` 并验证，然后运行该 package 的 `pota-lifecycle.mjs upgrade --auto`。包括 major 在内的所有新版本都会应用，从不降级。下一个 `SessionStart` 用一行只提示一次结果(`updated`、`failed`、`manual`)。从 git checkout 安装(`origin: "checkout"`)或从 source checkout 运行时不会执行。
-- 关闭: `pota auto-upgrade off`、`POTA_AUTO_UPGRADE=0`(也可用 `false`、`off`、`no`)，或在 `~/.pota/config.json` 中设置 `"autoUpgrade": false`。无法读取的 `config.json` 也视为关闭。状态和上次运行日志位于 `~/.pota/update/`。
-- 注释检查: 编辑成功后(Claude Code `Write`/`Edit`/`MultiEdit`、Codex `apply_patch` 和编辑工具)，PostToolUse hook 用 [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker)(MIT)检查改动内容。报告多余注释时返回 `decision: "block"`，让代理删除注释或说明保留的理由。不新增 npm 依赖: `pota install` 和 `pota upgrade`(包括自动升级)在安装 commit 之后下载当前平台(darwin/linux x64 与 arm64、windows x64)的固定 v0.8.2 release，校验固定的 SHA256，用系统 `tar` 解压到 `~/.pota/tools/comment-checker/`，并用一行输出结果。下载失败时安装和 exit code 保持不变，已安装 runtime 的 `SessionStart` 会在分离进程中按 backoff 重试。下载成功之前编辑不经检查直接通过，检查器出错或检查超过 7 秒也会通过。`pota doctor` 用一行显示其状态，`pota uninstall` 会删除它。`POTA_COMMENT_CHECKER=0`(也可用 `false`、`off`、`no`)或 `~/.pota/config.json` 中的 `"commentChecker": false` 同时关闭检查和下载。
+- 1.x 设置: 忽略 `config.json` 中的 `"autoUpgrade"`；Pota 不再自行升级。
+- 注释检查: 编辑成功后(Claude Code `Write`/`Edit`/`MultiEdit`、Codex `apply_patch` 和编辑工具)，PostToolUse hook 用 [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker)(MIT)检查改动内容；报告不必要的注释时返回 `decision: "block"`，让 agent 删除注释或说明其必要性。不添加 npm 依赖: host hook 的 session start 在分离进程中下载当前平台(darwin/linux x64 和 arm64、windows x64)的固定 v0.8.2 release，校验固定的 SHA256，并用系统 `tar` 解压到 `~/.pota/tools/comment-checker/`。下载失败时，之后的 session start 会按 backoff 重试。下载成功前编辑不经检查直接通过，检查器出错或检查超过 7 秒也会通过。`pota doctor` 用一行显示其状态；`POTA_COMMENT_CHECKER=0`(也可用 `false`、`off`、`no`)或 `~/.pota/config.json` 中的 `"commentChecker": false` 同时关闭检查和下载。
 - main model 检查: 当会话的 main model 低于 stronger tier 时,`SessionStart` 会添加一行 `Pota main model:` 和一次性通知。此时计划/分诊和最终评审必须委派给 stronger tier 或更高并记录(评审使用 `goal assign … --kind review`),否则 `triage-plan` 的完成和 `goal finish` 会被拒绝;绕过方式是 `--allow-main-model <reason>`。model 值缺失或无法识别时不生效。设置 `POTA_MAIN_MODEL_GATE=0` 可关闭。
 - model ceiling: 当账户不能或不打算使用更高的 tier 时(订阅等级、组织策略、usage credits),设置 `POTA_MODEL_CEILING=stronger`(或 `balanced`;也可以写 `opus`、`sonnet` 等 model 名),或在 `~/.pota/config.json` 中写入 `"modelCeiling": "stronger"`。环境变量优先,`config.json` 是所有 hook 和 CLI 调用都会读取的同一位置。设置后 `SessionStart` 会添加一行 `Pota model ceiling:`,高于 ceiling 的 tier 使用 ceiling tier 的 model,Heavy 设计门禁接受该 model,main model 检查以应用 ceiling 后的 stronger tier 为准。未设置时行为不变;无效值不应用 ceiling 并给出提示。
 - 请求契约与 steering: Light 和 Heavy Path 计划包含 `## Request Brief`(原始请求、解读的结果、范围、过往记录参考(`Prior records`,`pota plan steering`)、假设、隐含需求、未决问题、steering 记录),填写完成之前,除非传入 `--allow-no-request-brief <reason>`,否则 `triage-plan` 的完成会被拒绝。用户的更正、补充和方向变更用 `goal steer --kind <correction|addition|redirect> --reason <text>` 记录,task 发生变化时用 `goal replan --steer <correction|addition|redirect|none> --reason <text>` 记录;第二次 steering 或 redirect 还需要重写 `Current request (as of S<n>)`。
@@ -159,12 +214,14 @@ Claude Code 桌面版会把当前 Pota goal 显示为按 wave 分列的 DAG 面�
 
 ## Antigravity Compatibility
 
-Antigravity 支持通过 `/workflow-name` 调用的 `SKILL.md` based Agent Skills and Workflows。Pota 会为该 surface 安装这些 paths。
+Pota 支持 Antigravity CLI(`agy`)，不支持 Antigravity IDE。plugin 的 manifest 是根目录的 `plugin.json`，hooks 是根目录的 `hooks.json`，hook 在 plugin 目录中运行 `scripts/pota-state-antigravity.mjs`。这个 adapter 把 Antigravity 的 events 对应到 Pota 的 hooks：
 
-- Antigravity IDE: `~/.gemini/config/skills/pota-*/SKILL.md`。
-- Antigravity CLI: `~/.gemini/antigravity-cli/skills/pota-*.md` 下的扁平 skill 文件。
+- `SessionStart` 加入 session capsule 和 `Pota CLI:` 行。
+- Antigravity 没有 prompt event，因此每个 prompt 的第一个 `PreInvocation` 加入 prompt context。
+- `write_to_file`、`replace_file_content`、`multi_replace_file_content` 的 `PostToolUse` 运行 comment checker 和 goal 提醒，结果在下一个 `PreInvocation` 加入。
+- 活动 goal 还有未完成的 task 时，`Stop` 让 agent 继续工作。没有 `SubagentStop`。
 
-Codex-only hooks 不会移植到 Antigravity。相同的 planning、memory、complexity triage 和 two-gate verification procedures 会通过 Skills 和 Workflows 运行。设置 `ANTIGRAVITY_HOME` 或 `ANTIGRAVITY_CLI_HOME` 可以覆盖 paths。
+skills 以 `/pota-plan`、`/pota-work`、`/pota-review`、`/pota-memory` 调用；workflows 不是 Antigravity plugin 的组成部分。adapter 依据 Antigravity 的 hook 文档实现，在真实 `agy` session 中的行为尚未验证。
 
 ## Locale Policy
 
