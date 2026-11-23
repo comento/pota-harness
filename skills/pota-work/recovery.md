@@ -27,4 +27,4 @@ node "<pluginRoot>/scripts/pota.mjs" goal cancel --quiet --root "<repoRoot>"
 
 - When a hook reports that another session owns the goal and this session continues that same work, take ownership with `goal claim --quiet --root "<repoRoot>" --session "<session-id-shown-by-hook>"`. Never guess or invent a session ID.
 - If the plan task, persisted current task, and worker assignment disagree, or a required reference is missing, unreadable, or inconsistent, do not edit, delegate, record completion evidence, or complete work; report a blocker to the orchestrator.
-- If the shared runtime or locator is missing, unreadable, or inconsistent, stop every dependent mirror and recover with published/global `pota doctor` followed by `pota upgrade`; do not use another mirror as a repair source.
+- If a `Pota CLI:` path stops working mid-session (`Cannot find module`), the host updated or removed that plugin copy: restart the session so SessionStart prints the new prefix; if it still fails, reinstall the plugin with the host's plugin command. No `Pota CLI:` line on Codex usually means Pota's hooks are not approved: ask the user to approve them in `/hooks`.

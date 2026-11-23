@@ -1,0 +1,384 @@
+{
+  "schemaVersion": 2,
+  "plugin": "pota",
+  "version": "1.4.0",
+  "transactionId": "ae3f061b-bcee-42b1-b180-257b51b8ea30",
+  "installedAt": "2026-11-23T02:17:20.831Z",
+  "origin": "package",
+  "hosts": [
+    "codex",
+    "claude",
+    "antigravity"
+  ],
+  "targets": [
+    {
+      "id": "runtime",
+      "phase": "core",
+      "path": "<HOME>/.pota/install/runtime/1.4.0",
+      "type": "tree",
+      "installedDigest": "sha256:ff8bb9abc74b9bad2e0dfc05669f538817678a1b28849c5e472bd34c82b92091",
+      "previous": null
+    },
+    {
+      "id": "codex-source",
+      "phase": "codex",
+      "path": "<HOME>/.pota/install/codex/plugins/pota",
+      "type": "tree",
+      "installedDigest": "sha256:ff8bb9abc74b9bad2e0dfc05669f538817678a1b28849c5e472bd34c82b92091",
+      "previous": null
+    },
+    {
+      "id": "codex-runtime",
+      "phase": "codex",
+      "path": "<HOME>/.codex/plugins/cache/pota/pota/1.4.0",
+      "type": "tree",
+      "installedDigest": "sha256:ff8bb9abc74b9bad2e0dfc05669f538817678a1b28849c5e472bd34c82b92091",
+      "previous": null
+    },
+    {
+      "id": "marketplace",
+      "phase": "codex",
+      "path": "<HOME>/.pota/install/codex/.agents/plugins/marketplace.json",
+      "type": "file",
+      "installedDigest": "sha256:45a1e85e3ff9394d83fae2e9022b0ee66661dffd9ca39fe637172b253f1d7a1c",
+      "previous": null
+    },
+    {
+      "id": "claude-runtime",
+      "phase": "claude",
+      "path": "<HOME>/.claude/pota/runtime.json",
+      "type": "file",
+      "installedDigest": "sha256:32dc5948ac0e028e6383cc446ba1c16416ea93f3254da7d406f5a9926e657f35",
+      "previous": null
+    },
+    {
+      "id": "claude-command-install",
+      "phase": "claude",
+      "path": "<HOME>/.claude/commands/pota-install.md",
+      "type": "file",
+      "installedDigest": "sha256:320ceada90f4f035258d867e86c685a941c395b9dc40c844e5f4c4de1f4a85f6",
+      "previous": null
+    },
+    {
+      "id": "claude-command-upgrade",
+      "phase": "claude",
+      "path": "<HOME>/.claude/commands/pota-upgrade.md",
+      "type": "file",
+      "installedDigest": "sha256:83e6fdd1247f520675c850fcff22ddc2baa4c24794384dbe1006996e08a10eb0",
+      "previous": null
+    },
+    {
+      "id": "claude-command-doctor",
+      "phase": "claude",
+      "path": "<HOME>/.claude/commands/pota-doctor.md",
+      "type": "file",
+      "installedDigest": "sha256:d23671cd313cf82afe5a79a733976e2ea86bde1d63c00c763ecb8093d2139ed5",
+      "previous": null
+    },
+    {
+      "id": "claude-command-uninstall",
+      "phase": "claude",
+      "path": "<HOME>/.claude/commands/pota-uninstall.md",
+      "type": "file",
+      "installedDigest": "sha256:06f2797a2e74d4722cdbdbd3f6b83da42f19a8ad6d19c8bca125a32139e1253d",
+      "previous": null
+    },
+    {
+      "id": "claude-command-memory",
+      "phase": "claude",
+      "path": "<HOME>/.claude/commands/pota-memory.md",
+      "type": "file",
+      "installedDigest": "sha256:05237e7a91362b85e70d409de59ae65ebb986993ebb6f84feea024f6f8641732",
+      "previous": null
+    },
+    {
+      "id": "claude-command-plan",
+      "phase": "claude",
+      "path": "<HOME>/.claude/commands/pota-plan.md",
+      "type": "file",
+      "installedDigest": "sha256:9c23e009d04151c97410868b07e1a1c231c31ad3ddd979f119a39f6bcf7e4b21",
+      "previous": null
+    },
+    {
+      "id": "claude-command-work",
+      "phase": "claude",
+      "path": "<HOME>/.claude/commands/pota-work.md",
+      "type": "file",
+      "installedDigest": "sha256:6db4f6f2b7bf5d5a103f8703a6fb3fc7742dad8a9700d868f64b100ec5ad5167",
+      "previous": null
+    },
+    {
+      "id": "claude-command-review",
+      "phase": "claude",
+      "path": "<HOME>/.claude/commands/pota-review.md",
+      "type": "file",
+      "installedDigest": "sha256:d1a7567dfc3c8cf833dc33a48303904f836b211274dd85fb887eaeb4d2db7756",
+      "previous": null
+    },
+    {
+      "id": "claude-command-toolcheck",
+      "phase": "claude",
+      "path": "<HOME>/.claude/commands/pota-toolcheck.md",
+      "type": "file",
+      "installedDigest": "sha256:bff6ac134421daba286383a9101cf985c21e999972d06c2de828fea939f073a2",
+      "previous": null
+    },
+    {
+      "id": "claude-agent-explorer",
+      "phase": "claude",
+      "path": "<HOME>/.claude/agents/pota-explorer.md",
+      "type": "file",
+      "installedDigest": "sha256:0e1ee408723a38fd14fa3d21b2f9851d0be7ff1b8e0b0b1bb03c58f085cc9102",
+      "previous": null
+    },
+    {
+      "id": "claude-agent-worker",
+      "phase": "claude",
+      "path": "<HOME>/.claude/agents/pota-worker.md",
+      "type": "file",
+      "installedDigest": "sha256:544fb5527028170a0acd3f3a9eb8cba22600444892f2e27a0cc3308212db495c",
+      "previous": null
+    },
+    {
+      "id": "claude-plugin",
+      "phase": "claude",
+      "path": "<HOME>/.pota/install/claude",
+      "type": "tree",
+      "installedDigest": "sha256:8e960aee79ea916f87d6eeadf85bf7c76ffb546c91415cf8339b581aece92a73",
+      "previous": null
+    },
+    {
+      "id": "ide-runtime",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/pota/runtime.json",
+      "type": "file",
+      "installedDigest": "sha256:32dc5948ac0e028e6383cc446ba1c16416ea93f3254da7d406f5a9926e657f35",
+      "previous": null
+    },
+    {
+      "id": "ide-skill-pota-memory",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/skills/pota-memory",
+      "type": "tree",
+      "installedDigest": "sha256:71e2756b9ede558ad960bc82eda2766c7b9923d3bc4162fe4f3d3ce689485a26",
+      "previous": null
+    },
+    {
+      "id": "ide-skill-pota-plan",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/skills/pota-plan",
+      "type": "tree",
+      "installedDigest": "sha256:d50a2a8f03e9244ce1cb06b4a8a99cc293d69a82a6d7224e01c05937743ea197",
+      "previous": null
+    },
+    {
+      "id": "ide-skill-pota-work",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/skills/pota-work",
+      "type": "tree",
+      "installedDigest": "sha256:0c27c0ab96bf1ad44a68cc23b27c041073c612ac2da795090cc3f6dcfc718740",
+      "previous": null
+    },
+    {
+      "id": "ide-skill-pota-review",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/skills/pota-review",
+      "type": "tree",
+      "installedDigest": "sha256:1d21042f8029ee2234105841695f3bed3f495c8ea8da5df5d4c5f04fa972dde3",
+      "previous": null
+    },
+    {
+      "id": "ide-workflow-install",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/workflows/pota-install.md",
+      "type": "file",
+      "installedDigest": "sha256:753939b528ce4182d33e3248de99348b5d9e494a43093b93e890e3acdf54a071",
+      "previous": null
+    },
+    {
+      "id": "ide-workflow-upgrade",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/workflows/pota-upgrade.md",
+      "type": "file",
+      "installedDigest": "sha256:34820c744787dee792f9c83a3a19fae2e4287f26264e827f7aec25f7bb9aaa43",
+      "previous": null
+    },
+    {
+      "id": "ide-workflow-doctor",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/workflows/pota-doctor.md",
+      "type": "file",
+      "installedDigest": "sha256:e0ed904e2b1b21682b1ee43959b2948dc4bcfaa25bb5c6fe71e20390328c8d20",
+      "previous": null
+    },
+    {
+      "id": "ide-workflow-uninstall",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/workflows/pota-uninstall.md",
+      "type": "file",
+      "installedDigest": "sha256:741a9a4df2dfcaa7e6164647a9433606337a1d2b793cb57520e2524961285c88",
+      "previous": null
+    },
+    {
+      "id": "ide-workflow-memory",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/workflows/pota-memory.md",
+      "type": "file",
+      "installedDigest": "sha256:b323d80666d7127149210d91716f06387cf8de5b1aca7957c177b939184458bb",
+      "previous": null
+    },
+    {
+      "id": "ide-workflow-plan",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/workflows/pota-plan.md",
+      "type": "file",
+      "installedDigest": "sha256:1763dc0cc5e67562fadff1912442bf915652aad3f9746184e06e463777531e25",
+      "previous": null
+    },
+    {
+      "id": "ide-workflow-work",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/workflows/pota-work.md",
+      "type": "file",
+      "installedDigest": "sha256:f1564a8ea0f72b5796f0efd067dda3172c4e37ef0347cc9adc5553db044f58f8",
+      "previous": null
+    },
+    {
+      "id": "ide-workflow-review",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/workflows/pota-review.md",
+      "type": "file",
+      "installedDigest": "sha256:7a5e87e11c5337318131f7f2ead56c7eeaafd5bef4a867e00d4c91ca5cf155e3",
+      "previous": null
+    },
+    {
+      "id": "ide-workflow-toolcheck",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/config/workflows/pota-toolcheck.md",
+      "type": "file",
+      "installedDigest": "sha256:def8f6a8d8ed6a787438b7533d59dbaded9120b956d99f21c01179120e1b3534",
+      "previous": null
+    },
+    {
+      "id": "cli-runtime",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/pota/runtime.json",
+      "type": "file",
+      "installedDigest": "sha256:32dc5948ac0e028e6383cc446ba1c16416ea93f3254da7d406f5a9926e657f35",
+      "previous": null
+    },
+    {
+      "id": "cli-skill-pota-memory",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/skills/pota-memory.md",
+      "type": "file",
+      "installedDigest": "sha256:a885259367333a58eda03545f1ababe02d191d88b80030618cc8e3e1d7b430b1",
+      "previous": null
+    },
+    {
+      "id": "cli-skill-pota-plan",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/skills/pota-plan.md",
+      "type": "file",
+      "installedDigest": "sha256:5b219a69507f56afc6db02768d32f73769f0fb3c437d2eba98f9c8e6a43a55d5",
+      "previous": null
+    },
+    {
+      "id": "cli-skill-pota-work",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/skills/pota-work.md",
+      "type": "file",
+      "installedDigest": "sha256:95080cca9766126c1a13ff1e4fb99213481201657439086fb67d74ea174f3d2f",
+      "previous": null
+    },
+    {
+      "id": "cli-skill-pota-review",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/skills/pota-review.md",
+      "type": "file",
+      "installedDigest": "sha256:21c85e7b3809170e023ccb70f63bb820da48e1ac9644a310a282bfc4363547f1",
+      "previous": null
+    },
+    {
+      "id": "cli-workflow-install",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/workflows/pota-install.md",
+      "type": "file",
+      "installedDigest": "sha256:753939b528ce4182d33e3248de99348b5d9e494a43093b93e890e3acdf54a071",
+      "previous": null
+    },
+    {
+      "id": "cli-workflow-upgrade",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/workflows/pota-upgrade.md",
+      "type": "file",
+      "installedDigest": "sha256:34820c744787dee792f9c83a3a19fae2e4287f26264e827f7aec25f7bb9aaa43",
+      "previous": null
+    },
+    {
+      "id": "cli-workflow-doctor",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/workflows/pota-doctor.md",
+      "type": "file",
+      "installedDigest": "sha256:aed1cac217c405ccd30c52a7c193659906ba8cfdb7f0983cb9a5b2d02b8f4080",
+      "previous": null
+    },
+    {
+      "id": "cli-workflow-uninstall",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/workflows/pota-uninstall.md",
+      "type": "file",
+      "installedDigest": "sha256:aed5ac438352534eed645fef36ed4ae476da8582fec2f6c2bf2f34c505f45d9c",
+      "previous": null
+    },
+    {
+      "id": "cli-workflow-memory",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/workflows/pota-memory.md",
+      "type": "file",
+      "installedDigest": "sha256:2baf71c50aca8b791f92e6906bd89f6209f31a50711bcbf9a6df3caa8c2cfe8e",
+      "previous": null
+    },
+    {
+      "id": "cli-workflow-plan",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/workflows/pota-plan.md",
+      "type": "file",
+      "installedDigest": "sha256:1ecf5dddcf8978e6629968b30ba09917a1e791316e3cf0650c00577671d6dade",
+      "previous": null
+    },
+    {
+      "id": "cli-workflow-work",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/workflows/pota-work.md",
+      "type": "file",
+      "installedDigest": "sha256:4c9d53ba81dd6960757e697d185d5590b82a42335e60ace701ee1a0779977c50",
+      "previous": null
+    },
+    {
+      "id": "cli-workflow-review",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/workflows/pota-review.md",
+      "type": "file",
+      "installedDigest": "sha256:ed2936d0a9f2e0f536915fb2cbc678984127bab3832206acaa73d7b4be3f001a",
+      "previous": null
+    },
+    {
+      "id": "cli-workflow-toolcheck",
+      "phase": "antigravity",
+      "path": "<HOME>/.gemini/antigravity-cli/workflows/pota-toolcheck.md",
+      "type": "file",
+      "installedDigest": "sha256:5dc7b0144385da2f37142843b3212ea1f35b26971ee3280bc7c94c2121306b03",
+      "previous": null
+    },
+    {
+      "id": "codex-config",
+      "phase": "config",
+      "path": "<HOME>/.codex/config.toml",
+      "type": "config",
+      "installedDigest": "sha256:7c914ba03a71a548c39486a07d97cb9937b5ac61215e745fa1b25af456cc588b",
+      "previous": null
+    }
+  ],
+  "retained": []
+}

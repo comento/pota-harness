@@ -17,13 +17,13 @@ When subagent tools are available, each agent may recursively delegate bounded s
 
 ## Runtime Location
 
-Resolve Pota's read-only runtime from `references/pota-runtime.json` next to this `SKILL.md`. Its `pluginRoot` contains Pota's `scripts/`, `templates/`, commands, agents, and model guidance. In a source checkout where the locator does not exist, resolve the plugin root from this `SKILL.md` location (`../..`). Never look for Pota runtime files in the target repository or derive the plugin root from the current working directory. If the shared runtime or locator is missing, unreadable, or inconsistent, stop every dependent mirror and recover from the published/global package with `pota doctor` followed by `pota upgrade`; do not use another mirror as a repair source.
+`pluginRoot` is this session's Pota plugin copy: the parent of the `scripts` directory in the session-start `Pota CLI:` line; without that line, this file's `../..` (then tell the user Pota hooks are inactive). It contains Pota's `scripts/`, `templates/`, skills, and model guidance. Never look for Pota runtime files in the target repository or derive `pluginRoot` from the current working directory. If `pluginRoot` is missing or unreadable, stop and have the user reinstall or update the Pota plugin with the host's plugin command; never repair from another copy.
 
 Keep the target repository root separate. Pass it explicitly with `--root <repoRoot>` when invoking the installed runtime. Repository artifacts include `MEMORY.md`, `PLAN.md`, `docs/memory/`, and `docs/plan/`; runtime goal state lives only under the user-home Pota directory.
 
 ## Procedure
 
-1. Run `node "<pluginRoot>/scripts/pota.mjs" init --root "<repoRoot>"` through the resolved Pota runtime. If the runtime is unavailable, ensure `MEMORY.md`, `PLAN.md`, `docs/memory`, and `docs/plan` directly and report that `pota doctor` or `pota upgrade` is required.
+1. Run `node "<pluginRoot>/scripts/pota.mjs" init --root "<repoRoot>"` through the resolved Pota runtime. If the runtime is unavailable, ensure `MEMORY.md`, `PLAN.md`, `docs/memory`, and `docs/plan` directly and report that the Pota plugin needs reinstalling.
 2. Explore the repository before asking the user.
 3. Delegate when it materially improves speed or quality instead of asking the user.
    - `explorer`: read-only domain discovery, boundaries, invariants, policies, contradictions, and stale facts when available.

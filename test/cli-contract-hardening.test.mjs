@@ -4,11 +4,15 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { message } from "../scripts/pota.mjs";
+import { DOCTOR_USAGE } from "../scripts/pota-doctor.mjs";
+import { MIGRATION_USAGE } from "../scripts/pota-legacy-migration.mjs";
 
 const rootCli = resolve("scripts", "pota.mjs");
 const toolcheckCli = resolve("scripts", "pota-toolcheck.mjs");
 const { version } = JSON.parse(await readFile("package.json", "utf8"));
-const usage = "Usage: pota install|upgrade|doctor|uninstall|auto-upgrade|cleanup|init|memory|plan|work|review|toolcheck|goal|task\n";
+const commandList = "pota doctor|migrate|cleanup|init|memory|plan|work|review|toolcheck|goal|task";
+const usage = `Usage: ${commandList}\n`;
 const toolcheckUsage = "Usage: pota toolcheck [--root PATH] [--json] [--install --yes]\n";
 
 function run(script, args, options = {}) {
@@ -187,7 +191,22 @@ async function withIsolatedCli(operation) {
     const home = join(sandbox, "home");
     const stateHome = join(sandbox, "pota-home");
     await Promise.all([mkdir(root), mkdir(home), mkdir(stateHome)]);
-    const env = { ...process.env, LC_ALL: "en_US.UTF-8", HOME: home, POTA_HOME: stateHome };
+    // Every path the legacy migration reads points into the sandbox, so `pota migrate` can never reach a real install.
+    const env = {
+      ...process.env,
+      LC_ALL: "en_US.UTF-8",
+      HOME: home,
+      USERPROFILE: home,
+      POTA_HOME: stateHome,
+      CLAUDE_HOME: join(home, ".claude"),
+      CLAUDE_CONFIG_DIR: join(home, ".claude"),
+      CODEX_HOME: join(home, ".codex"),
+      CODEX_CONFIG_PATH: join(home, ".codex", "config.toml"),
+      ANTIGRAVITY_HOME: join(home, ".gemini", "config"),
+      ANTIGRAVITY_CLI_HOME: join(home, ".gemini", "antigravity-cli"),
+      POTA_CLAUDE_CLI: join(sandbox, "no-claude-cli"),
+      POTA_COMMENT_CHECKER: "0",
+    };
     await operation({ root, home, stateHome, env });
   } finally {
     await rm(sandbox, { recursive: true, force: true });
@@ -225,42 +244,44 @@ test("init rejects unknown options with exit 2 and creates no files", async () =
   });
 });
 
-test("lifecycle commands accept only --hosts and --allow-downgrade on install and upgrade and keep the documented --help exception", async () => {
+test("removed npm installer commands print one pointer to the host plugin commands and exit 2", async () => {
   await withIsolatedCli(async ({ root, home, stateHome, env }) => {
-    const lifecycleEnv = {
-      ...env,
-      CODEX_HOME: join(home, ".codex"),
-      CLAUDE_HOME: join(home, ".claude"),
-      ANTIGRAVITY_HOME: join(home, ".gemini", "config"),
-      ANTIGRAVITY_CLI_HOME: join(home, ".gemini", "antigravity-cli"),
-      CODEX_CONFIG_PATH: join(home, ".codex", "config.toml"),
-      POTA_CLAUDE_CLI: "none",
-    };
-    for (const [args, message] of [
-      [["install", "--help"], "Lifecycle command install does not accept arguments: --help"],
-      [["upgrade", "--hosts", "all", "--help"], "Lifecycle command upgrade does not accept arguments: --help"],
-      [["doctor", "--hosts", "all"], "Lifecycle command doctor does not accept arguments: --hosts all"],
-      [["uninstall", "--hosts=claude"], "Lifecycle command uninstall does not accept arguments: --hosts=claude"],
-      [["install", "--hosts"], "Invalid --hosts value: missing"],
-      [["install", "--hosts="], "Invalid --hosts value: empty"],
-      [["upgrade", "--hosts", "gemini"], "Invalid --hosts value: gemini (unknown host gemini; use all or codex,claude,antigravity)"],
-      [["install", "--hosts", "claude,claude"], "Invalid --hosts value: claude,claude (duplicate host claude)"],
-      [["doctor", "--allow-downgrade"], "Lifecycle command doctor does not accept arguments: --allow-downgrade"],
-      [["uninstall", "--allow-downgrade"], "Lifecycle command uninstall does not accept arguments: --allow-downgrade"],
-      [["install", "--allow-downgrade", "--allow-downgrade"], "Lifecycle command install does not accept arguments: --allow-downgrade"],
-      [["upgrade", "--auto", "--allow-downgrade"], "--auto cannot be combined with --allow-downgrade"],
-    ]) {
-      assertExit(run(rootCli, args, { env: lifecycleEnv }), { status: 1, stdout: "", stderr: `Pota lifecycle error: ${message}\n` });
+    for (const command of ["install", "upgrade", "uninstall", "auto-upgrade"]) {
+      for (const args of [[command], [command, "--hosts", "all"], [command, "--help"]]) {
+        assertExit(run(rootCli, args, { env }), {
+          status: 2,
+          stdout: "",
+          stderr: `pota ${command} was removed in 2.0.0. Install or update Pota with your host's plugin command: https://github.com/comento/pota-harness#install\n`,
+        });
+      }
     }
-    assertExit(run(resolve("scripts", "pota-lifecycle.mjs"), [], { env: lifecycleEnv }), {
-      status: 0,
-      stdout: "Usage: pota install|upgrade [--hosts all|codex,claude,antigravity] [--allow-downgrade] | doctor | uninstall | toolcheck\n",
-      stderr: "",
-    });
     assert.deepEqual(await listTree(root), []);
     assert.deepEqual(await listTree(home), []);
     assert.deepEqual(await listTree(stateHome), []);
   });
+});
+
+test("doctor and migrate dispatch to their own scripts", async () => {
+  await withIsolatedCli(async ({ root, home, stateHome, env }) => {
+    assertExit(run(rootCli, ["doctor", "--help"], { env }), { status: 0, stdout: `${DOCTOR_USAGE}\n`, stderr: "" });
+    assertExit(run(rootCli, ["migrate", "--help"], { env }), { status: 0, stdout: `${MIGRATION_USAGE}\n`, stderr: "" });
+    assertExit(run(rootCli, ["migrate"], { env }), { status: 0, stdout: `${MIGRATION_USAGE}\n`, stderr: "" });
+    const missingHost = run(rootCli, ["migrate", "run"], { env });
+    assert.equal(missingHost.status, 2);
+    assert.equal(missingHost.stdout, "");
+    assert.match(missingHost.stderr, /^Pota migrate error: run requires --host <host> or --all\n/);
+    assert.deepEqual(await listTree(root), []);
+    assert.deepEqual(await listTree(home), []);
+    assert.deepEqual(await listTree(stateHome), []);
+  });
+});
+
+test("every locale's usage names the 2.0.0 command list", () => {
+  for (const locale of ["en_US", "ko_KR", "ja_JP", "zh_CN", "es_ES", "fr_FR", "de_DE", "pt_BR"]) {
+    const line = message("usage", locale);
+    assert.ok(line.endsWith(` ${commandList}`), `${locale}: ${line}`);
+    assert.doesNotMatch(line, /install|upgrade|uninstall|auto-upgrade/, locale);
+  }
 });
 
 test("goal and task --help print usage with the advisory criteria notice and exit 0 without reading state", async () => {

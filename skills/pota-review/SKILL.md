@@ -17,7 +17,7 @@ At the start and after compaction, restart, delegation, or handoff, restore cont
 
 When subagent tools are available, each agent may recursively delegate bounded review sub-tasks to subagents. Every child subagent reads project-root `MEMORY.md` when present and continues when absent, keeps the assigned scope, and preserves others' edits.
 
-Resolve any `pota://...` resource through `references/pota-runtime.json` next to this `SKILL.md` (or this skill's `../..` source root during development). Never look for Pota runtime resources in the target repository. If the shared runtime or locator is missing, unreadable, or inconsistent, stop every dependent mirror and recover from the published/global package with `pota doctor` followed by `pota upgrade`; do not use another mirror as a repair source.
+`pluginRoot` is this session's Pota plugin copy: the parent of the `scripts` directory in the session-start `Pota CLI:` line; without that line, this file's `../..` (then tell the user Pota hooks are inactive). Resolve any `pota://...` resource through `pluginRoot`. Never look for Pota runtime resources in the target repository. If `pluginRoot` is missing or unreadable, stop and have the user reinstall or update the Pota plugin with the host's plugin command; never repair from another copy.
 
 ## Procedure
 

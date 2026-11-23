@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { parseModelCeiling } from "./pota-model-tier.mjs";
 import { potaHome } from "./pota-paths.mjs";
-import { readJsonFile } from "./pota-update-state.mjs";
+import { readJsonFile } from "./pota-safe-fs.mjs";
 
 export const NO_MODEL_CEILING = Object.freeze({ ceiling: null, source: null, invalid: null });
 

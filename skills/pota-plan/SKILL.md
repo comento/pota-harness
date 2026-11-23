@@ -13,7 +13,7 @@ At the start and after compaction, restart, or handoff, restore context in this 
 
 ## Runtime Location
 
-Resolve the read-only runtime from `references/pota-runtime.json` next to this `SKILL.md` (its `pluginRoot`; in a source checkout without it, this file's `../..`). Never search the target repository for Pota files or derive `pluginRoot` from the cwd. If the runtime or locator is missing, unreadable, or inconsistent, stop every dependent mirror and recover with published/global `pota doctor` followed by `pota upgrade`; never repair from another mirror.
+`pluginRoot` is this session's Pota plugin copy: the parent of the `scripts` directory in the session-start `Pota CLI:` line; without that line, this file's `../..` (then tell the user Pota hooks are inactive). Never search the target repository for Pota files or derive `pluginRoot` from the cwd. If `pluginRoot` is missing or unreadable, stop and have the user reinstall or update Pota with the host's plugin command; never repair from another copy.
 
 Plans use logical IDs such as `pota://templates/work-plan.md`, resolved through `pluginRoot`. The session-start hook prints a ready prefix `Pota CLI: node "<abs>/scripts/pota.mjs" goal <command>`: copy it literally into every command and never store it in a shell variable (shell variables do not persist between tool calls). `--root` may be omitted when the cwd is inside the repository (it resolves via `HARNESS_REPO_ROOT`, else the nearest `.git` ancestor).
 
@@ -40,7 +40,7 @@ Record three triage checkpoints: request (provisional), planning (after explorat
 
 ## Procedure (Light and Heavy Path)
 
-1. Run `node "<pluginRoot>/scripts/pota.mjs" init --root "<repoRoot>"`. If unavailable, create `MEMORY.md`, `PLAN.md`, `docs/memory`, `docs/plan` and report that `pota doctor`/`pota upgrade` is needed.
+1. Run `node "<pluginRoot>/scripts/pota.mjs" init --root "<repoRoot>"`. If unavailable, create `MEMORY.md`, `PLAN.md`, `docs/memory`, `docs/plan` and report that the Pota plugin needs reinstalling.
 2. Read `MEMORY.md` and `PLAN.md` when present; pick related notes and past plans (`planning-rules.md`). A non-trivial implementation request authorizes the plan and goal even if the user never says "goal".
 3. Write the initial plan `docs/plan/<topic>.md` from `pota://templates/work-plan.md` plus its `PLAN.md` entry from the request and `MEMORY.md`: outcome, anticipated surfaces, stable roadmap, and `triage-plan` as first active task (investigation scope, toolcheck, Heavy criteria, update condition); mark it `initial: decision-complete for triage; not implementation-ready`.
 4. Before exploration, toolcheck, delegation, or a non-blocking question, call Codex `update_plan` first and then `create_goal` when available (main agent only; record unavailability; never claim unoccurred sync), then start the repository goal:

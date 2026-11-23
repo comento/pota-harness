@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { readFileSync, realpathSync } from "node:fs";
+import { realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   appendNotice, contextResult, foreignSessionContextResult, mainModelLine, mainModelNotice, modelCeilingInvalidNotice,
-  modelCeilingLine, prependContext, updateNoticeLine,
+  modelCeilingLine, prependContext,
 } from "./pota-state-context.mjs";
 import { continuationReason, stopAllowedMessage, stopHookOutput } from "./pota-state-hook.mjs";
 import { initializeProject } from "./pota-state-init.mjs";
@@ -15,17 +15,22 @@ import { NO_MODEL_CEILING, resolveModelCeiling } from "./pota-model-ceiling.mjs"
 import { classifyModel, effectiveTier, isBelowTier } from "./pota-model-tier.mjs";
 import { hookIndexSnapshot } from "./pota-index.mjs";
 import { resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
-import { sessionStartUpdate } from "./pota-update-state.mjs";
+import { migrationNoticeLine, sessionStartMigration } from "./pota-legacy-migration.mjs";
 import { checkPostToolUse, startFetchWhenNeeded } from "./pota-comment-checker.mjs";
 
 const recoverableGoalStatuses = new Set(["active", "paused", "blocked"]);
+const HOOK_HOSTS = new Set(["claude", "codex"]);
 
+// Host hooks call `pota-state.mjs <event> <host>`. A run without a known host (a manual run, an older hook file) still
+// gets its capsule but never starts the legacy migration or the comment-checker download.
 if (isCliEntry()) {
   const event = process.argv[2] ?? "manual";
+  const host = HOOK_HOSTS.has(process.argv[3]) ? process.argv[3] : "unknown";
   const payload = await readHookInput();
   // Only SessionStart (the capsule line) and a prompt that carries a model (the main-model floor) read the setting.
   const readsCeiling = event === "session-start" || (event === "user-prompt-submit" && payload?.model !== undefined);
-  const options = readsCeiling ? { payload, modelCeiling: resolveModelCeiling() } : { payload };
+  const options = { payload, host, commentChecker: { autoFetch: host !== "unknown" } };
+  if (readsCeiling) options.modelCeiling = resolveModelCeiling();
   const result = isHookEvent(event)
     ? await runStateResult(event, options).catch((error) => hookFailureResult(event, error))
     : await runStateResult(event, options);
@@ -45,7 +50,9 @@ export async function runStateResult(event = "manual", {
   root,
   locale = localeValue(),
   payload,
-  update = {},
+  // claude | codex | antigravity selects the legacy-migration host; the default never starts a migration.
+  host = "unknown",
+  migration = {},
   commentChecker = {},
   mainModel = {},
   // The library default never reads the environment, so a developer's ceiling cannot leak into in-process callers.
@@ -72,13 +79,13 @@ export async function runStateResult(event = "manual", {
       floor: effectiveTier("stronger", modelCeiling?.ceiling ?? null),
     });
     if (event !== "session-start") return result;
-    const withNotice = withUpdateNotice(result, ko, update);
-    startFetchWhenNeeded(commentCheckerOptions(update, commentChecker));
+    const withNotice = withMigrationNotice(result, ko, { ...migration, host });
+    startFetchWhenNeeded(commentCheckerOptions(migration, commentChecker));
     return withNotice;
   }
 
   if (event === "post-tool-use") {
-    const comments = await checkPostToolUse(payload, commentCheckerOptions(update, commentChecker)).catch(() => null);
+    const comments = await checkPostToolUse(payload, commentCheckerOptions(migration, commentChecker)).catch(() => null);
     // Unreadable goal state keeps its failure result, except that findings for the edit still reach the model.
     const reminder = await postToolUseReminder({ ko, resolvedRoot, payload }).catch((error) => {
       if (comments?.reason) return { status: 0, message: "", hookOutput: {} };
@@ -160,11 +167,11 @@ function withCommentFindings(result, comments) {
   };
 }
 
-// The comment checker shares the update step's env, clock, and runtime root; its spawn is separate so tests can
+// The comment checker shares the migration step's env, clock, and plugin root; its spawn is separate so tests can
 // observe each detached process on its own.
-function commentCheckerOptions(update, commentChecker) {
+function commentCheckerOptions(migration, commentChecker) {
   const options = { ...commentChecker };
-  for (const key of ["env", "now", "pluginRoot"]) if (options[key] === undefined && update[key] !== undefined) options[key] = update[key];
+  for (const key of ["env", "now", "pluginRoot"]) if (options[key] === undefined && migration[key] !== undefined) options[key] = migration[key];
   return options;
 }
 
@@ -214,20 +221,10 @@ async function readHookIndex(root, event, recoverable) {
 }
 
 // Only the CLI path: goal commands resolve the repository root themselves, and a second absolute path would let
-// long install or checkout paths push the SessionStart capsule past its budget. An installed copy names the canonical
-// runtime from its locator, since an upgrade can remove a host cache copy (Codex) while the session still runs.
+// long plugin or checkout paths push the SessionStart capsule past its budget. The path is this plugin copy's own
+// pota.mjs, computed on every run and stored nowhere, so a host update that moves the copy is picked up next session.
 function cliPrefixLine() {
-  const cli = installedCanonicalCli() ?? fileURLToPath(new URL("./pota.mjs", import.meta.url));
-  return `Pota CLI: node ${JSON.stringify(cli)} goal <command>`;
-}
-
-function installedCanonicalCli() {
-  try {
-    const locator = JSON.parse(readFileSync(new URL("../.pota-runtime.json", import.meta.url), "utf8"));
-    return locator?.plugin === "pota" && typeof locator.entrypoints?.cli === "string" ? locator.entrypoints.cli : null;
-  } catch {
-    return null;
-  }
+  return `Pota CLI: node ${JSON.stringify(fileURLToPath(new URL("./pota.mjs", import.meta.url)))} goal <command>`;
 }
 
 function appendContext(result, line) {
@@ -241,16 +238,16 @@ function appendContext(result, line) {
   };
 }
 
-// The auto-upgrade step runs after the capsule is built and every error in it is swallowed, so it never changes the
-// capsule, the exit code, or the "could not read goal state" failure. A notice goes last (after the CLI line), keeping
-// the kernel-first prefix, and is mirrored in systemMessage for the user.
-function withUpdateNotice(result, ko, { env = process.env, now = new Date(), spawn, pluginRoot = resolvePluginRoot(import.meta.url) } = {}) {
-  let line = null;
+// Legacy npm install detection runs after the capsule is built and every error in it is swallowed, so it never changes
+// the capsule, the exit code, or the "could not read goal state" failure. A notice goes last (after the CLI line),
+// keeping the kernel-first prefix, and is mirrored in systemMessage for the user.
+function withMigrationNotice(result, ko, { env = process.env, now = new Date(), spawn, pluginRoot = resolvePluginRoot(import.meta.url), host } = {}) {
+  let line = "";
   try {
-    const notice = sessionStartUpdate({ env, now, spawn, pluginRoot });
-    line = notice ? updateNoticeLine({ ko, notice }) : null;
+    const { notice } = sessionStartMigration({ env, now, spawn, pluginRoot, host });
+    line = notice ? migrationNoticeLine({ ko, notice }) : "";
   } catch {
-    line = null;
+    line = "";
   }
   if (!line) return result;
   return appendNotice(result, line, line);

@@ -15,7 +15,7 @@ At the start and after compaction, restart, delegation, or handoff, restore cont
 
 ## Runtime Location
 
-Resolve the read-only runtime from `references/pota-runtime.json` next to this `SKILL.md` (its `pluginRoot`; in a source checkout without it, this file's `../..`). Never search the target repository for Pota files; resolve `pota://...` IDs through `pluginRoot`. If the runtime or locator is missing, unreadable, or inconsistent, stop every dependent mirror and recover with published/global `pota doctor` then `pota upgrade`.
+`pluginRoot` is this session's Pota plugin copy: the parent of the `scripts` directory in the session-start `Pota CLI:` line; without that line, this file's `../..` (then tell the user Pota hooks are inactive). Never search the target repository for Pota files; resolve `pota://...` IDs through `pluginRoot`. If `pluginRoot` is missing or unreadable, stop and have the user reinstall or update the Pota plugin (`recovery.md`).
 
 The session-start hook prints `Pota CLI: node "<abs>/scripts/pota.mjs" goal <command>`. Copy that prefix literally into each command; never store it in a shell variable (shell variables do not persist between tool calls). `--root` is optional for every `goal` subcommand: when omitted it resolves via `HARNESS_REPO_ROOT`, else the nearest `.git` ancestor of the cwd.
 

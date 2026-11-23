@@ -1,17 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn as spawnProcess, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, utimes, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { startGoal } from "../scripts/pota-goal.mjs";
 import {
-  checkPostToolUse, commentCheckerPaths, commentCheckerStatusLine, extractCheckRequests, fetchAfterInstall, fetchCommentChecker,
-  parseApplyPatch, removeCommentCheckerTools, startFetchWhenNeeded,
+  checkPostToolUse, commentCheckerPaths, commentCheckerStatusLine, extractCheckRequests, fetchCommentChecker,
+  parseApplyPatch, startFetchWhenNeeded,
 } from "../scripts/pota-comment-checker.mjs";
-import { createRuntimeLocator } from "../scripts/pota-paths.mjs";
 import { runStateResult } from "../scripts/pota-state.mjs";
 
 const posix = process.platform !== "win32";
@@ -132,47 +131,100 @@ test("findings and the goal reminder are returned together", { skip: !posix }, a
   });
 });
 
-test("a missing binary starts one detached fetch from an installed runtime only", async () => {
-  await withHome(async ({ env, project }) => {
-    const runtime = join(env.POTA_HOME, "install", "runtime", "9.9.9");
-    await mkdir(runtime, { recursive: true });
-    await writeFile(join(runtime, ".pota-runtime.json"), JSON.stringify(createRuntimeLocator(runtime)));
-    const manifest = { schemaVersion: 2, plugin: "pota", version: "9.9.9", origin: "package", installedAt: new Date().toISOString() };
-    await writeFile(join(env.POTA_HOME, "install", "lifecycle.json"), JSON.stringify(manifest));
+test("a missing binary starts one detached fetch from this plugin copy only when the hook entry point asks", async () => {
+  await withHome(async ({ env, project, home }) => {
+    const pluginRoot = join(home, "plugin");
+    const fetchArgs = [join(pluginRoot, "scripts", "pota-comment-checker.mjs"), "fetch"];
     const spawn = spawnRecorder();
 
-    assert.equal(await checkPostToolUse(editPayload(project), { env, spawn, pluginRoot: runtime }), null);
+    // The library default never downloads, so in-process callers and tests stay off the network.
+    assert.equal(await checkPostToolUse(editPayload(project), { env, spawn, pluginRoot }), null);
+    assert.equal(startFetchWhenNeeded({ env, spawn, pluginRoot }), false);
+    assert.equal(spawn.calls.length, 0);
+
+    assert.equal(await checkPostToolUse(editPayload(project), { env, spawn, pluginRoot, autoFetch: true }), null);
     assert.equal(spawn.calls.length, 1);
     const [command, args, options] = spawn.calls[0];
     assert.equal(command, process.execPath);
-    assert.deepEqual(args, [join(runtime, "scripts", "pota-comment-checker.mjs"), "fetch"]);
+    assert.deepEqual(args, fetchArgs);
     assert.equal(options.detached, true);
     assert.equal(options.stdio, "ignore");
     assert.equal(spawn.unrefCalls, 1);
 
-    const sessionStart = spawnRecorder();
-    await runStateResult("session-start", {
-      root: project, payload: { cwd: project, session_id: sessionId }, locale: "en_US",
-      update: { env: { ...env, POTA_AUTO_UPGRADE: "0" }, pluginRoot: runtime, spawn: spawnRecorder() },
-      commentChecker: { spawn: sessionStart },
-    });
-    assert.equal(sessionStart.calls.length, 1);
+    const previous = process.env.POTA_HOME;
+    process.env.POTA_HOME = env.POTA_HOME;
+    try {
+      const sessionStart = (commentChecker) => runStateResult("session-start", {
+        root: project, payload: { cwd: project, session_id: sessionId }, locale: "en_US", migration: { env, pluginRoot }, commentChecker,
+      });
+      const library = spawnRecorder();
+      await sessionStart({ spawn: library });
+      assert.equal(library.calls.length, 0);
+      const hook = spawnRecorder();
+      await sessionStart({ spawn: hook, autoFetch: true });
+      assert.equal(hook.calls.length, 1);
+      assert.deepEqual(hook.calls[0][1], fetchArgs);
+    } finally {
+      if (previous === undefined) delete process.env.POTA_HOME;
+      else process.env.POTA_HOME = previous;
+    }
 
-    assert.equal(startFetchWhenNeeded({ env, spawn, pluginRoot: join(project, "not-installed") }), false);
-    // A retained runtime of another version never starts a fetch.
-    await writeFile(join(env.POTA_HOME, "install", "lifecycle.json"), JSON.stringify({ ...manifest, version: "9.9.10" }));
-    assert.equal(startFetchWhenNeeded({ env, spawn, pluginRoot: runtime }), false);
-    await writeFile(join(env.POTA_HOME, "install", "lifecycle.json"), JSON.stringify(manifest));
-    assert.equal(startFetchWhenNeeded({ env: { ...env, POTA_COMMENT_CHECKER: "0" }, spawn, pluginRoot: runtime }), false);
-    assert.equal(startFetchWhenNeeded({ env, spawn, pluginRoot: runtime, platform: "aix", arch: "ppc64" }), false);
+    const fetch = (options = {}) => startFetchWhenNeeded({ env, spawn, pluginRoot, autoFetch: true, ...options });
+    assert.equal(fetch({ env: { ...env, POTA_COMMENT_CHECKER: "0" } }), false);
+    assert.equal(fetch({ platform: "aix", arch: "ppc64" }), false);
     const paths = commentCheckerPaths(env);
     await writeFile(paths.state, JSON.stringify({ schemaVersion: 1, nextAttemptAt: new Date(Date.now() + 60_000).toISOString() }));
-    assert.equal(startFetchWhenNeeded({ env, spawn, pluginRoot: runtime }), false);
+    assert.equal(fetch(), false);
     await rm(paths.state);
     await writeFile(paths.lock, JSON.stringify({ pid: process.pid }));
-    assert.equal(startFetchWhenNeeded({ env, spawn, pluginRoot: runtime }), false);
+    assert.equal(fetch(), false);
+    await rm(paths.lock);
+    await fakeChecker(env, { exit: 0, message: "" });
+    assert.equal(fetch(), false);
     assert.equal(spawn.calls.length, 1);
   });
+});
+
+test("the detached fetch starts on a home where the Pota home directory does not exist yet", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "pota-comment-checker-fresh-"));
+  try {
+    const home = join(temp, "home");
+    await mkdir(home);
+    const env = {
+      PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, POTA_HOME: join(home, ".pota"),
+      CLAUDE_HOME: join(home, ".claude"), CLAUDE_CONFIG_DIR: join(home, ".claude"), CODEX_HOME: join(home, ".codex"),
+      CODEX_CONFIG_PATH: join(home, ".codex", "config.toml"), ANTIGRAVITY_HOME: join(home, ".gemini", "config"),
+      ANTIGRAVITY_CLI_HOME: join(home, ".gemini", "antigravity-cli"), POTA_CLAUDE_CLI: "none",
+    };
+    // A stand-in fetch script: it records where it ran instead of downloading.
+    const pluginRoot = join(temp, "plugin");
+    const marker = join(temp, "fetch-ran.txt");
+    await mkdir(join(pluginRoot, "scripts"), { recursive: true });
+    await writeFile(join(pluginRoot, "scripts", "pota-comment-checker.mjs"),
+      `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(marker)}, process.cwd() + "\\n" + process.argv.slice(2).join(" "));\n`);
+    await assert.rejects(lstat(env.POTA_HOME));
+    let child = null;
+    let spawnError = null;
+    const spawn = (...args) => {
+      child = spawnProcess(...args);
+      child.on("error", (error) => { spawnError = error; });
+      return child;
+    };
+    assert.equal(startFetchWhenNeeded({ env, spawn, pluginRoot, autoFetch: true, platform: "linux", arch: "x64" }), true);
+    // The fetch child is unref'd, so a timer keeps the event loop alive until it exits (Node 18 ends the test otherwise).
+    const keepAlive = setInterval(() => {}, 50);
+    try {
+      await new Promise((resolveExit) => { child.on("exit", resolveExit); child.on("error", resolveExit); });
+    } finally {
+      clearInterval(keepAlive);
+    }
+    assert.equal(spawnError, null);
+    const [cwd, args] = (await readFile(marker, "utf8")).split("\n");
+    assert.equal(await realpath(cwd), await realpath(env.POTA_HOME));
+    assert.equal(args, "fetch");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
 });
 
 test("fetch installs a verified archive, rejects a wrong digest with a backoff, and respects the lock", { skip: !posix }, async () => {
@@ -219,34 +271,7 @@ test("fetch installs a verified archive, rejects a wrong digest with a backoff, 
       assert.equal(JSON.parse(await readFile(paths.state, "utf8")).consecutiveFailures, 0);
       assert.equal(commentCheckerStatusLine(env), "comment-checker: ready 0.8.2");
       assert.equal((await fetchCommentChecker({ env, now, asset })).status, "present");
-
-      await removeCommentCheckerTools(env);
-      await assert.rejects(lstat(join(env.POTA_HOME, "tools")));
     });
-  });
-});
-
-test("install and upgrade report the fetch on one line and never throw", { skip: !posix }, async () => {
-  await withHome(async ({ env, home }) => {
-    const source = join(home, "asset");
-    await mkdir(source);
-    await writeFile(join(source, "comment-checker"), "#!/bin/sh\nexit 0\n");
-    const archivePath = join(home, "asset.tar.gz");
-    assert.equal(spawnSync("tar", ["-czf", archivePath, "-C", source, "comment-checker"]).status, 0);
-    const archive = await readFile(archivePath);
-    const sha256 = createHash("sha256").update(archive).digest("hex");
-    await withServer(archive, async (url) => {
-      const asset = { name: "asset.tar.gz", url, sha256, zip: false };
-      assert.equal(await fetchAfterInstall({ ...env, POTA_COMMENT_CHECKER: "0" }, { asset }), null);
-      assert.match(await fetchAfterInstall(env, { asset: { ...asset, sha256: "1".repeat(64) } }),
-        /^comment-checker: download failed \(SHA256 mismatch .*\); edits pass unchecked until a later background retry succeeds$/);
-      assert.equal(await fetchAfterInstall(env, { asset }), "comment-checker: installed 0.8.2");
-      assert.equal(await fetchAfterInstall(env, { asset }), "comment-checker: ready 0.8.2");
-    });
-    await rm(commentCheckerPaths(env).directory, { recursive: true });
-    assert.equal(await fetchAfterInstall(env, { platform: "aix", arch: "ppc64" }), "comment-checker: unsupported platform aix-ppc64");
-    assert.match(await fetchAfterInstall(env, { asset: { name: "x.tar.gz", url: "http://127.0.0.1:9/x", sha256: "0".repeat(64), zip: false } }),
-      /^comment-checker: download failed/);
   });
 });
 

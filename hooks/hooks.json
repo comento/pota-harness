@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/pota-state.mjs\" session-start",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/pota-state.mjs\" session-start claude",
             "timeout": 10,
             "statusMessage": "Pota: loading read-only repository context"
           }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/pota-state.mjs\" user-prompt-submit",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/pota-state.mjs\" user-prompt-submit claude",
             "timeout": 10,
             "statusMessage": "Pota: loading read-only work context"
           }
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/pota-state.mjs\" post-tool-use",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/pota-state.mjs\" post-tool-use claude",
             "timeout": 10,
             "statusMessage": "Pota: reminding current goal evidence requirements"
           }
@@ -42,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/pota-state.mjs\" stop",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/pota-state.mjs\" stop claude",
             "timeout": 10,
             "statusMessage": "Pota: checking the active goal task"
           }
@@ -54,12 +54,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${PLUGIN_ROOT}/scripts/pota-state.mjs\" subagent-stop",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/pota-state.mjs\" subagent-stop claude",
             "timeout": 10,
             "statusMessage": "Pota: checking this subagent's assigned task"
           }
         ]
       }
     ]
-  }
+  },
+  "modules": ["./register.tsx"]
 }

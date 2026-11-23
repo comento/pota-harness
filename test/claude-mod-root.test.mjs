@@ -15,7 +15,7 @@ import {
   reduceDagState,
   rootLabel,
   samePath,
-} from "../claude-mod/hooks/dag-events.mjs";
+} from "../hooks/dag-events.mjs";
 
 const task = (id, status, updatedAt) => ({
   id, title: `Task ${id}`, status, dependsOn: [], assignedAgentId: null, route: null, kind: null, effort: null,
@@ -213,7 +213,7 @@ test("9. rebaseDagState", () => {
 });
 
 test("10. dag-events.mjs keeps to the source constraints", () => {
-  const source = readFileSync(join(resolve("claude-mod"), "hooks", "dag-events.mjs"), "utf8");
+  const source = readFileSync(join(resolve("hooks"), "dag-events.mjs"), "utf8");
   for (const banned of ["node:", "process", "require(", "import(", "Date.now", "setTimeout", "Intl"]) {
     assert.equal(source.includes(banned), false, `dag-events.mjs contains ${banned}`);
   }
