@@ -71,7 +71,7 @@ test("a healthy plugin copy passes with English labels and exit 0, as text and a
     const parsed = JSON.parse(json.stdout);
     assert.equal(parsed.ok, true);
     assert.equal(parsed.version, "2.0.0");
-    assert.equal(parsed.pluginRoot, await realpath(root));
+    assert.equal(await realpath(parsed.pluginRoot), await realpath(root));
     assert.deepEqual(parsed.checks.map((check) => check.label), ["node", "potaHome", "version surfaces", "required files", "legacy install", "legacy migration"]);
     assert.equal(doctorCli(root, env, "--bogus").status, 2);
   });

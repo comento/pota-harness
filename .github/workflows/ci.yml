@@ -71,6 +71,7 @@ jobs:
         env:
           npm_config_cache: ${{ runner.temp }}/npm-cache
       - run: |
+          mkdir -p "$CODEX_HOME"
           codex plugin marketplace add "$GITHUB_WORKSPACE"
           codex plugin add pota@pota-harness
           codex plugin list --json

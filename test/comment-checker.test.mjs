@@ -220,7 +220,7 @@ test("the detached fetch starts on a home where the Pota home directory does not
     }
     assert.equal(spawnError, null);
     const [cwd, args] = (await readFile(marker, "utf8")).split("\n");
-    assert.equal(cwd, await realpath(env.POTA_HOME));
+    assert.equal(await realpath(cwd), await realpath(env.POTA_HOME));
     assert.equal(args, "fetch");
   } finally {
     await rm(temp, { recursive: true, force: true });
