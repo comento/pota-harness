@@ -11,10 +11,10 @@ import {
   reduceEdges,
   summarize,
   taskState,
-} from "../claude-mod/hooks/dag-model.mjs";
-import { layoutDag, panelWidth, textWidth, truncateText } from "../claude-mod/hooks/dag-layout.mjs";
-import { cardLines, cellWidth, formatElapsed, formatSummary, pickLocale, runningRows, textRows } from "../claude-mod/hooks/dag-text.mjs";
-import { escapeXml, renderDagSvg } from "../claude-mod/hooks/dag-svg.mjs";
+} from "../hooks/dag-model.mjs";
+import { layoutDag, panelWidth, textWidth, truncateText } from "../hooks/dag-layout.mjs";
+import { cardLines, cellWidth, formatElapsed, formatSummary, pickLocale, runningRows, textRows } from "../hooks/dag-text.mjs";
+import { escapeXml, renderDagSvg } from "../hooks/dag-svg.mjs";
 import {
   describeToolCall,
   extractTaskMentions,
@@ -24,9 +24,9 @@ import {
   reduceDagState,
   resolveAgentTasks,
   shouldAutoOpen,
-} from "../claude-mod/hooks/dag-events.mjs";
+} from "../hooks/dag-events.mjs";
 
-const modRoot = resolve("claude-mod");
+const modRoot = resolve(".");
 const pureModules = ["dag-model.mjs", "dag-layout.mjs", "dag-text.mjs", "dag-svg.mjs", "dag-events.mjs", "dag-term.mjs"];
 
 const task = (id, dependsOn = [], status = "pending", extra = {}) => ({
@@ -120,7 +120,10 @@ test("1. manifest, hooks.json and the state contract", () => {
   const manifest = JSON.parse(readFileSync(join(modRoot, ".claude-plugin/plugin.json"), "utf8"));
   assert.equal(manifest.name, "pota");
   assert.equal(manifest.types, "./types/index.d.ts");
-  assert.deepEqual(JSON.parse(readFileSync(join(modRoot, "hooks/hooks.json"), "utf8")), { modules: ["./register.tsx"] });
+  assert.deepEqual(JSON.parse(readFileSync(join(modRoot, "hooks/hooks.json"), "utf8")).modules, ["./register.tsx"]);
+  const register = readFileSync(join(modRoot, "hooks/register.tsx"), "utf8");
+  assert.ok(register.includes("`${$.plugin.root}/scripts/pota.mjs`"), "the CLI is the plugin root's scripts/pota.mjs");
+  assert.doesNotMatch(register, /pota-runtime\.json|\.\.\/scripts\/pota\.mjs/);
   const contract = readFileSync(join(modRoot, "types/index.d.ts"), "utf8");
   assert.match(contract, /interface PluginState/);
   assert.match(contract, /pota:\s*\{\s*dag:\s*Shaped<DagState>;\s*dagUi:\s*Shaped<DagUi>;\s*dagAgents:\s*Shaped<DagAgent\[\]>/);
@@ -519,7 +522,7 @@ test("19. describeToolCall stays short and drops arguments", () => {
   assert.equal(describeToolCall({ tool: "Bash", command: "API_KEY=abc cd /tmp && git status --short --branch" }), "$ git status --short");
   assert.equal(describeToolCall({ tool: "Bash", command: 'node "/x/scripts/pota.mjs" goal receipt --task a' }), "pota goal receipt");
   assert.equal(describeToolCall({ tool: "Bash", command: "node /a/b/c.mjs --flag" }), "$ node c.mjs --flag");
-  assert.equal(describeToolCall({ tool: "Read", file_path: "/repo/claude-mod/hooks/register.tsx" }), "Read register.tsx");
+  assert.equal(describeToolCall({ tool: "Read", file_path: "/repo/hooks/register.tsx" }), "Read register.tsx");
   assert.equal(describeToolCall({ tool: "Grep", pattern: "renderDagSvg" }), "Grep renderDagSvg");
   assert.equal(describeToolCall({ tool: "Agent", description: "Implement the pane" }), "Agent: Implement the pane");
   assert.equal(describeToolCall({ tool: "mcp__serena__find_symbol", name_path: "x" }), "serena:find_symbol");

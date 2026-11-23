@@ -13,6 +13,99 @@ Pota Harness는 Codex, Claude Code, Antigravity를 위한 토큰 효율적인 �
 
 Pota는 도구 준비 상태도 작업의 일부로 다룹니다. LSP, typecheck, lint, dry-run, 검증 도구를 저장소 스택 기준으로 확인합니다. 누락 도구는 명시적 승인과 고정된 지원 installer가 모두 있을 때만 설치하고, 그렇지 않으면 blocker로 보고합니다.
 
+## Install
+
+Pota는 Claude Code, Codex, Antigravity CLI의 플러그인입니다. 이 저장소의 루트가 플러그인이고, `main` 브랜치가 배포 버전입니다. 각 호스트는 자기 플러그인 명령으로 자기 사본을 설치·업데이트·제거하며, 그 사본이 그 호스트의 runtime입니다. hook, skill, CLI가 모두 그 사본에서 실행됩니다. 호스트마다 버전이 달라도 되고 Pota는 버전을 서로 비교하지 않습니다. `~/.pota/projects/`의 goal 상태는 모든 호스트가 함께 씁니다.
+
+### Claude Code
+
+```sh
+claude plugin marketplace add comento/pota-harness
+claude plugin install pota@pota-harness
+```
+
+세션 안에서는 `/plugin marketplace add comento/pota-harness`, `/plugin install pota@pota-harness`로 같은 일을 합니다. Claude Code는 서드파티 marketplace를 기본으로 자동 업데이트하지 않으므로 직접 업데이트하고 세션을 다시 시작합니다.
+
+```sh
+claude plugin marketplace update pota-harness
+claude plugin update pota@pota-harness
+```
+
+제거:
+
+```sh
+claude plugin uninstall pota@pota-harness
+claude plugin marketplace remove pota-harness
+```
+
+### Codex
+
+```sh
+codex plugin marketplace add comento/pota-harness
+```
+
+그다음 Codex TUI에서:
+
+1. `/plugins`를 열어 `pota-harness` marketplace에서 `pota`를 설치하고 새 세션을 시작합니다.
+2. `/hooks`를 열어 Pota hook 5개를 승인합니다. Codex는 승인하기 전에는 플러그인 hook을 실행하지 않고, 승인은 hook 내용에 묶이므로 업데이트할 때마다 `/hooks`에서 다시 승인해야 합니다. 승인하지 않으면 세션에 `Pota CLI:` 줄이 나오지 않고, Pota skill이 Pota hook이 꺼져 있다고 알립니다.
+
+업데이트는 `codex plugin marketplace upgrade pota-harness` 뒤 `/hooks`에서 다시 승인합니다. 제거는 `/plugins`에서 플러그인을 열고 "Uninstall plugin"을 고릅니다. 이 Codex 절차는 Codex 문서와 소스를 따른 것이며, 실제 Codex 설치본에서는 아직 실행해 보지 않았습니다.
+
+### Antigravity CLI
+
+```sh
+agy plugin install https://github.com/comento/pota-harness
+```
+
+업데이트는 같은 명령을 다시 실행합니다. Antigravity 문서는 다시 설치하면 설치된 사본을 교체한다고 설명합니다. 제거는 `agy plugin uninstall pota`입니다. `agy` 1.5.6 이상을 권장합니다. Antigravity는 CLI만 지원하고 Antigravity IDE는 지원하지 않습니다.
+
+### What each host gets
+
+| | Claude Code | Codex | Antigravity CLI |
+| --- | --- | --- | --- |
+| Skill | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` |
+| Hook | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | 같은 5개(`/hooks`에서 승인한 뒤) | SessionStart, PreInvocation(프롬프트 컨텍스트), PostToolUse, Stop. SubagentStop 없음 |
+| Agent `explorer`, `worker` | 있음 | 없음 | 없음 |
+| DAG 패널(mod) | 있음 | 없음 | 없음 |
+
+### Coming from the npm install (1.x)
+
+Pota 2.x는 npm에 게시하지 않으며 전역 `pota` 명령이 없습니다. npm 패키지 `@comento/pota-harness`는 이 설치 안내만 보여 주는 1.5.0이 마지막이고, 패키지는 deprecated로 표시됩니다.
+
+1. Claude Code만: 먼저 `claude plugin uninstall pota@pota --scope user`로 1.x 플러그인을 지웁니다.
+2. **쓰는 모든 호스트에 플러그인을 설치합니다.** 아래 제거는 호스트 단위로 일어나며, 1.x 설치본에 남은 호스트는 다른 호스트 몫이 지워진 뒤 업그레이드(자동 업그레이드 포함)가 "Managed artifact was modified"로 거부되어 더 이상 갱신되지 않습니다.
+3. 세션을 시작합니다. 플러그인의 세션 시작이 1.x ownership manifest(`~/.pota/install/lifecycle.json`)를 찾으면 그 호스트 몫의 1.x 설치본을 백그라운드 프로세스로 제거하고 그 사실을 알립니다. 세션을 한 번 다시 시작하세요. 다음 세션이 결과를 한 번 알려 줍니다. 공유 1.x runtime, `~/.pota/update/`, manifest는 모든 호스트 몫이 없어진 뒤에만 지웁니다.
+
+제거는 1.x manifest에 기록되고 digest가 그대로인 파일·디렉터리와, Codex `config.toml`의 Pota 구획만 지웁니다. `~/.pota/projects/`(goal 상태), `~/.pota/config.json`, `~/.pota/tools/comment-checker/`, 사용자가 고친 파일(남긴 항목으로 보고), manifest에 없는 모든 것, 전역 npm 패키지(`npm uninstall -g @comento/pota-harness`로 지웁니다)는 남깁니다. 다음 경우에는 그 호스트에서 아무것도 지우지 않고 이유를 알립니다.
+
+- 호스트 경로의 디렉터리가 symlink인 경우(`symlinked-path`. 보고된 경로를 직접 지웁니다)
+- 호스트 등록을 안전하게 해제할 수 없는 경우(`host-unregister-failed`): `claude` CLI가 없거나 실패하는 경우, Codex `config.toml`에서 Pota 구획을 안전하게 가려낼 수 없거나 다시 쓰면 다른 구획이 바뀌는 경우
+- manifest가 잘못됐거나, schema를 지원하지 않거나, 예상 경로 밖을 가리키거나, 1.x 설치 트랜잭션이 중단된 경우(`manifest-invalid`, `manifest-unsupported-schema`, `target-outside-allowlist`, `transaction-pending`). 1.x를 `CODEX_HOME`, `CLAUDE_HOME`, `ANTIGRAVITY_HOME`, `ANTIGRAVITY_CLI_HOME`, `CODEX_CONFIG_PATH`를 지정해 설치했다면 호스트에도 같은 값을 둡니다. 그 밖에는 아직 어느 호스트 몫도 지워지지 않았을 때 `npx @comento/pota-harness@1.5.0 uninstall`을 실행한 뒤 다시 시작합니다.
+
+한 호스트 몫이라도 지워진 뒤에는 manifest를 고쳐 쓰지 않으므로 1.x uninstall이 "Refusing to uninstall modified managed artifacts"로 거부합니다. 이때 거부 알림은 `doctor`가 보여 주는 수동 항목을 정리한 뒤 그 호스트에 대해 `node "<pluginRoot>/scripts/pota.mjs" migrate run --host <host>`를 실행하라고 안내합니다.
+
+거부된 제거는 24시간 뒤 다시 시도하고, 알림은 7일에 한 번까지만 냅니다. 1.3 이전 설치본은 ownership manifest가 없어 건드리지 않으므로, 플러그인을 설치하기 전에 `npx @comento/pota-harness@1.5.0 uninstall`로 지웁니다. 상태를 보거나 제거를 직접 실행하려면(`<pluginRoot>`는 아래 설명):
+
+```sh
+node "<pluginRoot>/scripts/pota.mjs" doctor
+node "<pluginRoot>/scripts/pota.mjs" migrate status
+node "<pluginRoot>/scripts/pota.mjs" migrate run --host claude --dry-run
+node "<pluginRoot>/scripts/pota.mjs" migrate run --host claude
+```
+
+`POTA_LEGACY_MIGRATION=0`(`false`, `off`, `no`도 가능)은 자동 제거를 끕니다. 1.x 이름은 2.x에서 다음과 같습니다.
+
+| 1.x | 2.x |
+| --- | --- |
+| `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` | 위 표의 호스트별 skill 이름 |
+| `/pota-toolcheck` | 에이전트에게 `pota toolcheck` 실행을 요청 |
+| `/pota-doctor` | `pota doctor` |
+| CLI의 `install`, `upgrade`, `uninstall` 명령과 자동 업그레이드 | 위의 호스트 플러그인 명령. CLI는 이 절을 가리키는 안내를 출력하고 exit 2로 끝납니다 |
+
+### Running the Pota CLI
+
+세션이 시작될 때마다 그 호스트 플러그인 사본의 `scripts/pota.mjs` 절대 경로가 담긴 `Pota CLI:` 줄이 나오고, 에이전트는 그 경로로 Pota 명령을 실행합니다. `<pluginRoot>`는 그 `scripts` 디렉터리의 상위 디렉터리이며, 호스트가 새 버전을 설치하면 경로가 바뀝니다. 이 README의 `pota <command>`는 `node "<pluginRoot>/scripts/pota.mjs" <command>`를 뜻합니다.
+
 ## Complexity Triage
 
 모든 구현 작업은 agent, plugin, delegated workflow 지침을 적용하기 전에 먼저 complexity triage를 거칩니다. triage는 사용자에게 묻지 않고 저장소 탐색, 예상 변경 범위, 위험 신호를 기준으로 결정합니다.
@@ -86,37 +179,14 @@ Pota는 Claude-family와 Codex-family 모델에만 모델별 조정을 적용합
 
 `pota-work`는 `goal finish` 전에 goal마다 한 번 메모리 승격 결정을 계획의 Evidence에 기록합니다. 다시 쓸 저장소 지식이 생겼으면 `Memory promotion: docs/memory/<domain>.md`, 아니면 `Memory promotion: none: <reason>`입니다. 결정 기록은 필수이고 노트 작성은 선택입니다. goal이 완료됐는데 계획 파일에 채워진 `Memory promotion:` 줄이 없으면 `goal finish`와 `goal complete`가 stderr에 한 줄 알림을 내며, exit code와 stdout은 바뀌지 않습니다.
 
-런타임 script, template, command, agent, model guidance는 설치된 canonical runtime `~/.pota/install/runtime/<version>/`에 유지합니다. 각 표면의 locator가 같은 설치본을 가리키므로 대상 저장소에 Pota 내부 파일을 복사하지 않습니다. 공유 런타임 또는 locator가 없거나 읽을 수 없거나 불일치하면 이를 가리키는 모든 mirror 사용을 중단하고 게시 패키지에서 `bunx @comento/pota-harness@latest doctor` 후 `bunx @comento/pota-harness@latest upgrade`를 실행해 복구합니다. 다른 host mirror나 대상 저장소를 복구 원본으로 사용하지 않습니다.
+script, template, agent, model guidance는 호스트의 플러그인 사본에 있고, 대상 저장소에는 Pota 파일을 복사하지 않습니다. 그 사본이 없거나 읽을 수 없으면 호스트의 플러그인 명령으로 다시 설치하거나 업데이트합니다. 다른 호스트의 사본으로 복구하거나 대상 저장소에서 Pota 파일을 찾지 않습니다.
 
 ## Commands
 
-게시된 패키지는 `bunx` 또는 전역 설치된 `pota` 명령으로 실행할 수 있습니다.
+아래의 `pota <command>`는 세션 시작의 `Pota CLI:` 줄에 나온 경로로 실행하는 `node "<pluginRoot>/scripts/pota.mjs" <command>`입니다([Running the Pota CLI](#running-the-pota-cli) 참고).
 
-```sh
-bunx @comento/pota-harness@latest install
-bunx @comento/pota-harness@latest upgrade
-bunx @comento/pota-harness@latest doctor
-bunx @comento/pota-harness@latest uninstall
-bunx @comento/pota-harness@latest toolcheck
-```
-
-전역 설치 후에는 짧은 명령도 사용할 수 있습니다.
-
-```sh
-bun add -g @comento/pota-harness
-pota install
-pota upgrade
-pota doctor
-pota uninstall
-pota toolcheck
-pota auto-upgrade status
-```
-
-- `pota install [--hosts all|codex,claude,antigravity]`: canonical runtime을 `~/.pota/install/` 아래에 설치하고, 선택한 호스트에 대해 Codex marketplace source, versioned Codex runtime cache, Pota-owned config section, Claude Code mirror와 플러그인, 현재 Antigravity IDE/CLI skill 표면을 transaction으로 설치합니다. `--hosts`가 없으면 터미널에서 처음 설치할 때 호스트를 묻고, 비대화형 실행과 CI는 모든 호스트를 설치합니다.
-- `pota upgrade [--hosts all|codex,claude,antigravity]`: ownership manifest의 installed digest와 현재 값이 같은 항목만 교체하며, staged validation과 역순 rollback을 적용합니다. `--hosts`로 바꾸지 않으면 기록된 호스트를 유지하고, 다른 버전을 담은 Claude Code 플러그인 캐시를 갱신합니다. 설치본 버전이 이 CLI보다 높으면 `install`과 `upgrade`는 아무것도 바꾸지 않고 거부하며, 그래도 이 CLI 버전으로 내리려면 `--allow-downgrade`를 붙입니다.
-- `pota doctor`: 첫 줄에 `Hosts: <ids>`를 출력한 뒤 선택된 호스트의 ownership manifest, managed digest, 유효 Codex feature, 실제 plugin installed/enabled/version(`Claude plugin cache version` 포함), mirror/runtime locator를 수정 없이 진단합니다.
-- `pota uninstall`: 먼저 config 외 모든 ownership manifest 항목을 설치 digest와 대조하고, 수정되거나 삭제된 managed artifact가 하나라도 있으면 아무것도 바꾸지 않고 uninstall 전체를 거부합니다. 그렇지 않으면 managed 항목과 유예 중인 runtime을 제거·복원하고 빈 managed scaffold를 정리하며, unmanaged target과 그 상위 디렉터리는 보존하고 commit 전 실패는 rollback합니다. `~/.pota/update/`도 지우며 `~/.pota/config.json`과 `~/.pota/projects/`는 남깁니다. legacy 레이아웃 설치는 이전하지 않고 그 자리에서 제거합니다.
-- `pota auto-upgrade status|on|off|run`: `status`는 설정, 설치 버전, 마지막 확인, 대기 중인 알림을 JSON으로 출력합니다. `on`과 `off`는 `~/.pota/config.json`에 `autoUpgrade`를 쓰고 같은 보고를 출력합니다. `run`은 하루 주기와 backoff를 무시하고 지금 npm을 확인해 결과를 출력합니다. exit 0은 성공, 1은 실행 오류 또는 실패한 실행, 2는 사용법 오류입니다.
+- `pota doctor [--json]`: 이 플러그인 사본과 `~/.pota`를 읽기만 하는 진단입니다. 버전, `pluginRoot`, Node.js(18 이상), `POTA_HOME` 쓰기 가능 여부, 이 사본의 버전 표면 4개 일치 여부, 필수 파일, 1.x 설치본(`none`, `present <version>`, `blocked <reason>`), 호스트별 마지막 제거 보고서(남긴 경로와 수동 명령 포함), comment-checker 상태를 보여 줍니다. 다른 호스트의 사본과 비교하지 않습니다. 검사가 실패하면 exit 1, 사용법 오류는 exit 2입니다.
+- `pota migrate status|run [--host claude|codex|antigravity] [--all] [--dry-run] [--json]`: 1.x 설치본 제거를 직접 실행합니다. `status`는 실행하면 할 일과 마지막 보고서를 보여 줍니다. `run`은 `--host <host>` 또는 `--all`(플러그인을 아직 설치하지 않은 호스트까지 모든 호스트)이 필요하고, `--dry-run`은 아무것도 바꾸지 않고 계획만 보여 줍니다. 제거가 거부되면 exit 1, 사용법 오류는 exit 2입니다.
 - `pota toolcheck`: 저장소 스택과 필요한 LSP·검증 도구를 확인하며, 승인된 지원 installer만 실행합니다.
 - `pota cleanup --root <repo>`: 기본값은 legacy 프로젝트 로컬 `.pota` 잔여물을 읽기 전용으로 보고합니다. `--yes`는 유효한 활성 상태를 사용자 홈 저장소로 조정·이관하고 알려진 상태/lock/tool 잔여물만 제거하며, 알 수 없는 파일은 보존하고 비었을 때만 디렉터리를 정리합니다. `state.lock`은 이 host에서 owner 프로세스가 종료된 유효한 lock 레코드일 때만 삭제하고, 격리된 `state.lock.stale.*` 파일은 유효한 레코드의 nonce가 파일 이름과 일치할 때만 삭제합니다. owner가 살아 있거나 다른 host의 lock, 파싱할 수 없는 lock은 보존하고 `preservedReasons`에 사유를 남깁니다. `--help`와 `--version`은 exit 0, 사용법 오류는 exit 2, 실행 오류는 `Pota cleanup error:` 한 줄과 exit 1입니다.
 - `pota goal ...`: 저장소의 영속 goal을 시작·조회·일시정지·재개·차단·취소·완료합니다. `goal claim --session <id>`는 같은 작업을 이어받는 session(재개·압축·handoff·fork)에 미완료 goal의 소유권을 넘기며, 미완료 goal 중에 들어온 새 작업은 goal을 취소하지 않고 `goal replan`으로 합칩니다. 기본 tool-bound 정책은 `goal verify -- <argv>`가 명령을 직접 실행해 성공 증거를 기록합니다. `goal receipt`는 기존 선언 증거를 가져오는 호환 명령입니다. 모든 `goal` 하위 명령에서 `--root`는 선택이며, 생략하면 `HARNESS_REPO_ROOT`, 없으면 cwd에서 가장 가까운 `.git` 상위 디렉터리로 결정됩니다. `goal verify --kind "moduleAcceptance|surfaceIntegration" -- <argv>`는 한 번 실행으로 kind마다 receipt를 기록하며, evidence scope는 `task`와 `goal`뿐입니다. `goal finish [--watch "<path|path>"] [--timeout-ms N] -- <argv>`는 active task를 완료하고(필수 증거가 fresh여야 함) argv를 한 번 실행해 goal requiredEvidence의 모든 kind(기본 `finalReview`)를 goal scope로 기록한 뒤 goal을 완료합니다. 이 goal scope 증거가 모든 task receipt 이후에 기록되면 이전 task 검사를 다시 실행하지 않습니다. `goal stats`는 현재 goal의 receipt 수, 재실행, stale receipt를 JSON으로 출력합니다. `goal stats --history [--limit N]`은 저장소의 모든 worktree에서 끝난 goal을 집계합니다: 완료·취소 수, 소요 시간 중앙값과 p90, task·receipt 중앙값, 재실행 비율, 메모리 승격 결정 수, 완료 goal이 4개 이상일 때의 이전/최근 `trend`, 최근 goal 목록입니다. 이력이 없으면 `{"schemaVersion":1,"scope":"repository","goals":0}`을 출력합니다. `completionCriteria`(`goal start --criteria`)는 `advisory`입니다. Pota는 이를 기록만 하고 강제하지 않으며, 완료는 필수 증거로만 판정합니다. task는 `dependsOn`(생략 시 이전 task)과 `writeScope`를 선언하고, `goal ready`는 active/ready/blocked task id를 출력하며, write scope가 겹치지 않는 ready task는 같은 worktree에서 최대 4개까지 병렬로 active가 될 수 있습니다.
@@ -131,38 +201,24 @@ pota auto-upgrade status
 
 토큰 효율 실행에서는 구현보다 먼저 요구사항·불변식·경계·실패 모드로 집중 실행 test contract를 설계하는 데 추론을 배분합니다. 구현에는 실패 계약과 제한된 파일 범위만 전달하고 통과에 필요한 최소 변경을 요구합니다. 성공 여부는 도구 exit code와 기계적 요약으로 판정하며 성공 출력은 축약하고 실패할 때만 컨텍스트를 확장합니다. 명시적 `--watch`가 없으면 Git fingerprint는 ignored file을 제외하므로 주장에 필요한 ignored artifact는 각각 `--watch <path>` 또는 명시적인 상위 디렉터리로 지정해야 합니다. package 검증 전 lifecycle script를 검사하고 기본적으로 정상 `npm pack --dry-run`을 실행합니다. content-producing 또는 미분류 script에는 `--ignore-scripts`를 사용하면 안 되며, script가 없거나 content-neutral임을 입증했고 전체 검사 증거가 여전히 유효할 때만 사용할 수 있습니다. 성공한 상태 변경은 `--quiet`를 지원하므로 커지는 goal JSON이 대화 토큰을 소모하지 않습니다.
 
-`install`과 `upgrade`는 custom marketplace lifecycle을 유지하며 `codex plugin add`를 호출하지 않습니다. candidate를 staging에서 검증한 뒤 commit하고, 현재 managed destination과 digest를 ownership manifest에 기록하며 실패 시 완료된 phase를 역순 rollback합니다. 수정되었거나 ownership manifest에 기록되지 않은 artifact는 보존한 채 거부합니다. Pota-owned TOML section만 편집하고 public feature/agent 설정은 강제하지 않습니다. lifecycle command는 교체 대상인 `~/.pota/install/` 아래 설치본이나 Codex plugin cache가 아니라 게시/전역 package에서 실행해야 합니다.
+Pota는 `POTA_HOME`(기본 `~/.pota`) 아래에만 쓰고 자기 플러그인 사본 안에는 쓰지 않습니다. Codex는 hook 승인을 플러그인 내용에 묶기 때문에, 스스로 바뀐 사본은 승인을 잃습니다. 호스트의 플러그인 파일은 호스트 자신의 플러그인 명령으로만 설치·업데이트·제거됩니다.
 
-Clean uninstall은 모든 managed scaffold가 비었을 때만 recursive 삭제 없이 빈 디렉터리 제거로 `~/.pota/install/`과 Codex cache root `$CODEX_HOME/plugins/cache/pota`를 정리합니다. 소스 저장소와 저장소의 `MEMORY.md`/`PLAN.md`, 사용자 홈 Pota goal 상태, 전역 `@comento/pota-harness` package, package-manager download cache, legacy backup, 현재 ownership manifest 밖의 legacy shared setting은 지우지 않으며 별도의 명시적 정리 판단이 필요합니다.
+## Pota Home And Settings
 
-Codex는 `skills/`와 `commands/`를 사용합니다. Claude Code는 `~/.claude/` 아래의 mirror command·agent definition과 Claude Code 플러그인 `pota@pota`를 사용합니다. Antigravity는 `.agents/workflows`와 global skills mirror를 사용합니다.
-
-Claude Code 플러그인은 Pota가 소유한 로컬 marketplace `~/.pota/install/claude`에 생성되며, Pota skill 4개와 SessionStart·UserPromptSubmit·PostToolUse·Stop·SubagentStop hook을 담습니다. hook은 canonical runtime을 절대경로로 호출합니다. 파일 commit 뒤 `pota install`/`upgrade`가 `claude plugin marketplace add`와 `claude plugin install pota@pota --scope user`로 등록하므로 다음 세션부터 Claude Code 터미널·데스크톱 앱·IDE 플러그인 목록에 표시됩니다. `claude` CLI가 없으면 등록을 건너뛰고 수동 명령을 안내하며, 이미 `pota`라는 다른 marketplace가 있으면 건드리지 않습니다. `pota uninstall`은 파일 제거 전에 Pota 소유 marketplace만 등록 해제하고, uninstall이 rollback되면 다시 등록합니다. Claude Code 플러그인 캐시에 다른 버전이 있으면 `pota upgrade`가 `claude plugin marketplace update pota`와 `claude plugin update pota@pota --scope user`로 갱신합니다. 갱신에 실패하면 업그레이드된 설치는 그대로 두고 수동으로 마칠 명령을 출력하며 exit 1입니다. `pota doctor`는 `Claude plugin files`, `Claude plugin registered`, `Claude plugin enabled`, `Claude plugin cache version`을 보고합니다.
-
-## Install Layout And Auto-Upgrade
-
-Pota는 설치본을 `POTA_HOME`(기본 `~/.pota`) 아래에 둡니다. `CODEX_HOME`, `CLAUDE_HOME`, `ANTIGRAVITY_HOME`, `ANTIGRAVITY_CLI_HOME`, `CODEX_CONFIG_PATH`는 여전히 각 호스트 경로를 따로 정합니다.
+Pota는 데이터를 `POTA_HOME`(기본 `~/.pota`) 아래에 두고, 모든 호스트의 플러그인 사본이 함께 씁니다.
 
 ```text
 ~/.pota/
-  install/                  lifecycle 관리 파일
-    lifecycle.json          ownership manifest (schema 2: hosts, origin, 유예 runtime)
-    lifecycle.lock, transaction.json, transactions/
-    runtime/<version>/      모든 runtime locator와 Claude Code hook이 쓰는 canonical runtime
-    codex/                  Codex 로컬 marketplace source
-    claude/                 Claude Code 로컬 marketplace
   projects/                 goal 상태
-  config.json               사용자 설정 ("autoUpgrade", "commentChecker", "modelCeiling")
-  update/                   자동 업그레이드 상태
+  config.json               사용자 설정 ("commentChecker", "modelCeiling")
   tools/comment-checker/    comment-checker 바이너리(고정 release)
-$CODEX_HOME/plugins/cache/pota/pota/<version>/   Codex 플러그인 캐시 사본 (Codex를 선택했을 때만)
+  migration/                1.x 설치본 제거의 보고서와 상태
+  hosts/antigravity/        Antigravity 세션 파일(다음 프롬프트를 기다리는 hook 메시지)
+  install/, update/         1.x npm 설치본이 남긴 것. 제거가 끝나면 없어짐
 ```
 
-- 호스트: `--hosts`는 `install`과 `upgrade`에서만 받으며 값은 `all` 또는 `codex`, `claude`, `antigravity`의 쉼표 목록입니다. 선택은 ownership manifest에 기록되고 `upgrade`, `doctor`, `uninstall`이 따릅니다. `pota upgrade --hosts <list>`는 호스트를 추가하고 빠진 호스트를 제거합니다(빠지는 호스트의 관리 파일이 수정됐으면 거부). 대화형 prompt는 전체(기본), Claude Code만, Codex만, Antigravity만, 쉼표 목록을 제시하며 아직 아무것도 설치되지 않았을 때만 나옵니다.
-- 유예: 버전이 바뀌는 업그레이드는 직전 canonical runtime과 Codex 캐시 사본을 3일 동안(종류별 최대 3개) 남겨, 업그레이드 전에 시작한 세션이 계속 동작하게 합니다. 기간이 지난 것은 다음 install이나 upgrade가 제거하고, uninstall은 모두 제거합니다. 새 버전과 같거나 높은 Codex 캐시 사본은 남기지 않습니다. Codex는 캐시에서 가장 높은 버전을 로드하기 때문입니다.
-- 자동 업그레이드: 기본으로 켜져 있습니다. 24시간에 한 번 이하로(설치·업그레이드 직후 24시간은 제외) `SessionStart`가 분리 프로세스를 시작합니다. 이 프로세스는 npm에서 `@comento/pota-harness` 최신 버전을 읽고, 그 정확한 버전을 `--ignore-scripts`로 `~/.pota/update/stage/`에 설치해 검증한 뒤, 그 패키지의 `pota-lifecycle.mjs upgrade --auto`를 실행합니다. major를 포함한 모든 새 버전을 적용하며 다운그레이드하지 않습니다. 다음 `SessionStart`는 결과를 한 줄로 한 번만 알립니다: `updated`, `failed`, `manual`(설치됐지만 Claude Code 플러그인 캐시에 `claude plugin update pota@pota`가 필요함). npm 조회·설치 실패는 알림 없이 backoff하고, 업그레이드 실패는 backoff하며 버전마다 한 번 알립니다. git 체크아웃에서 설치한 설치본(`origin: "checkout"`)과 소스 체크아웃 실행에서는 동작하지 않습니다.
-- 끄기: `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0`(`false`, `off`, `no`도 가능), 또는 `~/.pota/config.json`의 `"autoUpgrade": false`. 읽을 수 없는 `config.json`도 자동 업그레이드를 끕니다. 상태와 마지막 실행 출력은 `~/.pota/update/`(`state.json`, `notice.json`, `last-run.log`, `update.lock`, `stage/`)에 있습니다.
-- 주석 검사: 편집이 성공하면(Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch`와 편집 도구) PostToolUse hook이 바뀐 내용을 [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker)(MIT)로 검사합니다. 불필요한 주석이 보고되면 `decision: "block"`을 돌려줘 에이전트가 주석을 지우거나 필요한 이유를 설명하게 합니다. npm 의존성은 추가하지 않습니다. `pota install`과 `pota upgrade`(자동 업그레이드 포함)가 설치를 commit한 뒤 현재 플랫폼(darwin/linux x64·arm64, windows x64)용 고정 v0.8.2 release를 내려받고, 고정된 SHA256을 검증해 OS `tar`로 `~/.pota/tools/comment-checker/`에 풀고, 결과를 한 줄로 출력합니다. 다운로드가 실패해도 설치와 exit code는 그대로이며, 설치된 runtime의 `SessionStart`가 분리 프로세스로 backoff를 두고 다시 시도합니다. 다운로드가 성공하기 전까지 편집은 검사 없이 통과하며, 검사기 오류나 7초를 넘는 검사도 통과합니다. `pota doctor`가 상태를 한 줄로 보여 주고 `pota uninstall`이 제거합니다. `POTA_COMMENT_CHECKER=0`(`false`, `off`, `no`도 가능) 또는 `~/.pota/config.json`의 `"commentChecker": false`는 검사와 다운로드를 모두 끕니다.
+- 1.x 설정: `config.json`의 `"autoUpgrade"`는 무시합니다. Pota는 더 이상 스스로 업그레이드하지 않습니다.
+- 주석 검사: 편집이 성공하면(Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch`와 편집 도구) PostToolUse hook이 바뀐 내용을 [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker)(MIT)로 검사합니다. 불필요한 주석이 보고되면 `decision: "block"`을 돌려줘 에이전트가 주석을 지우거나 필요한 이유를 설명하게 합니다. npm 의존성은 추가하지 않습니다. 호스트 hook의 세션 시작이 분리 프로세스로 현재 플랫폼(darwin/linux x64·arm64, windows x64)용 고정 v0.8.2 release를 내려받고, 고정된 SHA256을 검증해 OS `tar`로 `~/.pota/tools/comment-checker/`에 풉니다. 다운로드가 실패하면 이후 세션 시작에서 backoff를 두고 다시 시도합니다. 다운로드가 성공하기 전까지 편집은 검사 없이 통과하며, 검사기 오류나 7초를 넘는 검사도 통과합니다. `pota doctor`가 상태를 한 줄로 보여 주고, `POTA_COMMENT_CHECKER=0`(`false`, `off`, `no`도 가능) 또는 `~/.pota/config.json`의 `"commentChecker": false`는 검사와 다운로드를 모두 끕니다.
 - main 모델 확인: 세션의 main 모델이 stronger tier 미만이면 `SessionStart`가 `Pota main model:` 줄과 1회 알림을 추가합니다. 이때 계획·트리아지와 최종 리뷰는 stronger tier 이상으로 위임하고 기록해야 하며(리뷰는 `goal assign … --kind review`), 기록이 없으면 `triage-plan` 완료와 `goal finish`가 거부됩니다. 우회는 `--allow-main-model <reason>`입니다. 모델 값이 없거나 인식되지 않으면 동작하지 않습니다. `POTA_MAIN_MODEL_GATE=0`으로 끕니다.
 - 모델 상한: 계정에서 상위 tier를 쓸 수 없거나 쓰지 않을 때(구독 등급, 조직 정책, usage credits) `POTA_MODEL_CEILING=stronger`(또는 `balanced`, `opus`·`sonnet` 같은 모델 이름도 가능)를 설정하거나 `~/.pota/config.json`에 `"modelCeiling": "stronger"`를 적습니다. 환경변수가 우선이고, `config.json`은 모든 hook과 CLI 호출이 똑같이 읽는 위치입니다. 설정하면 `SessionStart`가 `Pota model ceiling:` 줄을 추가하고, 상한보다 높은 tier는 상한 tier의 모델을 쓰며, Heavy 설계 게이트가 그 모델을 통과시키고, main 모델 확인은 상한이 적용된 stronger tier를 기준으로 합니다. 설정이 없으면 동작은 그대로이고, 잘못된 값은 상한 없이 알림만 냅니다.
 - 요청 계약과 스티어링: Light·Heavy Path 계획은 `## Request Brief`(원문 요청, 해석한 결과, 범위, 과거 기록 참고(`Prior records`, `pota plan steering`), 가정, 암묵 요구사항, 열린 질문, 스티어링 기록)를 담고, 채우기 전에는 `--allow-no-request-brief <reason>`을 주지 않는 한 `triage-plan` 완료가 거부됩니다. 사용자의 정정·추가·방향 전환은 `goal steer --kind <correction|addition|redirect> --reason <text>`로, task가 바뀌면 `goal replan --steer <correction|addition|redirect|none> --reason <text>`로 기록하며, 두 번째 스티어링이나 redirect에는 다시 쓴 `Current request (as of S<n>)`도 필요합니다.
@@ -178,12 +234,14 @@ Claude Code 데스크탑은 현재 Pota goal을 wave별 열로 나눈 DAG 패널
 
 ## Antigravity Compatibility
 
-Antigravity는 `/workflow-name`으로 호출되는 `SKILL.md` 기반 Agent Skills와 Workflows를 지원합니다. Pota는 해당 표면에 다음 경로를 설치합니다.
+Pota는 Antigravity CLI(`agy`)를 지원하고 Antigravity IDE는 지원하지 않습니다. 플러그인 manifest는 루트 `plugin.json`, hook은 루트 `hooks.json`이며, hook은 플러그인 폴더에서 `scripts/pota-state-antigravity.mjs`를 실행합니다. 이 어댑터가 Antigravity 이벤트를 Pota hook에 대응시킵니다.
 
-- Antigravity IDE: `~/.gemini/config/skills/pota-*/SKILL.md`.
-- Antigravity CLI: flat `~/.gemini/antigravity-cli/skills/pota-*.md` skill 파일.
+- `SessionStart`는 세션 캡슐과 `Pota CLI:` 줄을 넣습니다.
+- Antigravity에는 프롬프트 이벤트가 없어서 프롬프트마다 첫 `PreInvocation`이 프롬프트 컨텍스트를 넣습니다.
+- `write_to_file`, `replace_file_content`, `multi_replace_file_content`의 `PostToolUse`는 comment checker와 goal 알림을 실행하고, 결과는 다음 `PreInvocation`에 들어갑니다.
+- `Stop`은 활성 goal에 끝나지 않은 task가 있으면 에이전트가 작업을 계속하게 합니다. `SubagentStop`은 없습니다.
 
-Codex 전용 hooks는 Antigravity로 포팅하지 않습니다. 대신 같은 planning, memory, complexity triage, two-gate verification 절차가 Skills와 Workflows를 통해 실행됩니다. 경로를 바꾸려면 `ANTIGRAVITY_HOME` 또는 `ANTIGRAVITY_CLI_HOME`을 설정하세요.
+skill은 `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`로 호출합니다. workflow는 Antigravity 플러그인의 구성요소가 아닙니다. 어댑터는 Antigravity hook 문서를 따른 것이며, 실제 `agy` 세션 안에서의 동작은 아직 확인하지 않았습니다.
 
 ## Locale Policy
 

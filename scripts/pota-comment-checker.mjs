@@ -2,16 +2,16 @@
 import { spawn as spawnProcess, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmodSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { lstat, rm, rmdir } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createLifecycleLock } from "./pota-lifecycle-lock.mjs";
 import { potaHome, resolvePluginRoot } from "./pota-paths.mjs";
-import { readInstallManifest, readJsonFile, runningInstall, updatePaths, writeJsonAtomic } from "./pota-update-state.mjs";
+import { readJsonFile, writeJsonAtomic } from "./pota-safe-fs.mjs";
 
 // comment-checker (github.com/code-yeongyu/go-claude-code-comment-checker, MIT) flags needless comments in code an
 // edit tool just wrote. Pota pins one release and its SHA256 values instead of an npm dependency: a SessionStart (or a
-// PostToolUse that finds no binary) starts a detached `fetch` from the installed runtime, and later edits are checked.
+// PostToolUse that finds no binary) of a host hook starts a detached `fetch` from this plugin copy, and later edits are
+// checked.
 // The binary reads a Claude Code PostToolUse payload on stdin and exits 0 (clean) or 2 (findings on stderr).
 export const COMMENT_CHECKER_VERSION = "0.8.2";
 const RELEASE_BASE_URL = `https://github.com/code-yeongyu/go-claude-code-comment-checker/releases/download/v${COMMENT_CHECKER_VERSION}`;
@@ -70,7 +70,7 @@ export function releaseAsset(platform = process.platform, arch = process.arch) {
 export function commentCheckerEnabled(env = process.env) {
   const raw = env.POTA_COMMENT_CHECKER;
   if (typeof raw === "string" && OFF_VALUES.has(raw.trim().toLowerCase())) return false;
-  const config = readJsonFile(updatePaths(env).config);
+  const config = readJsonFile(join(potaHome(env), "config.json"));
   return !(config.status === "ok" && config.value?.commentChecker === false);
 }
 
@@ -79,17 +79,18 @@ export function binaryReady(paths) {
 }
 
 // PostToolUse: returns `{ reason }` when the checker reported findings, otherwise null. A missing binary starts the
-// detached download (installed runtime only) and lets this edit pass; checker errors and timeouts also pass.
+// detached download (only when the hook entry point passed `autoFetch`) and lets this edit pass; checker errors and
+// timeouts also pass.
 export async function checkPostToolUse(payload, {
   env = process.env, spawn = spawnProcess, pluginRoot = resolvePluginRoot(import.meta.url), now = new Date(),
-  platform = process.platform, arch = process.arch, budgetMs = CHECK_BUDGET_MS,
+  platform = process.platform, arch = process.arch, budgetMs = CHECK_BUDGET_MS, autoFetch = false,
 } = {}) {
   if (!commentCheckerEnabled(env)) return null;
   const requests = extractCheckRequests(payload);
   if (requests.length === 0 || !releaseAsset(platform, arch)) return null;
   const paths = commentCheckerPaths(env, platform);
   if (!binaryReady(paths)) {
-    startFetchWhenNeeded({ env, spawn, pluginRoot, now, platform, arch });
+    startFetchWhenNeeded({ env, spawn, pluginRoot, now, platform, arch, autoFetch });
     return null;
   }
   const deadline = Date.now() + budgetMs;
@@ -241,25 +242,27 @@ export function runChecker(binary, hookInput, { timeoutMs = CHECK_BUDGET_MS, spa
   });
 }
 
-// Starts the detached download from the installed canonical runtime only, when it is enabled, the platform has a
-// pinned asset, the binary is missing, no backoff is pending, and no live fetch holds the lock. Never throws.
+// Starts the detached download from this plugin copy only when the hook entry point passed `autoFetch` (the library
+// default never downloads, so in-process callers and tests stay off the network), the checker is enabled, the platform
+// has a pinned asset, the binary is missing, no backoff is pending, and no live fetch holds the lock. Never throws.
 export function startFetchWhenNeeded({
   env = process.env, spawn = spawnProcess, pluginRoot = resolvePluginRoot(import.meta.url), now = new Date(),
-  platform = process.platform, arch = process.arch,
+  platform = process.platform, arch = process.arch, autoFetch = false,
 } = {}) {
   try {
-    const running = runningInstall(pluginRoot, updatePaths(env));
-    // Only the canonical runtime of the installed version, never a retained one that may pin another checker.
-    if (!running || readInstallManifest(updatePaths(env))?.version !== running.version) return false;
+    if (autoFetch !== true) return false;
     if (!commentCheckerEnabled(env) || !releaseAsset(platform, arch)) return false;
     const paths = commentCheckerPaths(env, platform);
     if (binaryReady(paths)) return false;
     const next = Date.parse(readState(paths)?.nextAttemptAt ?? "");
     if (Number.isFinite(next) && now.getTime() < next) return false;
     if (lockHolder(paths) !== null) return false;
+    // A home that never had 1.x has no Pota home yet, and a missing cwd fails the spawn with ENOENT.
+    const cwd = potaHome(env);
+    mkdirSync(cwd, { recursive: true });
     // stdio "ignore" keeps the hook's stdout closed so the host does not wait for the download.
-    const child = spawn(process.execPath, [join(running.runtimeRoot, "scripts", "pota-comment-checker.mjs"), "fetch"], {
-      cwd: potaHome(env), env, detached: true, stdio: "ignore", windowsHide: true,
+    const child = spawn(process.execPath, [join(pluginRoot, "scripts", "pota-comment-checker.mjs"), "fetch"], {
+      cwd, env, detached: true, stdio: "ignore", windowsHide: true,
     });
     child?.on?.("error", () => {});
     child?.unref?.();
@@ -349,21 +352,7 @@ function removeAgedLock(paths) {
   } catch { /* no lock */ }
 }
 
-// install and upgrade (including the auto-upgrade runner's `upgrade --auto`) call this after the transaction commits and
-// the lifecycle lock is released, so a download failure never rolls back or fails the installation. Returns the line
-// to print, or null when the checker is turned off. Never throws.
-export async function fetchAfterInstall(env = process.env, options = {}) {
-  if (!commentCheckerEnabled(env)) return null;
-  let result;
-  try { result = await fetchCommentChecker({ ...options, env }); } catch (error) { result = { status: "failed", error: String(error?.message ?? error) }; }
-  if (result.status === "installed") return `comment-checker: installed ${COMMENT_CHECKER_VERSION}`;
-  if (result.status === "present") return `comment-checker: ready ${COMMENT_CHECKER_VERSION}`;
-  if (result.status === "unsupported") return `comment-checker: unsupported platform ${result.platform}`;
-  if (result.status === "locked") return "comment-checker: another download is in progress";
-  return `comment-checker: download failed (${result.error}); edits pass unchecked until a later background retry succeeds`;
-}
-
-// One informational doctor line; it never changes the doctor result.
+// One informational status line.
 export function commentCheckerStatusLine(env = process.env, platform = process.platform, arch = process.arch) {
   if (!commentCheckerEnabled(env)) return "comment-checker: disabled";
   if (!releaseAsset(platform, arch)) return `comment-checker: unsupported platform ${platform}-${arch}`;
@@ -373,19 +362,6 @@ export function commentCheckerStatusLine(env = process.env, platform = process.p
   return lastError
     ? `comment-checker: not downloaded (last attempt failed: ${lastError})`
     : "comment-checker: not downloaded yet (fetched in the background at the next session start)";
-}
-
-// Called by uninstall after the lifecycle lock is released. A fetch in progress keeps its lock and stage.
-export async function removeCommentCheckerTools(env = process.env) {
-  const paths = commentCheckerPaths(env);
-  try {
-    if (!(await lstat(paths.root)).isDirectory()) return;
-  } catch (error) {
-    if (error?.code === "ENOENT") return;
-    throw error;
-  }
-  if (lockHolder(paths) === null) await rm(paths.root, { recursive: true, force: true });
-  try { await rmdir(join(potaHome(env), "tools")); } catch (error) { if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error?.code)) throw error; }
 }
 
 async function download(fetchImpl, url) {
@@ -398,8 +374,8 @@ async function download(fetchImpl, url) {
   return buffer;
 }
 
-// Read-only view of fetch.lock for the hook and uninstall: a live pid holds it unless the lock is older than any fetch
-// can run (a pid reused after a reboot or kill -9 would otherwise stop downloads and uninstall cleanup for good).
+// Read-only view of fetch.lock for the hook: a live pid holds it unless the lock is older than any fetch can run (a pid
+// reused after a reboot or kill -9 would otherwise stop downloads for good).
 function lockHolder(paths) {
   let info;
   try { info = lstatSync(paths.lock); } catch { return null; }

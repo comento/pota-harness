@@ -11,6 +11,8 @@ import { parseRootArgs, resolvePluginRoot } from "./pota-paths.mjs";
 const pluginRoot = resolvePluginRoot(import.meta.url);
 const scriptDir = join(pluginRoot, "scripts");
 const version = JSON.parse(readFileSync(join(pluginRoot, "package.json"), "utf8")).version;
+// The npm installer's commands; host plugin commands install, update, and remove Pota now.
+const REMOVED_COMMANDS = ["install", "upgrade", "uninstall", "auto-upgrade"];
 
 export async function main(command = "help", args = [], { runner = spawnSync } = {}) {
   if (command === "help" || command === "--help") {
@@ -21,8 +23,14 @@ export async function main(command = "help", args = [], { runner = spawnSync } =
     console.log(`pota ${version}`);
     return;
   }
-  if (["install", "upgrade", "doctor", "uninstall"].includes(command)) {
-    const result = runner(process.execPath, [join(scriptDir, "pota-lifecycle.mjs"), command, ...args], { stdio: "inherit" });
+  if (REMOVED_COMMANDS.includes(command)) {
+    console.error(`pota ${command} was removed in 2.0.0. Install or update Pota with your host's plugin command: https://github.com/comento/pota-harness#install`);
+    process.exitCode = 2;
+    return;
+  }
+  if (command === "doctor" || command === "migrate") {
+    const script = command === "doctor" ? "pota-doctor.mjs" : "pota-legacy-migration.mjs";
+    const result = runner(process.execPath, [join(scriptDir, script), ...args], { stdio: "inherit" });
     process.exitCode = result.status ?? 1;
     return;
   }
@@ -77,11 +85,6 @@ export async function main(command = "help", args = [], { runner = spawnSync } =
   }
   if (command === "toolcheck") {
     const result = runner(process.execPath, [join(scriptDir, "pota-toolcheck.mjs"), ...args], { stdio: "inherit" });
-    process.exitCode = result.status ?? 1;
-    return;
-  }
-  if (command === "auto-upgrade") {
-    const result = runner(process.execPath, [join(scriptDir, "pota-auto-upgrade.mjs"), ...args], { stdio: "inherit" });
     process.exitCode = result.status ?? 1;
     return;
   }
@@ -141,56 +144,56 @@ const messages = {
     plan: `Use the pota-plan skill before non-trivial implementation. Read project-root MEMORY.md first when present; if absent, continue without repository memory. Understand the whole work first, then classify it into executable tasks and sub-tasks. Keep PLAN.md as an index, write detailed plans to docs/plan/<topic>.md, and record Light/Heavy Path triage before any mutation. ${stagedTriagePolicy} ${reasoningEffortPolicy} ${artifactLocalePolicy} ${planExecutionPolicy} ${planIndexPolicy}`,
     work: `Use pota-work only after a plan exists. Read root MEMORY.md when present and continue without it when absent. ${tokenEfficientWorkPolicy} Execute one task through its recorded Light/Heavy Path. ${stagedTriagePolicy} ${reasoningEffortPolicy} ${workExecutionPolicy} ${artifactLocalePolicy} Resume active work after side questions unless asked to pause, stop, or switch.`,
     review: `Use the pota-review skill. Compare evidence against PLAN.md and MEMORY.md. ${artifactLocalePolicy}`,
-    usage: "Usage: pota install|upgrade|doctor|uninstall|auto-upgrade|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
+    usage: "Usage: pota doctor|migrate|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
   },
   ko: {
     memory: `pota-memory 스킬을 사용하세요. MEMORY.md는 짧은 색인으로, 상세 내용은 docs/memory/<domain>.md에 기록합니다. ${artifactLocalePolicyKo} ${memoryIndexPolicy}`,
     plan: `중요 구현 전에는 pota-plan 스킬을 사용하세요. 프로젝트 루트 MEMORY.md가 있으면 먼저 읽고, 없으면 저장소 메모리 없이 계속 진행합니다. 먼저 전체 작업을 파악한 뒤 실행 가능한 task와 필요한 sub-task로 분류합니다. PLAN.md는 색인으로, 상세 계획은 docs/plan/<topic>.md에 기록하며 파일 변경 전 Light/Heavy Path 트리아지를 남깁니다. ${stagedTriagePolicyKo} ${reasoningEffortPolicy} ${artifactLocalePolicyKo} ${planExecutionPolicy} ${planIndexPolicy}`,
     work: `계획이 있으면 pota-work를 사용하세요. 루트 MEMORY.md가 있으면 읽고 없으면 무시하고 진행합니다. ${tokenEfficientWorkPolicy} 기록된 Light/Heavy Path로 한 task를 수행합니다. ${stagedTriagePolicyKo} ${reasoningEffortPolicy} ${workExecutionPolicy} ${artifactLocalePolicyKo} 곁가지 질문 뒤에는 일시중지·중단·전환 요청이 없으면 active work를 재개합니다.`,
     review: `pota-review 스킬을 사용하세요. PLAN.md와 MEMORY.md 기준으로 증거를 비교합니다. ${artifactLocalePolicyKo}`,
-    usage: "사용법: pota install|upgrade|doctor|uninstall|auto-upgrade|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
+    usage: "사용법: pota doctor|migrate|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
   },
   ja: {
     memory: `pota-memory スキルを使用してください。MEMORY.md は短い索引にし、詳細は docs/memory/<domain>.md に記録します。${artifactLocalePolicy} ${memoryIndexPolicy}`,
     plan: `pota-plan スキルを使用してください。PLAN.md は索引にし、詳細計画は docs/plan/<topic>.md に記録します。${reasoningEffortPolicy} ${artifactLocalePolicy} ${planExecutionPolicy} ${planIndexPolicy}`,
     work: `pota-work スキルを使用してください。1つのモジュールスライスを実行し、モジュール証拠と表面証拠を取得します。${tokenEfficientWorkPolicy} ${reasoningEffortPolicy} ${workExecutionPolicy} ${artifactLocalePolicy}`,
     review: `pota-review スキルを使用してください。PLAN.md と MEMORY.md に照らして証拠を比較します。${artifactLocalePolicy}`,
-    usage: "使い方: pota install|upgrade|doctor|uninstall|auto-upgrade|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
+    usage: "使い方: pota doctor|migrate|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
   },
   zh: {
     memory: `使用 pota-memory skill。将 MEMORY.md 保持为简短索引，并将详细内容写入 docs/memory/<domain>.md。${artifactLocalePolicy} ${memoryIndexPolicy}`,
     plan: `使用 pota-plan skill。将 PLAN.md 保持为索引，并将详细计划写入 docs/plan/<topic>.md。${reasoningEffortPolicy} ${artifactLocalePolicy} ${planExecutionPolicy} ${planIndexPolicy}`,
     work: `使用 pota-work skill。执行一个模块切片，并收集模块证据。${tokenEfficientWorkPolicy} ${reasoningEffortPolicy} ${workExecutionPolicy} ${artifactLocalePolicy}`,
     review: `使用 pota-review skill。根据 PLAN.md 和 MEMORY.md 对比证据。${artifactLocalePolicy}`,
-    usage: "用法: pota install|upgrade|doctor|uninstall|auto-upgrade|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
+    usage: "用法: pota doctor|migrate|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
   },
   es: {
     memory: `Usa la skill pota-memory. Mantén MEMORY.md como un índice breve y escribe los detalles en docs/memory/<domain>.md. ${artifactLocalePolicy} ${memoryIndexPolicy}`,
     plan: `Usa la skill pota-plan. Mantén PLAN.md como índice y escribe los planes detallados en docs/plan/<topic>.md. ${reasoningEffortPolicy} ${artifactLocalePolicy} ${planExecutionPolicy} ${planIndexPolicy}`,
     work: `Usa la skill pota-work. Ejecuta un solo segmento de módulo y captura evidencia de módulo y de superficie. ${tokenEfficientWorkPolicy} ${reasoningEffortPolicy} ${workExecutionPolicy} ${artifactLocalePolicy}`,
     review: `Usa la skill pota-review. Compara la evidencia con PLAN.md y MEMORY.md. ${artifactLocalePolicy}`,
-    usage: "Uso: pota install|upgrade|doctor|uninstall|auto-upgrade|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
+    usage: "Uso: pota doctor|migrate|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
   },
   fr: {
     memory: `Utilisez la skill pota-memory. Gardez MEMORY.md comme index court et écrivez les détails dans docs/memory/<domain>.md. ${artifactLocalePolicy} ${memoryIndexPolicy}`,
     plan: `Utilisez la skill pota-plan. Gardez MEMORY.md comme index et écrivez les plans détaillés dans docs/plan/<topic>.md. ${reasoningEffortPolicy} ${artifactLocalePolicy} ${planExecutionPolicy} ${planIndexPolicy}`,
     work: `Utilisez la skill pota-work. Exécutez une tranche de module et capturez les preuves de module et de surface. ${tokenEfficientWorkPolicy} ${reasoningEffortPolicy} ${workExecutionPolicy} ${artifactLocalePolicy}`,
     review: `Utilisez la skill pota-review. Comparez les preuves avec PLAN.md et MEMORY.md. ${artifactLocalePolicy}`,
-    usage: "Utilisation: pota install|upgrade|doctor|uninstall|auto-upgrade|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
+    usage: "Utilisation: pota doctor|migrate|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
   },
   de: {
     memory: `Verwenden Sie die Skill pota-memory. Halten Sie MEMORY.md als kurzen Index und schreiben Sie Details nach docs/memory/<domain>.md. ${artifactLocalePolicy} ${memoryIndexPolicy}`,
     plan: `Verwenden Sie die Skill pota-plan. Halten Sie MEMORY.md als Index und schreiben Sie Detailpläne nach docs/plan/<topic>.md. ${reasoningEffortPolicy} ${artifactLocalePolicy} ${planExecutionPolicy} ${planIndexPolicy}`,
     work: `Verwenden Sie die Skill pota-work. Führen Sie einen Modulabschnitt aus und erfassen Sie Modul- und Oberflächenbelege. ${tokenEfficientWorkPolicy} ${reasoningEffortPolicy} ${workExecutionPolicy} ${artifactLocalePolicy}`,
     review: `Verwenden Sie die Skill pota-review. Vergleichen Sie Belege mit PLAN.md und MEMORY.md. ${artifactLocalePolicy}`,
-    usage: "Verwendung: pota install|upgrade|doctor|uninstall|auto-upgrade|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
+    usage: "Verwendung: pota doctor|migrate|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
   },
   pt: {
     memory: `Use a skill pota-memory. Mantenha MEMORY.md como um índice curto e escreva detalhes em docs/memory/<domain>.md. ${artifactLocalePolicy} ${memoryIndexPolicy}`,
     plan: `Use a skill pota-plan. Mantenha MEMORY.md como índice e escreva planos detalhados em docs/plan/<topic>.md. ${reasoningEffortPolicy} ${artifactLocalePolicy} ${planExecutionPolicy} ${planIndexPolicy}`,
     work: `Use a skill pota-work. Execute uma fatia de módulo e capture evidências de módulo e de superfície. ${tokenEfficientWorkPolicy} ${reasoningEffortPolicy} ${workExecutionPolicy} ${artifactLocalePolicy}`,
     review: `Use a skill pota-review. Compare evidências com PLAN.md e MEMORY.md. ${artifactLocalePolicy}`,
-    usage: "Uso: pota install|upgrade|doctor|uninstall|auto-upgrade|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
+    usage: "Uso: pota doctor|migrate|cleanup|init|memory|plan|work|review|toolcheck|goal|task",
   },
 };
 

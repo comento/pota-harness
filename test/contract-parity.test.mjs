@@ -6,20 +6,17 @@ import { resolve } from "node:path";
 const root = resolve(".");
 const readJson = async (path) => JSON.parse(await readFile(resolve(root, path), "utf8"));
 
-test("package and plugin metadata expose the same machine-consumed version", async () => {
+test("package and the three host manifests expose the same version", async () => {
   const packageJson = await readJson("package.json");
-  const pluginJson = await readJson(".codex-plugin/plugin.json");
 
-  assert.equal(packageJson.version, "1.4.0");
-  assert.equal(pluginJson.version, packageJson.version);
-  // The mod manifest in the repo is a dev manifest, but it ships in the package, so it carries the release version too.
-  assert.equal((await readJson("claude-mod/.claude-plugin/plugin.json")).version, packageJson.version);
-  assert.deepEqual(packageJson.bin, {
-    pota: "scripts/pota.mjs",
-  });
-  assert.ok(packageJson.files.includes("scripts/*.mjs"));
-  assert.ok(!packageJson.files.includes("scripts/"));
-  assert.equal(packageJson.scripts.prepack, "npm run check");
+  assert.equal(packageJson.version, "2.0.0");
+  for (const path of [".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "plugin.json"]) {
+    assert.equal((await readJson(path)).version, packageJson.version, `${path} version`);
+  }
+  // Hosts install the plugin from the repository; the npm package is never published again.
+  assert.equal(packageJson.private, true);
+  for (const key of ["bin", "files"]) assert.equal(packageJson[key], undefined, `package.json ${key}`);
+  assert.equal(packageJson.scripts.prepack, undefined);
 });
 
 const readText = (path) => readFile(resolve(root, path), "utf8");
@@ -33,7 +30,7 @@ test("templates/MEMORY.md and templates/PLAN.md equal the English init templates
 });
 
 test("memory surfaces require a Summary line and pota memory index/check", async () => {
-  for (const path of ["skills/pota-memory/SKILL.md", "commands/pota-memory.md", ".agents/workflows/pota-memory.md"]) {
+  for (const path of ["skills/pota-memory/SKILL.md"]) {
     const content = await readText(path);
     assert.match(content, /`Summary:`/, `${path} Summary line`);
     assert.match(content, /120 characters/, `${path} Summary limit`);
@@ -63,15 +60,8 @@ test("plan surfaces require reuse of related notes and completed plans and the P
   assert.match(reuse, /200 characters/);
   assert.match(reuse, /plan index --root/);
   assert.match(reuse, /do not read every/i);
-
-  for (const path of ["commands/pota-plan.md", ".agents/workflows/pota-plan.md"]) {
-    const content = await readText(path);
-    assert.match(content, /related (?:`docs\/memory` )?notes/i, `${path} related notes`);
-    assert.match(content, /at most 3 completed plans/i, `${path} completed plans`);
-    assert.match(content, /`Related completed plans:`/, `${path} Related completed plans`);
-    assert.match(content, /one line of 200 characters or fewer/, `${path} PLAN.md one-line entry`);
-    assert.match(content, /plan index --root/, `${path} plan index`);
-  }
+  assert.match(rules, /one line of 200 characters or fewer/, "PLAN.md one-line entry");
+  assert.match(rules, /plan index --root/, "plan index");
 });
 
 test("work and review surfaces require the Memory promotion decision and forbid forced notes", async () => {
@@ -85,14 +75,7 @@ test("work and review surfaces require the Memory promotion decision and forbid 
   assert.match(promotion, /`Memory promotion: none: <reason>`/);
   assert.match(promotion, /memory index --root/);
 
-  const surfaces = [
-    "skills/pota-work/verification.md",
-    "commands/pota-work.md",
-    ".agents/workflows/pota-work.md",
-    "skills/pota-review/SKILL.md",
-    "commands/pota-review.md",
-    ".agents/workflows/pota-review.md",
-  ];
+  const surfaces = ["skills/pota-work/verification.md", "skills/pota-review/SKILL.md"];
   for (const path of surfaces) {
     const content = await readText(path);
     assert.match(content, /Memory promotion:/, `${path} Memory promotion line`);
@@ -100,7 +83,7 @@ test("work and review surfaces require the Memory promotion decision and forbid 
     assert.match(content, /do not create a note/i, `${path} optional note`);
     assert.doesNotMatch(content, forcedNote, `${path} forced note`);
   }
-  for (const path of ["skills/pota-review/SKILL.md", "commands/pota-review.md", ".agents/workflows/pota-review.md"]) {
+  for (const path of ["skills/pota-review/SKILL.md"]) {
     const content = await readText(path);
     assert.match(content, /memory check --root/, `${path} memory check`);
     assert.match(content, /plan check --root/, `${path} plan check`);
@@ -131,30 +114,16 @@ test("tool readiness surfaces tell the agent to ask the user once before install
     assert.match(policy, /`toolcheck --install --yes(?: --root "<repoRoot>")?` only for pinned\/supported installers|pinned\/supported installer \(`toolcheck --install --yes`\)/, `${path} pinned installer rule`);
   }
 
-  const derived = [
-    "commands/pota-toolcheck.md",
-    ".agents/workflows/pota-toolcheck.md",
-    ".claude/commands/pota-toolcheck.md",
-    "commands/pota-plan.md",
-    ".agents/workflows/pota-plan.md",
-    "commands/pota-work.md",
-    ".agents/workflows/pota-work.md",
-    "docs/model-guidance/README.md",
-  ];
-  for (const path of derived) {
+  for (const path of ["docs/model-guidance/README.md"]) {
     const content = await readText(path);
     assert.match(content, /asks? the user once whether to install/, `${path} asks once`);
     assert.match(content, /explicit(?:ly)? approv/, `${path} approval still required`);
-  }
-  for (const path of ["commands/pota-toolcheck.md", ".agents/workflows/pota-toolcheck.md", ".claude/commands/pota-toolcheck.md", "docs/model-guidance/README.md"]) {
-    const content = await readText(path);
     assert.match(content, /proposed command or the reason no automatic installer exists/, `${path} question content`);
     assert.match(content, /non-interactive/, `${path} non-interactive blocker`);
     assert.match(content, /record a blocker/, `${path} blocker`);
   }
-  assert.match(await readText("commands/pota-toolcheck.md"), /do not ask again in this session; a blocker recorded by an earlier session does not suppress the question in a new one/, "pota-toolcheck command session scope");
 
-  for (const path of ["skills/pota-plan/delegation.md", "skills/pota-work/delegation.md", "agents/worker.md"]) {
+  for (const path of ["skills/pota-plan/delegation.md", "skills/pota-work/delegation.md", "claude/agents/worker.md"]) {
     const content = await readText(path);
     assert.match(content, /`toolcheck` install proposal to the orchestrator, which asks the user once/, `${path} subagent reports instead of asking`);
     assert.match(content, /never install without that approval/, `${path} approval still required`);
@@ -190,8 +159,8 @@ test("delegation prompts carry the selected memory note paths", async () => {
   }
 });
 
-test("agents and their Claude mirrors point to MEMORY.md entries for relevant notes", async () => {
-  for (const path of ["agents/explorer.md", "agents/worker.md", ".claude/agents/explorer.md", ".claude/agents/worker.md"]) {
+test("Claude agents point to MEMORY.md entries for relevant notes", async () => {
+  for (const path of ["claude/agents/explorer.md", "claude/agents/worker.md"]) {
     const content = await readText(path);
     assert.ok(lineWith(content, [/`MEMORY\.md`/, /entries/, /`docs\/memory\/\*\.md`/]), `${path} MEMORY.md entries locate notes`);
     assert.match(content, /continue without repository memory when absent|If absent, continue without repository memory/, `${path} missing MEMORY.md`);
@@ -232,15 +201,6 @@ test("request brief and steering surfaces name the template section, the command
   assert.ok(work.includes("pota://skills/pota-plan/request-brief.md"), "pota-work SKILL pointer");
   const recovery = await readText("skills/pota-work/recovery.md");
   for (const needle of ["goal steer", "--steer", "Current request (as of S", "## Request Brief"]) assert.ok(recovery.includes(needle), `recovery ${needle}`);
-
-  for (const path of ["commands/pota-plan.md", ".agents/workflows/pota-plan.md"]) {
-    const content = await readText(path);
-    for (const needle of ["## Request Brief", "--allow-no-request-brief", "request-brief.md", "pota plan steering", "Prior records"]) assert.ok(content.includes(needle), `${path} ${needle}`);
-  }
-  for (const path of ["commands/pota-work.md", ".agents/workflows/pota-work.md"]) {
-    const content = await readText(path);
-    for (const needle of ["goal steer", "--steer", "Current request (as of S", "## Request Brief", "request-brief.md"]) assert.ok(content.includes(needle), `${path} ${needle}`);
-  }
 
   for (const path of ["README.md", "README.ko.md", "README.ja.md", "README.zh.md", "README.es.md", "README.fr.md", "README.de.md", "README.pt.md"]) {
     const content = await readText(path);

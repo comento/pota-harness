@@ -13,6 +13,99 @@ Bevor ein task externen Zustand verändert, zeichnet Pota den nächstliegenden d
 
 Pota behandelt tool readiness ebenfalls als Teil der Arbeit. LSP, typecheck, lint, dry-run und verification tools werden gegen den repository stack geprüft. Installation erfolgt nur mit ausdrücklicher Zustimmung und einem gepinnten unterstützten installer; andernfalls wird ein blocker gemeldet.
 
+## Install
+
+Pota ist ein Plugin für Claude Code, Codex und die Antigravity-CLI. Die Wurzel dieses Repositorys ist das Plugin, und der Branch `main` ist die veröffentlichte Version. Jeder Host installiert, aktualisiert und entfernt seine eigene Kopie mit seinen eigenen Plugin-Befehlen, und diese Kopie ist die Runtime des Hosts: Hooks, Skills und CLI laufen aus ihr. Kopien auf verschiedenen Hosts dürfen unterschiedliche Versionen haben; Pota vergleicht sie nicht. Der goal state in `~/.pota/projects/` wird von allen Hosts geteilt.
+
+### Claude Code
+
+```sh
+claude plugin marketplace add comento/pota-harness
+claude plugin install pota@pota-harness
+```
+
+In einer Sitzung sind dieselben Schritte `/plugin marketplace add comento/pota-harness` und `/plugin install pota@pota-harness`. Claude Code aktualisiert Marketplaces von Drittanbietern standardmäßig nicht automatisch; aktualisieren Sie daher von Hand und starten Sie die Sitzung neu:
+
+```sh
+claude plugin marketplace update pota-harness
+claude plugin update pota@pota-harness
+```
+
+Deinstallieren:
+
+```sh
+claude plugin uninstall pota@pota-harness
+claude plugin marketplace remove pota-harness
+```
+
+### Codex
+
+```sh
+codex plugin marketplace add comento/pota-harness
+```
+
+Danach in der Codex-TUI:
+
+1. `/plugins` öffnen, den Marketplace `pota-harness` wählen, `pota` installieren und eine neue Sitzung starten.
+2. `/hooks` öffnen und die fünf Hooks von Pota freigeben. Codex führt Plugin-Hooks erst nach der Freigabe aus, und die Freigabe ist an den Hook-Inhalt gebunden; nach jedem Update müssen Sie die Hooks daher in `/hooks` erneut freigeben. Ohne Freigabe erhält keine Sitzung die Zeile `Pota CLI:`, und die Pota-Skills melden, dass die Hooks von Pota inaktiv sind.
+
+Zum Aktualisieren `codex plugin marketplace upgrade pota-harness` ausführen und die Hooks in `/hooks` erneut freigeben. Zum Deinstallieren das Plugin in `/plugins` öffnen und "Uninstall plugin" wählen. Diese Codex-Schritte folgen der Codex-Dokumentation und dem Quellcode; sie wurden noch nicht an einer echten Codex-Installation ausgeführt.
+
+### Antigravity CLI
+
+```sh
+agy plugin install https://github.com/comento/pota-harness
+```
+
+Zum Aktualisieren denselben Befehl erneut ausführen; laut Antigravity-Dokumentation ersetzt eine Neuinstallation die installierte Kopie. Deinstallieren mit `agy plugin uninstall pota`. Empfohlen ist `agy` 1.5.6 oder neuer. Unterstützt wird nur die Antigravity-CLI, nicht die Antigravity-IDE.
+
+### What each host gets
+
+| | Claude Code | Codex | Antigravity CLI |
+| --- | --- | --- | --- |
+| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` |
+| Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | dieselben fünf, nach Freigabe in `/hooks` | SessionStart, PreInvocation (Prompt-Kontext), PostToolUse, Stop; kein SubagentStop |
+| Agents `explorer`, `worker` | ja | nein | nein |
+| DAG-Panel (Mod) | ja | nein | nein |
+
+### Coming from the npm install (1.x)
+
+Pota 2.x wird nicht auf npm veröffentlicht und hat keinen globalen Befehl `pota`. Das npm-Paket `@comento/pota-harness` endet mit 1.5.0, das nur diese Installationsanleitung anzeigt, und das Paket ist als deprecated markiert.
+
+1. Nur Claude Code: zuerst das 1.x-Plugin mit `claude plugin uninstall pota@pota --scope user` entfernen.
+2. **Das Plugin auf jedem Host installieren, den Sie nutzen.** Das Entfernen unten geschieht pro Host, und ein Host, der auf der 1.x-Installation bleibt, kann nicht mehr aktualisieren, sobald der Teil eines anderen Hosts entfernt ist: seine Upgrades, auch die automatischen, werden mit "Managed artifact was modified" abgelehnt.
+3. Eine Sitzung starten. Findet der Sitzungsstart des Plugins das 1.x-ownership manifest (`~/.pota/install/lifecycle.json`), entfernt er den Teil dieses Hosts an der 1.x-Installation in einem Hintergrundprozess und meldet das; starten Sie die Sitzung einmal neu. Die nächste Sitzung meldet das Ergebnis einmal. Die gemeinsame 1.x-Runtime, `~/.pota/update/` und das Manifest werden erst entfernt, wenn von keinem Host mehr ein Teil übrig ist.
+
+Entfernt werden nur Dateien und Verzeichnisse, die das 1.x-Manifest verzeichnet und deren Digest unverändert ist, sowie die eigenen Pota-Abschnitte der Codex-`config.toml`. Erhalten bleiben `~/.pota/projects/` (goal state), `~/.pota/config.json`, `~/.pota/tools/comment-checker/`, jede von Ihnen geänderte Datei (als behalten gemeldet), alles, was das Manifest nicht verzeichnet, und das globale npm-Paket (entfernen mit `npm uninstall -g @comento/pota-harness`). In diesen Fällen wird für den Host nichts entfernt, und der Grund wird gemeldet:
+
+- ein Verzeichnis auf einem der Host-Pfade ist ein Symlink (`symlinked-path`; die gemeldeten Pfade von Hand entfernen);
+- die Host-Registrierung lässt sich nicht sicher entfernen (`host-unregister-failed`): die `claude`-CLI fehlt oder schlägt fehl, oder die Codex-`config.toml` enthält Pota-Abschnitte, die sich nicht sicher erkennen lassen, oder das Umschreiben würde andere Abschnitte ändern;
+- das Manifest ist ungültig, hat ein nicht unterstütztes Schema, zeigt außerhalb der erwarteten Pfade, oder eine 1.x-Installationstransaktion wurde unterbrochen (`manifest-invalid`, `manifest-unsupported-schema`, `target-outside-allowlist`, `transaction-pending`). Wurde 1.x mit `CODEX_HOME`, `CLAUDE_HOME`, `ANTIGRAVITY_HOME`, `ANTIGRAVITY_CLI_HOME` oder `CODEX_CONFIG_PATH` installiert, setzen Sie dieselben Werte für den Host. Andernfalls, solange noch von keinem Host der Teil entfernt wurde, `npx @comento/pota-harness@1.5.0 uninstall` ausführen und neu starten.
+
+Sobald der Teil eines Hosts entfernt ist, verweigert das 1.x-Uninstall ("Refusing to uninstall modified managed artifacts"), weil das Manifest nie neu geschrieben wird. Die Ablehnungsmeldung fordert Sie dann auf, die manuellen Punkte aus `doctor` zu erledigen und für diesen Host `node "<pluginRoot>/scripts/pota.mjs" migrate run --host <host>` auszuführen.
+
+Ein abgelehntes Entfernen wird nach 24 Stunden erneut versucht und höchstens alle 7 Tage gemeldet. Eine Installation vor 1.3 hat kein ownership manifest und wird nie angefasst; entfernen Sie sie mit `npx @comento/pota-harness@1.5.0 uninstall`, bevor Sie das Plugin installieren. Zustand ansehen oder das Entfernen selbst ausführen (`<pluginRoot>` wird unten erklärt):
+
+```sh
+node "<pluginRoot>/scripts/pota.mjs" doctor
+node "<pluginRoot>/scripts/pota.mjs" migrate status
+node "<pluginRoot>/scripts/pota.mjs" migrate run --host claude --dry-run
+node "<pluginRoot>/scripts/pota.mjs" migrate run --host claude
+```
+
+`POTA_LEGACY_MIGRATION=0` (auch `false`, `off` oder `no`) schaltet das automatische Entfernen ab. 1.x-Namen entsprechen in 2.x:
+
+| 1.x | 2.x |
+| --- | --- |
+| `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` | die Skill-Namen des Hosts in der Tabelle oben |
+| `/pota-toolcheck` | den Agenten bitten, `pota toolcheck` auszuführen |
+| `/pota-doctor` | `pota doctor` |
+| die CLI-Befehle `install`, `upgrade` und `uninstall` und automatische Upgrades | die Plugin-Befehle des Hosts oben; die CLI gibt jetzt einen Verweis auf diesen Abschnitt aus und endet mit exit 2 |
+
+### Running the Pota CLI
+
+Jeder Sitzungsstart gibt eine Zeile `Pota CLI:` mit dem absoluten Pfad von `scripts/pota.mjs` in der Plugin-Kopie dieses Hosts aus, und der Agent führt Pota-Befehle mit diesem Pfad aus. `<pluginRoot>` ist das übergeordnete Verzeichnis dieses `scripts`-Verzeichnisses; der Pfad ändert sich, wenn der Host eine neue Version installiert. In diesem README steht `pota <command>` für `node "<pluginRoot>/scripts/pota.mjs" <command>`.
+
 ## Complexity Triage
 
 Jede implementation task durchläuft zuerst complexity triage, bevor agent, plugin oder delegated workflow guidance angewendet werden. Triage wird aus repository exploration, erwartetem Änderungsumfang und risk signals entschieden, ohne den user nach auffindbaren Fakten zu fragen.
@@ -77,33 +170,10 @@ Für geringe Tokenkosten entsteht zuerst ein test contract aus Anforderungen, In
 
 ## Commands
 
-Das veröffentlichte package kann mit `bunx` oder global installierten `pota` commands ausgeführt werden.
+Unten steht `pota <command>` für `node "<pluginRoot>/scripts/pota.mjs" <command>` mit dem Pfad aus der Zeile `Pota CLI:` des Sitzungsstarts (siehe [Running the Pota CLI](#running-the-pota-cli)).
 
-```sh
-bunx @comento/pota-harness@latest install
-bunx @comento/pota-harness@latest upgrade
-bunx @comento/pota-harness@latest doctor
-bunx @comento/pota-harness@latest uninstall
-bunx @comento/pota-harness@latest toolcheck
-```
-
-Nach globaler installation sind auch kurze commands verfügbar.
-
-```sh
-bun add -g @comento/pota-harness
-pota install
-pota upgrade
-pota doctor
-pota uninstall
-pota toolcheck
-pota auto-upgrade status
-```
-
-- `pota install [--hosts all|codex,claude,antigravity]`: installiert transaktional custom marketplace source, versioned runtime, Pota-eigene config sections und aktuelle host mirrors. Die canonical runtime liegt unter `~/.pota/install/`; der Rest wird nur für die gewählten hosts installiert. Ohne `--hosts` fragt die erste Installation in einem Terminal nach den hosts; nicht interaktive Läufe und CI installieren alle hosts.
-- `pota upgrade [--hosts all|codex,claude,antigravity]`: ersetzt nur unveränderte Einträge des ownership manifest nach staged validation und nutzt rollback bei Fehlern. Behält die aufgezeichneten hosts, sofern `--hosts` sie nicht ändert, und aktualisiert einen Claude Code plugin cache, der noch eine andere Version enthält. Ist die installierte Version neuer als diese CLI, verweigern `install` und `upgrade` ohne Änderung; `--allow-downgrade` installiert trotzdem die Version dieser CLI.
-- `pota doctor`: prüft ownership digests, effektive Codex features, den tatsächlichen plugin status und runtime locators ohne Reparatur. Gibt zuerst `Hosts: <ids>` aus und prüft nur die gewählten hosts (einschließlich `Claude plugin cache version`).
-- `pota uninstall`: prüft zuerst jeden Nicht-config-Eintrag des ownership manifest gegen seinen installed digest und verweigert das ganze uninstall ohne Änderung, wenn ein managed artifact verändert oder entfernt wurde. Andernfalls entfernt es die verwalteten Einträge und retained runtimes bzw. stellt sie wieder her, räumt leere managed scaffolds auf, bewahrt unmanaged Ziele und ihre übergeordneten Verzeichnisse und nutzt rollback bei Fehlern vor dem commit. Entfernt auch `~/.pota/update/` und behält `~/.pota/config.json` und `~/.pota/projects/`. Eine Installation im legacy layout wird ohne Migration an Ort und Stelle entfernt.
-- `pota auto-upgrade status|on|off|run`: `status` gibt Einstellung, installierte Version, letzte Prüfung und ausstehende Meldung als JSON aus; `on`/`off` schreiben `autoUpgrade` in `~/.pota/config.json` und geben denselben Bericht aus; `run` prüft npm sofort, ohne 24-Stunden-Intervall und backoff abzuwarten. Exit 0 bedeutet Erfolg, 1 einen Ausführungsfehler oder fehlgeschlagenen Lauf, 2 einen Verwendungsfehler.
+- `pota doctor [--json]`: schreibgeschützte Diagnose dieser Plugin-Kopie und von `~/.pota`: Version, `pluginRoot`, Node.js (18 oder neuer), ob `POTA_HOME` beschreibbar ist, ob die vier Versionsflächen dieser Kopie übereinstimmen, Pflichtdateien, die 1.x-Installation (`none`, `present <version>` oder `blocked <reason>`), der letzte Entfernungsbericht pro Host mit behaltenen Pfaden und manuellen Befehlen sowie der comment-checker-Zustand. Kopien anderer Hosts werden nie verglichen. Exit 1, wenn eine Prüfung fehlschlägt, 2 bei einem Bedienungsfehler.
+- `pota migrate status|run [--host claude|codex|antigravity] [--all] [--dry-run] [--json]`: führt das Entfernen der 1.x-Installation von Hand aus. `status` zeigt, was ein Lauf tun würde, und die letzten Berichte; `run` braucht `--host <host>` oder `--all` (alle Hosts, auch solche ohne Plugin), und `--dry-run` zeigt den Plan, ohne etwas zu ändern. Exit 1, wenn das Entfernen abgelehnt wird, 2 bei einem Bedienungsfehler.
 - `pota toolcheck`: erkennt repository stacks und prüft required tools; Installation läuft nur für einen genehmigten unterstützten installer, sonst gilt `installer-unavailable`.
 - `pota cleanup --root <repo>`: meldet standardmäßig read-only legacy projektlokale `.pota`-Reste. `--yes` migriert/gleicht gültigen active state mit dem user-home store ab, entfernt nur bekannte state/lock/tool-Reste, bewahrt unbekannte Dateien und entfernt das Verzeichnis nur, wenn es leer ist.
 - `pota memory check|index [--root <repo>]`: `check` gleicht `MEMORY.md` mit `docs/memory/*.md` ab und gibt einen JSON-Bericht aus; bei nicht indexierten Notizen, dead links, Duplikaten, veralteten Zusammenfassungen, Steuerzeichen in Zusammenfassungen oder unsicheren Pfaden endet es mit exit 1, warnings schlagen nur mit `--strict` fehl. Einträge sind Listenzeilen unter `## Domain Knowledge` (in einer älteren Datei ohne diesen Abschnitt alle Listenzeilen); ein Notizlink in einem anderen Abschnitt ist eine Erwähnung, die `index` nie umschreibt. `index` ergänzt fehlende Notizen und ersetzt bei geändertem `Summary:` nur die Zusammenfassung nach dem Link (eine Zeile mit mehreren Links bleibt unverändert); es entfernt nur exakt passende Pota-Platzhalterzeilen in diesem Abschnitt, löscht nie Einträge oder dead links und erhält den Rest Byte für Byte. `--dry-run` zeigt eine Vorschau. Liegt die Einfügestelle in einem nicht geschlossenen Codeblock, schreibt `index` nichts und endet mit exit 1 und `unclosed-fence`. Usage-Fehler enden mit exit 2; `pota memory` ohne Unterbefehl gibt weiterhin den Hinweis aus.
@@ -114,37 +184,24 @@ pota auto-upgrade status
 - `pota-work`: führt den nächsten module task im aktuellen `PLAN.md` mit zwei verification gates aus.
 - `pota-review`: prüft completed tasks gegen plan, memory und evidence.
 
-Der custom marketplace lifecycle hält source und versioned runtime getrennt. Staged validation geht jedem commit voraus, das ownership manifest bindet alle managed digests, und ein Fehler führt zu reverse-order rollback. Modified oder unmanaged artifacts werden preserved und als conflict gemeldet. Pota ändert nur eigene TOML sections und erzwingt keine öffentlichen feature/agent settings.
+Pota schreibt nur unter `POTA_HOME` (Standard `~/.pota`) und nie in seine Plugin-Kopie. Codex bindet die Hook-Freigabe an den Plugin-Inhalt; eine Kopie, die sich selbst änderte, verlöre ihre Freigabe. Die Plugin-Dateien eines Hosts werden nur von dessen eigenen Plugin-Befehlen installiert, aktualisiert und entfernt.
 
-Clean uninstall entfernt `~/.pota/install/` und den Codex cache root `$CODEX_HOME/plugins/cache/pota` nur, wenn alle managed scaffold directories leer sind; unmanaged Inhalte bleiben erhalten. Source repository, repository `MEMORY.md`/`PLAN.md` und user-home Pota goal state, das globale `@comento/pota-harness` package, package-manager caches sowie legacy backups/settings außerhalb des aktuellen ownership manifest werden nicht automatisch gelöscht.
+## Pota Home And Settings
 
-Codex verwendet `skills/` und `commands/`. Claude Code verwendet gespiegelte commands und agent definitions unter `.claude/`. Antigravity verwendet `.agents/workflows` und globale skills mirrors.
-
-## Install Layout And Auto-Upgrade
-
-Pota legt seine Installation unter `POTA_HOME` (Standard `~/.pota`) ab. Die Pfade der einzelnen hosts setzen weiterhin getrennt `CODEX_HOME`, `CLAUDE_HOME`, `ANTIGRAVITY_HOME`, `ANTIGRAVITY_CLI_HOME` und `CODEX_CONFIG_PATH`.
+Pota legt seine Daten unter `POTA_HOME` (Standard `~/.pota`) ab; die Plugin-Kopien aller Hosts teilen sie.
 
 ```text
 ~/.pota/
-  install/                  vom lifecycle verwaltete Dateien
-    lifecycle.json          ownership manifest (schema 2: hosts, origin, retained runtimes)
-    lifecycle.lock, transaction.json, transactions/
-    runtime/<version>/      canonical runtime für alle runtime locators und die Claude Code hooks
-    codex/                  Codex local marketplace source
-    claude/                 Claude Code local marketplace
   projects/                 goal state
-  config.json               Benutzereinstellungen ("autoUpgrade", "commentChecker", "modelCeiling")
-  update/                   auto-upgrade-Zustand
-  tools/comment-checker/    comment-checker-Binary (feste Release)
-$CODEX_HOME/plugins/cache/pota/pota/<version>/   Kopie im Codex plugin cache (nur wenn Codex gewählt ist)
+  config.json               user settings ("commentChecker", "modelCeiling")
+  tools/comment-checker/    comment-checker-Binary (fixierter Release)
+  migration/                Berichte und Zustand des Entfernens der 1.x-Installation
+  hosts/antigravity/        Antigravity-Sitzungsdateien (Hook-Meldungen, die auf den nächsten Prompt warten)
+  install/, update/         Reste der npm-Installation 1.x, bis ihr Entfernen abgeschlossen ist
 ```
 
-- Hosts: Nur `install` und `upgrade` akzeptieren `--hosts`, mit `all` oder einer Kommaliste aus `codex`, `claude` und `antigravity`. Die Auswahl steht im ownership manifest, und `upgrade`, `doctor` und `uninstall` folgen ihr. Geändert wird sie mit `pota upgrade --hosts <list>`; eine veränderte verwaltete Datei eines abgewählten hosts führt zur Ablehnung. Der interaktive prompt (alle als Standard, nur Claude Code, nur Codex, nur Antigravity oder eine Liste) erscheint nur, wenn noch nichts installiert ist.
-- Aufbewahrung: Ein upgrade mit Versionswechsel behält die vorherige canonical runtime und die Kopie im Codex cache 3 Tage lang (höchstens 3 je Art), damit vorher gestartete sessions weiterlaufen. Das nächste install oder upgrade entfernt abgelaufene, uninstall entfernt alle. Eine Codex-cache-Kopie gleich oder über der neuen Version wird nie behalten, weil Codex die höchste Version im cache lädt.
-- Claude Code plugin cache: Enthält er noch eine andere Version, aktualisiert `pota upgrade` ihn mit `claude plugin marketplace update pota` und `claude plugin update pota@pota --scope user`. Schlägt das fehl, bleibt die aktualisierte Installation bestehen, die Befehle zum manuellen Abschluss werden ausgegeben und der Exit-Code ist 1.
-- Auto-upgrade: standardmäßig an. Höchstens einmal alle 24 Stunden (und nicht in den 24 Stunden nach einem install oder upgrade) startet `SessionStart` einen abgetrennten Prozess, der die neueste `@comento/pota-harness`-Version von npm liest, genau diese Version mit `--ignore-scripts` nach `~/.pota/update/stage/` installiert, sie prüft und ihr `pota-lifecycle.mjs upgrade --auto` ausführt. Jede neuere Version wird angewendet, auch major, und es gibt nie ein downgrade. Der nächste `SessionStart` meldet das Ergebnis (`updated`, `failed` oder `manual`) einmal in einer Zeile. Für Installationen aus einem git checkout (`origin: "checkout"`) und Läufe aus einem source checkout läuft es nicht.
-- Abschalten: `pota auto-upgrade off`, `POTA_AUTO_UPGRADE=0` (auch `false`, `off` oder `no`) oder `"autoUpgrade": false` in `~/.pota/config.json`. Eine unlesbare `config.json` schaltet es ebenfalls ab. Zustand und Log des letzten Laufs liegen in `~/.pota/update/`.
-- Kommentarprüfung: Nach einer erfolgreichen Bearbeitung (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` und Bearbeitungswerkzeuge) führt der PostToolUse-Hook [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) auf dem geänderten Text aus und gibt bei überflüssigen Kommentaren `decision: "block"` zurück, damit der Agent sie entfernt oder begründet. Es kommt keine npm-Abhängigkeit hinzu: `pota install` und `pota upgrade` (auch das automatische Upgrade) laden nach dem Commit der Installation die feste Release v0.8.2 für die aktuelle Plattform (darwin/linux x64 und arm64, windows x64), prüfen ihren festen SHA256, entpacken sie mit dem System-`tar` nach `~/.pota/tools/comment-checker/` und geben das Ergebnis in einer Zeile aus. Ein fehlgeschlagener Download lässt Installation und Exit-Code unverändert; `SessionStart` aus der installierten Runtime versucht es in einem abgetrennten Prozess mit Backoff erneut. Bis ein Download gelingt, gehen Bearbeitungen ungeprüft durch; ein Fehler des Prüfers oder eine Prüfung über 7 Sekunden geht ebenfalls durch. `pota doctor` zeigt den Zustand in einer Zeile, `pota uninstall` entfernt ihn, und `POTA_COMMENT_CHECKER=0` (auch `false`, `off` oder `no`) oder `"commentChecker": false` in `~/.pota/config.json` schaltet Prüfung und Download ab.
+- 1.x-Einstellungen: `"autoUpgrade"` in `config.json` wird ignoriert; Pota aktualisiert sich nicht mehr selbst.
+- Kommentarprüfung: Nach einer erfolgreichen Bearbeitung (Claude Code `Write`/`Edit`/`MultiEdit`, Codex `apply_patch` und Bearbeitungswerkzeuge) führt der PostToolUse-Hook [comment-checker](https://github.com/code-yeongyu/go-claude-code-comment-checker) (MIT) auf dem geänderten Text aus und gibt bei überflüssigen Kommentaren `decision: "block"` zurück, damit der Agent sie entfernt oder begründet. Es kommt keine npm-Abhängigkeit hinzu: Der Sitzungsstart eines Host-Hooks lädt in einem getrennten Prozess den fixierten Release v0.8.2 für die aktuelle Plattform (darwin/linux x64 und arm64, windows x64) herunter, prüft dessen fixierten SHA256 und entpackt ihn mit dem `tar` des Systems nach `~/.pota/tools/comment-checker/`. Ein fehlgeschlagener Download wird bei einem späteren Sitzungsstart mit Backoff wiederholt. Bis ein Download gelingt, gehen Bearbeitungen ungeprüft durch; ein Fehler des Prüfers oder eine Prüfung über 7 Sekunden geht ebenfalls durch. `pota doctor` zeigt den Zustand in einer Zeile, und `POTA_COMMENT_CHECKER=0` (auch `false`, `off` oder `no`) oder `"commentChecker": false` in `~/.pota/config.json` schaltet Prüfung und Download ab.
 - Main-model-Prüfung: Liegt das main model der Sitzung unter dem stronger tier, fügt `SessionStart` eine Zeile `Pota main model:` und einen einmaligen Hinweis hinzu. Planung/Triage und das abschließende Review müssen dann an den stronger tier oder höher delegiert und aufgezeichnet werden (das Review mit `goal assign … --kind review`); ohne diesen Eintrag werden der Abschluss von `triage-plan` und `goal finish` abgelehnt, außer mit `--allow-main-model <reason>`. Ein fehlender oder nicht erkannter model-Wert löst sie nie aus. Mit `POTA_MAIN_MODEL_GATE=0` lässt sie sich abschalten.
 - Model ceiling: Wenn das Konto die höheren tiers nicht nutzen kann oder soll (Abonnement, Organisationsrichtlinie, usage credits), setze `POTA_MODEL_CEILING=stronger` (oder `balanced`; ein model-Name wie `opus` oder `sonnet` geht ebenfalls) oder `"modelCeiling": "stronger"` in `~/.pota/config.json`. Die Umgebungsvariable hat Vorrang, und `config.json` ist der eine Ort, den alle hooks und CLI-Aufrufe gleich lesen. `SessionStart` fügt dann eine Zeile `Pota model ceiling:` hinzu, tiers über dem ceiling verwenden das model des ceiling-tier, das Heavy-Design-Gate akzeptiert dieses model, und die Main-model-Prüfung verwendet den gedeckelten stronger tier. Ohne Einstellung ändert sich nichts; ein ungültiger Wert wendet kein ceiling an und wird gemeldet.
 - Request Brief und Steering: Ein Light- oder Heavy-Path-Plan enthält einen `## Request Brief` (ursprüngliche Anfrage, interpretiertes Ergebnis, Umfang, frühere Aufzeichnungen (`Prior records`, über `pota plan steering`), Annahmen, implizite Anforderungen, offene Fragen, Steering-Protokoll); der Abschluss von `triage-plan` wird abgelehnt, bis er ausgefüllt ist, es sei denn, `--allow-no-request-brief <reason>` wird übergeben. Korrekturen, Ergänzungen und Richtungswechsel des Nutzers werden mit `goal steer --kind <correction|addition|redirect> --reason <text>` erfasst, oder mit `goal replan --steer <correction|addition|redirect|none> --reason <text>`, wenn sich tasks ändern; ab dem zweiten Steering oder bei einem redirect muss zudem `Current request (as of S<n>)` neu geschrieben werden.
@@ -159,12 +216,14 @@ Claude Code Desktop zeigt das aktuelle Pota-goal als DAG-Panel mit einer Spalte 
 
 ## Antigravity Compatibility
 
-Antigravity unterstützt `SKILL.md`-basierte Agent Skills und Workflows, die als `/workflow-name` aufgerufen werden. Pota installiert für diese Oberfläche die folgenden paths.
+Pota unterstützt die Antigravity-CLI (`agy`); die Antigravity-IDE wird nicht unterstützt. Das Manifest des Plugins ist die `plugin.json` im Wurzelverzeichnis, seine Hooks sind die `hooks.json` im Wurzelverzeichnis, die `scripts/pota-state-antigravity.mjs` aus dem Plugin-Ordner ausführt. Dieser Adapter bildet die Ereignisse von Antigravity auf die Hooks von Pota ab:
 
-- Antigravity IDE: `~/.gemini/config/skills/pota-*/SKILL.md`.
-- Antigravity CLI: flache Skill-Dateien unter `~/.gemini/antigravity-cli/skills/pota-*.md`.
+- `SessionStart` fügt die Sitzungskapsel und die Zeile `Pota CLI:` hinzu.
+- Antigravity hat kein Prompt-Ereignis, daher fügt das erste `PreInvocation` jedes Prompts den Prompt-Kontext hinzu.
+- `PostToolUse` auf `write_to_file`, `replace_file_content` und `multi_replace_file_content` führt den comment checker und die Goal-Erinnerung aus; das Ergebnis kommt mit dem nächsten `PreInvocation`.
+- `Stop` lässt den Agenten weiterarbeiten, solange das aktive Goal eine unfertige Task hat. Es gibt kein `SubagentStop`.
 
-Codex-only hooks werden nicht nach Antigravity portiert. Stattdessen laufen dieselben planning-, memory-, complexity triage- und two-gate verification procedures über Skills und Workflows. Setze `ANTIGRAVITY_HOME` oder `ANTIGRAVITY_CLI_HOME`, um paths zu überschreiben.
+Skills werden als `/pota-plan`, `/pota-work`, `/pota-review` und `/pota-memory` aufgerufen; Workflows sind kein Bestandteil von Antigravity-Plugins. Der Adapter folgt der Hook-Dokumentation von Antigravity; sein Verhalten in einer echten `agy`-Sitzung wurde noch nicht geprüft.
 
 ## Locale Policy
 
