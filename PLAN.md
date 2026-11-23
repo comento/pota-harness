@@ -5,6 +5,7 @@
 ## Active Plans
 
 - [plugin-native-install](docs/plan/plugin-native-install.md): 호스트 플러그인 설치로 전환, Pota 2.0.0
+- [handoff-notice-1x](docs/plan/handoff-notice-1x.md): notice-1x (Pota 1.5.0)
 
 ## Superseded Plans
 

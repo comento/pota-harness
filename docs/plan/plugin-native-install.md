@@ -40,7 +40,8 @@ Pota를 npm 설치 프로그램(`pota install`)이 아니라 각 호스트(Claud
 - Steering log:
   - S1 (correction): "그러니까 각각의 에이전트를 모두 별개의 플러그인으로 설치한다고 했을 때, 버전이 달라도 상관 없다는 이야기야", "버전 관리는 호스트가 알아서 하는거니까" → 가정 A9 추가. 내가 대화에서 말한 "버전이 다른 두 호스트는 schema 버전 검사로 막는다"를 대체한다: 플러그인 버전 불일치는 막지 않고, 상태 schema가 다를 때만 다룬다. task는 그대로.
   - S2 (addition): "안내용 1.x만 게시" → 가정 A10 추가, task `release` 추가(dev PR 병합, main PR 병합, 1.5.0 안내 버전 게시, npm deprecated 표시, 이 컴퓨터의 기존 설치본을 플러그인으로 교체). 내가 처음 권한 "스스로 제거하는 마지막 npm 버전"을 대체한다.
-- Current request (as of S2): Pota 2.0.0에서 npm 설치 프로그램을 없애고 Claude Code, Codex, Antigravity CLI 각각의 플러그인 설치 명령으로 설치·업데이트하게 한다. 플러그인은 호스트가 설치한 자리의 스크립트를 runtime으로 쓰고, 호스트마다 버전이 달라도 된다. 기존 npm 설치본은 플러그인의 첫 SessionStart hook이 제거한다. 2.0.0은 npm에 게시하지 않고, 1.x에서 안내 문구만 바꾼 1.5.0을 마지막으로 게시한 뒤 패키지를 deprecated로 표시한다. 릴리스는 dev PR·main PR 병합, 1.5.0 게시, 이 컴퓨터의 설치본 교체까지 포함한다.
+  - S3 (addition): "../collabo 프로젝트에서 svg로 된 pota icon이 있어." → 그 아이콘을 `assets/logo.svg`로 넣고 플러그인 manifest의 로고로 쓴다(§13 R10). task는 그대로이고 `layout-cutover`가 manifest에 연결한다.
+- Current request (as of S3): Pota 2.0.0에서 npm 설치 프로그램을 없애고 Claude Code, Codex, Antigravity CLI 각각의 플러그인 설치 명령으로 설치·업데이트하게 한다. 플러그인은 호스트가 설치한 자리의 스크립트를 runtime으로 쓰고, 호스트마다 버전이 달라도 된다. 기존 npm 설치본은 플러그인의 첫 SessionStart hook이 제거한다. 2.0.0은 npm에 게시하지 않고, 1.x에서 안내 문구만 바꾼 1.5.0을 마지막으로 게시한 뒤 패키지를 deprecated로 표시한다. 릴리스는 dev PR·main PR 병합, 1.5.0 게시, 이 컴퓨터의 설치본 교체까지 포함한다. 플러그인 로고는 collabo 프로젝트의 pota 아이콘을 쓴다.
 
 ## Whole Work
 
@@ -767,6 +768,8 @@ Codex(대체 수단) — ① `test/plugin-manifests.test.mjs`의 소스 기반 �
 - **R7 알림과 보고서**: `report.json`은 지우지 않고 남기며(`pota doctor`가 요약), 알림을 보여 줬는지는 별도 파일로 기록한다. `blocked` 알림은 7일에 한 번, "제거 중" 알림은 runner를 띄운 세션 한 번이다. lock을 잡지 못해 끝난 실행은 `deferred` 보고서를 남기고 알림을 반복하지 않는다. `state.json`의 실행 조건 키에는 manifest 지문과 함께 호스트와 경로 환경 변수의 지문을 넣어, 한 호스트의 `blocked`가 다른 호스트의 실행을 막지 않게 한다.
 - **R8 그 밖의 수정**: detached `spawn`에 `windowsHide: true`. 빈 디렉터리 정리 목록에 `install/codex/.agents/plugins`, `install/codex/.agents`, `install/codex/plugins`를 추가한다. 사용자에게 보이는 안내의 `pota doctor`는 `node "<pluginRoot>/scripts/pota.mjs" doctor` 형태로 적는다(2.0.0에는 `bin`이 없다). skill 문장의 "`scripts/` 위의 디렉터리"는 구분자에 의존하지 않게 "the parent of the `scripts` directory in the session-start `Pota CLI:` line"으로 쓴다(바이트 예산 9000 이하를 다시 확인한다). ko 알림 문구도 240자 이하로 테스트에 고정한다.
 - **R9 task 분할 수정(§10)**: T1 `legacy-migration`이 import할 수 있는 기존 모듈은 `scripts/pota-paths.mjs`, `scripts/pota-safe-fs.mjs`의 지금 있는 export, `scripts/pota-lifecycle-lock.mjs`뿐이다(`pota-update-state.mjs`를 import하지 않는다). T1·T2·`notice-1x`는 병렬로 돌리되 각자 자기 테스트 파일만 실행하고, 전체 `npm run check`는 main 세션이 셋이 끝난 뒤 한 번 돌린다. T3 `runtime-cutover`의 테스트에 "Antigravity SessionStart가 이전 알림을 내는 경로"를 추가하고, 그 테스트 파일 `test/antigravity-hooks.test.mjs`의 해당 부분 수정을 T3의 writeScope에 넣는다(T2가 끝난 뒤이므로 겹치지 않는다).
+- **R10 로고(S3)**: `assets/logo.svg`는 `../collabo`의 `apps/web/src/components/agents/floating-agent.tsx`에 있는 pota 캐릭터의 경로 9개를 애니메이션 없이 옮긴 정적 SVG다(main 세션이 생성). Antigravity `plugin.json`에 `"logo": "assets/logo.svg"`를 넣는다(`agy` 1.5.14의 validate가 로고 없음 안내를 내지 않음을 확인). Claude manifest의 아이콘 경고(`ICON_MISSING`)와 Codex `interface`의 아이콘 필드는 `layout-cutover`가 각 호스트의 실제 필드 이름을 확인해 같은 파일로 연결하고, 확인하지 못한 호스트는 넣지 않는다.
+- **`agy` 1.5.14 확인(2026-11-23, 사용자가 `agy update`)**: 루트 `plugin.json`을 manifest로 읽고, §1.4의 루트 `hooks.json` 형식이 validate를 통과하며, validate가 "Hook commands run in the plugin folder"라고 알린다(U1·U2 해소). `hooks/hooks.json`은 "never loaded" 경고만 낸다.
 - **남은 미확인**: Codex 실제 실행, `pota@pota`와 `pota@pota-harness`의 공존(U6), `agy` 세션 안의 hook cwd와 matcher, Windows 동작. `verify`와 `release`에서 확인하거나 미확인으로 보고한다.
 
 ## Module Tasks
