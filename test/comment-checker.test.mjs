@@ -211,7 +211,13 @@ test("the detached fetch starts on a home where the Pota home directory does not
       return child;
     };
     assert.equal(startFetchWhenNeeded({ env, spawn, pluginRoot, autoFetch: true, platform: "linux", arch: "x64" }), true);
-    await new Promise((resolveExit) => { child.on("exit", resolveExit); child.on("error", resolveExit); });
+    // The fetch child is unref'd, so a timer keeps the event loop alive until it exits (Node 18 ends the test otherwise).
+    const keepAlive = setInterval(() => {}, 50);
+    try {
+      await new Promise((resolveExit) => { child.on("exit", resolveExit); child.on("error", resolveExit); });
+    } finally {
+      clearInterval(keepAlive);
+    }
     assert.equal(spawnError, null);
     const [cwd, args] = (await readFile(marker, "utf8")).split("\n");
     assert.equal(cwd, await realpath(env.POTA_HOME));

@@ -61,13 +61,13 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: current
-      - run: npm install --global @anthropic-ai/claude-code@2.1.327
+      - run: npm install --global @anthropic-ai/claude-code@2.1.327 --allow-scripts=@anthropic-ai/claude-code
         env:
           npm_config_cache: ${{ runner.temp }}/npm-cache
       - run: claude plugin validate .
         env:
           CLAUDE_CONFIG_DIR: ${{ runner.temp }}/claude
-      - run: npm install --global @openai/codex@0.171.0
+      - run: npm install --global @openai/codex@0.171.0 --allow-scripts=@openai/codex
         env:
           npm_config_cache: ${{ runner.temp }}/npm-cache
       - run: |
