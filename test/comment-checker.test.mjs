@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn as spawnProcess, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, utimes, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { startGoal } from "../scripts/pota-goal.mjs";
@@ -183,6 +183,42 @@ test("a missing binary starts one detached fetch from this plugin copy only when
     assert.equal(fetch(), false);
     assert.equal(spawn.calls.length, 1);
   });
+});
+
+test("the detached fetch starts on a home where the Pota home directory does not exist yet", async () => {
+  const temp = await mkdtemp(join(tmpdir(), "pota-comment-checker-fresh-"));
+  try {
+    const home = join(temp, "home");
+    await mkdir(home);
+    const env = {
+      PATH: process.env.PATH ?? "", HOME: home, USERPROFILE: home, POTA_HOME: join(home, ".pota"),
+      CLAUDE_HOME: join(home, ".claude"), CLAUDE_CONFIG_DIR: join(home, ".claude"), CODEX_HOME: join(home, ".codex"),
+      CODEX_CONFIG_PATH: join(home, ".codex", "config.toml"), ANTIGRAVITY_HOME: join(home, ".gemini", "config"),
+      ANTIGRAVITY_CLI_HOME: join(home, ".gemini", "antigravity-cli"), POTA_CLAUDE_CLI: "none",
+    };
+    // A stand-in fetch script: it records where it ran instead of downloading.
+    const pluginRoot = join(temp, "plugin");
+    const marker = join(temp, "fetch-ran.txt");
+    await mkdir(join(pluginRoot, "scripts"), { recursive: true });
+    await writeFile(join(pluginRoot, "scripts", "pota-comment-checker.mjs"),
+      `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(marker)}, process.cwd() + "\\n" + process.argv.slice(2).join(" "));\n`);
+    await assert.rejects(lstat(env.POTA_HOME));
+    let child = null;
+    let spawnError = null;
+    const spawn = (...args) => {
+      child = spawnProcess(...args);
+      child.on("error", (error) => { spawnError = error; });
+      return child;
+    };
+    assert.equal(startFetchWhenNeeded({ env, spawn, pluginRoot, autoFetch: true, platform: "linux", arch: "x64" }), true);
+    await new Promise((resolveExit) => { child.on("exit", resolveExit); child.on("error", resolveExit); });
+    assert.equal(spawnError, null);
+    const [cwd, args] = (await readFile(marker, "utf8")).split("\n");
+    assert.equal(cwd, await realpath(env.POTA_HOME));
+    assert.equal(args, "fetch");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
 });
 
 test("fetch installs a verified archive, rejects a wrong digest with a backoff, and respects the lock", { skip: !posix }, async () => {

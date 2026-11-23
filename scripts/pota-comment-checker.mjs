@@ -257,9 +257,12 @@ export function startFetchWhenNeeded({
     const next = Date.parse(readState(paths)?.nextAttemptAt ?? "");
     if (Number.isFinite(next) && now.getTime() < next) return false;
     if (lockHolder(paths) !== null) return false;
+    // A home that never had 1.x has no Pota home yet, and a missing cwd fails the spawn with ENOENT.
+    const cwd = potaHome(env);
+    mkdirSync(cwd, { recursive: true });
     // stdio "ignore" keeps the hook's stdout closed so the host does not wait for the download.
     const child = spawn(process.execPath, [join(pluginRoot, "scripts", "pota-comment-checker.mjs"), "fetch"], {
-      cwd: potaHome(env), env, detached: true, stdio: "ignore", windowsHide: true,
+      cwd, env, detached: true, stdio: "ignore", windowsHide: true,
     });
     child?.on?.("error", () => {});
     child?.unref?.();

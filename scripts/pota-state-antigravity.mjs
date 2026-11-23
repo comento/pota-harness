@@ -30,6 +30,8 @@ export async function runAntigravityHook(event, input, { env = process.env, now 
   try {
     if (!ADAPTER_EVENTS.has(event) || !isRecord(input)) return {};
     const payload = statePayload(input);
+    // Hooks run with the plugin folder as cwd, so without a workspace path there is no user repository to read.
+    if (!payload.cwd) return {};
     const session = sessionStore(input.conversationId, { env, now });
     if (event === "session-start") {
       // The legacy-migration notice arrives in the result like any other SessionStart notice and is folded into the
@@ -63,9 +65,11 @@ async function preInvocation(input, payload, session, run, env) {
     const options = payload.model !== undefined ? { payload, modelCeiling: resolveModelCeiling({ env, home: potaHome(env) }) } : { payload };
     capsule = contextText(await run("user-prompt-submit", options));
   }
+  // A new turn is never the continuation of an earlier blocked Stop, even with the same prompt text.
+  const newTurn = input.invocationNum === 0;
   const record = await session.read();
-  if (record.pending.length > 0) {
-    await session.update((current) => ({ ...current, pending: [] }));
+  if (record.pending.length > 0 || (newTurn && record.stopBlockedFor !== null)) {
+    await session.update((current) => ({ ...current, pending: [], stopBlockedFor: newTurn ? null : current.stopBlockedFor }));
   }
   return injectStepsOutput(joinText(capsule, ...record.pending));
 }
@@ -74,10 +78,12 @@ async function stop(input, payload, session, run) {
   if (input.terminationReason !== "model_stop") return {};
   const inputHash = sha256(typeof input.lastUserInput === "string" ? input.lastUserInput : "");
   const continuation = typeof input.continuation_active === "boolean" ? input.continuation_active : null;
-  const stopHookActive = continuation ?? ((await session.read()).stopBlockedFor === inputHash);
+  const recorded = (await session.read()).stopBlockedFor;
+  const stopHookActive = continuation ?? (recorded === inputHash);
   const result = await run("stop", { payload: { ...payload, stop_hook_active: stopHookActive } });
   const output = stopOutput(result);
   if (output.decision === "continue") await session.update((record) => ({ ...record, stopBlockedFor: inputHash }));
+  else if (recorded !== null) await session.update((record) => ({ ...record, stopBlockedFor: null }));
   return output;
 }
 

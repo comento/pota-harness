@@ -2,11 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { join, resolve } from "node:path";
+import { join, posix, resolve } from "node:path";
 
 const root = resolve(".");
 const readText = (path) => readFileSync(join(root, path), "utf8");
 const readJson = (path) => JSON.parse(readText(path));
+// A GitHub install gets only committed files, so a path a manifest names must be tracked, not just present here.
+const trackedFiles = (() => {
+  const listed = spawnSync("git", ["ls-files", "--cached", "-z"], { cwd: root, encoding: "utf8" });
+  assert.equal(listed.status, 0, listed.stderr);
+  return new Set(listed.stdout.split("\0").filter(Boolean));
+})();
+const isTracked = (...parts) => trackedFiles.has(posix.normalize(posix.join(...parts)));
 
 const manifestPaths = [
   "package.json",
@@ -61,11 +68,11 @@ test("both marketplaces are pota-harness and list the repository root as the plu
 test("the Claude manifest names the agents and the mod type contract, and hooks.json loads the mod", () => {
   const manifest = readJson(".claude-plugin/plugin.json");
   assert.deepEqual(manifest.agents, ["./claude/agents/explorer.md", "./claude/agents/worker.md"]);
-  for (const path of [...manifest.agents, manifest.types]) assert.ok(existsSync(join(root, path)), `${path} exists`);
+  for (const path of [...manifest.agents, manifest.types]) assert.ok(isTracked(path), `${path} is tracked`);
   const hooks = readJson("hooks/hooks.json");
   assert.deepEqual(Object.keys(hooks).sort(), ["hooks", "modules"]);
   assert.deepEqual(hooks.modules, ["./register.tsx"]);
-  for (const module of hooks.modules) assert.ok(existsSync(join(root, "hooks", module)), `${module} exists`);
+  for (const module of hooks.modules) assert.ok(isTracked("hooks", module), `${module} is tracked`);
 });
 
 test("Claude and Codex hooks run pota-state.mjs with the event and host tokens, and Codex reads only its own file", () => {
@@ -84,7 +91,7 @@ test("Claude and Codex hooks run pota-state.mjs with the event and host tokens, 
     for (const [event, command] of commandsOf(hooks)) {
       assert.equal(command, `node "\${${variable}}/scripts/pota-state.mjs" ${stateEvents[event]} ${host}`, `${file} ${event}`);
       const script = command.match(/^node "\$\{[A-Z_]+\}\/([^"]+)"/)[1];
-      assert.ok(existsSync(join(root, script)), `${file} ${script} exists`);
+      assert.ok(isTracked(script), `${file} ${script} is tracked`);
     }
   }
 
@@ -108,7 +115,7 @@ test("Antigravity reads the root plugin.json and root hooks.json with plugin-roo
   const allowed = ["$schema", "name", "displayName", "version", "description", "logo", "suggestedPrompts", "author", "homepage", "repository", "license", "keywords"];
   for (const key of Object.keys(manifest)) assert.ok(allowed.includes(key), `plugin.json key ${key}`);
   assert.equal(manifest.logo, "assets/logo.svg");
-  assert.ok(existsSync(join(root, manifest.logo)));
+  assert.ok(isTracked(manifest.logo), `${manifest.logo} is tracked`);
   assert.equal(existsSync(join(root, ".antigravity-plugin")), false);
 
   const hooks = readJson("hooks.json");
@@ -117,7 +124,8 @@ test("Antigravity reads the root plugin.json and root hooks.json with plugin-roo
   assert.equal(hooks.pota.PostToolUse[0].matcher, "^(write_to_file|replace_file_content|multi_replace_file_content)$");
   for (const [event, command] of commandsOf(hooks.pota)) {
     assert.equal(command, `node ./scripts/pota-state-antigravity.mjs ${antigravityEvents[event]}`, `hooks.json ${event}`);
-    assert.ok(existsSync(join(root, "scripts/pota-state-antigravity.mjs")));
+    const script = command.match(/^node \.\/(\S+)/)[1];
+    assert.ok(isTracked(script), `hooks.json ${script} is tracked`);
   }
 });
 
@@ -125,7 +133,7 @@ test("the Codex interface logo fields point at the shared logo", () => {
   const { interface: face } = readJson(".codex-plugin/plugin.json");
   for (const key of ["composerIcon", "logo"]) {
     assert.equal(face[key], "./assets/logo.svg", key);
-    assert.ok(existsSync(join(root, face[key])), `${key} exists`);
+    assert.ok(isTracked(face[key]), `${key} is tracked`);
   }
 });
 

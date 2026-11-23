@@ -81,14 +81,16 @@ Run the same command again to update; the Antigravity documentation describes a 
 Pota 2.x is not published to npm and has no global `pota` command. The npm package `@comento/pota-harness` ends at 1.5.0, which only shows these install instructions, and the package is deprecated.
 
 1. Claude Code only: remove the 1.x plugin first with `claude plugin uninstall pota@pota --scope user`.
-2. Install the plugin on every host you use. The removal below works one host at a time, so a host without the plugin keeps running the 1.x install until you install the plugin there.
+2. **Install the plugin on every host you use.** The removal below works one host at a time, and a host left on the 1.x install can no longer upgrade once another host's part is removed: its upgrades, automatic ones included, refuse with "Managed artifact was modified".
 3. Start a session. When the plugin's session start finds the 1.x ownership manifest (`~/.pota/install/lifecycle.json`), it removes that host's part of the 1.x install in a background process and says so; restart the session once. The next session reports the result once. The shared 1.x runtime, `~/.pota/update/`, and the manifest go only after no host's part is left.
 
 The removal deletes only files and directories that the 1.x manifest records and whose digest is unchanged, plus Pota's own sections of Codex's `config.toml`. It keeps `~/.pota/projects/` (goal state), `~/.pota/config.json`, `~/.pota/tools/comment-checker/`, every file you changed (listed as kept), anything the manifest does not record, and the global npm package (remove it with `npm uninstall -g @comento/pota-harness`). It refuses, removes nothing for that host, and tells you why when:
 
 - a directory on one of the host's paths is a symlink (`symlinked-path`; remove the listed paths by hand);
 - the host registration cannot be removed safely (`host-unregister-failed`): the `claude` CLI is missing or fails, or Codex's `config.toml` has Pota sections that cannot be identified safely or a rewrite would change other sections;
-- the manifest is invalid, has an unsupported schema, points outside the expected paths, or a 1.x install transaction was interrupted (`manifest-invalid`, `manifest-unsupported-schema`, `target-outside-allowlist`, `transaction-pending`). If you installed 1.x with `CODEX_HOME`, `CLAUDE_HOME`, `ANTIGRAVITY_HOME`, `ANTIGRAVITY_CLI_HOME`, or `CODEX_CONFIG_PATH` set, set the same values for the host. Otherwise run `npx @comento/pota-harness@1.5.0 uninstall`, then restart.
+- the manifest is invalid, has an unsupported schema, points outside the expected paths, or a 1.x install transaction was interrupted (`manifest-invalid`, `manifest-unsupported-schema`, `target-outside-allowlist`, `transaction-pending`). If you installed 1.x with `CODEX_HOME`, `CLAUDE_HOME`, `ANTIGRAVITY_HOME`, `ANTIGRAVITY_CLI_HOME`, or `CODEX_CONFIG_PATH` set, set the same values for the host. Otherwise, while no host's part has been removed yet, run `npx @comento/pota-harness@1.5.0 uninstall`, then restart.
+
+Once any host's part has been removed, the 1.x uninstall refuses ("Refusing to uninstall modified managed artifacts") because the manifest is never rewritten. A refused removal then tells you to fix the manual items that `doctor` lists and run `node "<pluginRoot>/scripts/pota.mjs" migrate run --host <host>` for that host instead.
 
 A refused removal is retried after 24 hours and announced at most once every 7 days. An install from before 1.3 has no ownership manifest and is never touched; remove it with `npx @comento/pota-harness@1.5.0 uninstall` before you install the plugin. To see the state, or to run the removal yourself (`<pluginRoot>` is explained below):
 

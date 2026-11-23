@@ -17,7 +17,8 @@ const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const pluginRoot = join("/Users", "someone", ".claude", "plugins", "cache", "pota-harness", "pota", "2.0.0");
-const doctor = `node "${join(pluginRoot, "scripts", "pota.mjs")}" doctor`;
+const cli = `node "${join(pluginRoot, "scripts", "pota.mjs")}"`;
+const doctor = `${cli} doctor`;
 // Entries a run is expected to change even when it removes nothing.
 const VOLATILE = ["home/.pota/migration", "home/.claude/fake-claude.log"];
 const CLAUDE_MANUAL = ["claude plugin uninstall pota@pota --scope user", "claude plugin marketplace remove pota"];
@@ -661,6 +662,34 @@ test("SessionStart starts one detached runner per manifest, host, and environmen
     assert.equal(detect(at(7 * DAY + 3 * MINUTE)).notice?.kind, "blocked");
     assert.equal(calls.length, 3);
   }));
+
+  await t.test("once another host's part is gone, a blocked report points at doctor and migrate run, not the 1.x uninstall", () => withLegacyInstall({ env: { POTA_CLAUDE_CLI: "none" } }, async (install) => {
+    const { spawn } = fakeSpawn();
+    sessionStartMigration({ env: install.env, now: NOW, spawn, pluginRoot, host: "claude" });
+    await runLegacyRemoval({ env: install.env, now: NOW, host: "antigravity" });
+    const result = await runLegacyRemoval({ env: install.env, now: at(MINUTE), host: "claude" });
+    assert.equal(result.hosts.claude.status, "blocked");
+    assert.deepEqual(result.hosts.claude.manifestHosts, ["codex", "claude", "antigravity"]);
+    assert.deepEqual(result.hosts.claude.remainingHosts, ["codex", "claude"]);
+    const shown = sessionStartMigration({ env: install.env, now: at(2 * MINUTE), spawn, pluginRoot, host: "claude" });
+    assert.deepEqual(shown.notice, { kind: "blockedRerun", reason: "host-unregister-failed", cli, host: "claude" });
+    assert.equal(migrationNoticeLine({ notice: shown.notice }),
+      `Pota: could not remove the legacy npm install (host-unregister-failed). Fix the manual items doctor lists, then run: ${cli} migrate run --host claude`);
+    assert.equal(migrationNoticeLine({ ko: true, notice: shown.notice }),
+      `Pota: 기존 npm 설치본을 제거하지 못했습니다(host-unregister-failed). doctor가 보여 주는 수동 항목을 정리한 뒤 실행하세요: ${cli} migrate run --host claude`);
+    assert.doesNotMatch(migrationNoticeLine({ notice: shown.notice }), /npx/);
+  }));
+
+  await t.test("an unreadable manifest does not count as untouched", () => withLegacyInstall({}, async (install) => {
+    const { spawn } = fakeSpawn();
+    await writeFile(join(install.env.POTA_HOME, "install", "lifecycle.json"), "{ not json");
+    const detect = (now) => sessionStartMigration({ env: install.env, now, spawn, pluginRoot, host: "codex" });
+    assert.equal(detect(NOW).notice?.kind, "removing");
+    const result = await runLegacyRemoval({ env: install.env, now: at(MINUTE), host: "codex" });
+    assert.equal(result.hosts.codex.reason, "manifest-invalid");
+    assert.equal(result.hosts.codex.manifestHosts, null);
+    assert.deepEqual(detect(at(2 * MINUTE)).notice, { kind: "blockedRerun", reason: "manifest-invalid", cli, host: "codex" });
+  }));
 });
 
 test("notice lines stay within 240 characters in English and Korean", () => {
@@ -670,6 +699,8 @@ test("notice lines stay within 240 characters in English and Korean", () => {
     { kind: "removed", version: "1.4.0", kept: 0, hosts: [], doctor },
     { kind: "blocked", reason: "manifest-unsupported-schema", doctor },
     { kind: "blocked", reason: "host-unregister-failed", doctor },
+    { kind: "blockedRerun", reason: "manifest-unsupported-schema", cli, host: "antigravity" },
+    { kind: "blockedRerun", reason: "host-unregister-failed", cli, host: "claude" },
     { kind: "symlinked", doctor },
   ];
   for (const ko of [false, true]) {

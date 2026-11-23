@@ -49,9 +49,15 @@ test("every readme covers the move from the npm install", async () => {
       "npm uninstall -g @comento/pota-harness",
       "`Pota CLI:`",
       "scripts/pota.mjs\" doctor",
+      // The 1.x uninstall refuses once a host's part is gone; the per-host rerun replaces it.
+      "Refusing to uninstall modified managed artifacts",
+      "scripts/pota.mjs\" migrate run --host <host>`",
+      // A host left on 1.x cannot upgrade after another host's part is removed.
+      "Managed artifact was modified",
     ]) {
       assert.ok(readme.includes(needle), `${path} ${needle}`);
     }
+    assert.match(section(readme, "### Coming from the npm install (1.x)"), /^2\. \*\*[^*]+\*\* /m, `${path} the every-host step stands out`);
     assert.match(readme, /1\.5\.0/, `${path} last npm version`);
     assert.match(readme, /deprecated/, `${path} npm package deprecated`);
   }

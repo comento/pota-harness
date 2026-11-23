@@ -73,14 +73,16 @@ agy plugin install https://github.com/comento/pota-harness
 Pota 2.x 不发布到 npm，也没有全局 `pota` 命令。npm package `@comento/pota-harness` 的最后版本是只显示这些安装说明的 1.5.0，该 package 已标记为 deprecated。
 
 1. 仅 Claude Code：先用 `claude plugin uninstall pota@pota --scope user` 删除 1.x plugin。
-2. 在你使用的每个 host 上安装 plugin。下面的删除按 host 进行，所以没有安装 plugin 的 host 会继续使用 1.x 安装，直到你在那里安装 plugin。
+2. **在你使用的每个 host 上安装 plugin。** 下面的删除按 host 进行，留在 1.x 安装上的 host 在其他 host 的部分被删除后无法再升级：它的升级(包括自动升级)会以 "Managed artifact was modified" 拒绝。
 3. 开始一个 session。plugin 的 session start 找到 1.x ownership manifest(`~/.pota/install/lifecycle.json`)时，会在后台进程中删除该 host 那一部分 1.x 安装，并给出提示；请重启一次 session。下一个 session 会报告一次结果。共享的 1.x runtime、`~/.pota/update/` 和 manifest 只在所有 host 的部分都删除后才删除。
 
 删除只针对 1.x manifest 记录且 digest 未变的文件和目录，以及 Codex `config.toml` 中 Pota 自己的 sections。保留 `~/.pota/projects/`(goal state)、`~/.pota/config.json`、`~/.pota/tools/comment-checker/`、你修改过的文件(作为保留项报告)、manifest 未记录的一切，以及全局 npm package(用 `npm uninstall -g @comento/pota-harness` 删除)。以下情况不会删除该 host 的任何内容，并说明原因：
 
 - host 路径上的某个目录是 symlink(`symlinked-path`；手动删除报告中列出的路径)；
 - 无法安全地注销 host 注册(`host-unregister-failed`)：`claude` CLI 不存在或失败，或 Codex `config.toml` 中的 Pota sections 无法安全识别、重写会改变其他 sections；
-- manifest 无效、schema 不受支持、指向预期路径之外，或 1.x 安装 transaction 被中断(`manifest-invalid`、`manifest-unsupported-schema`、`target-outside-allowlist`、`transaction-pending`)。如果安装 1.x 时设置了 `CODEX_HOME`、`CLAUDE_HOME`、`ANTIGRAVITY_HOME`、`ANTIGRAVITY_CLI_HOME` 或 `CODEX_CONFIG_PATH`，请为 host 设置相同的值。否则运行 `npx @comento/pota-harness@1.5.0 uninstall` 后重启。
+- manifest 无效、schema 不受支持、指向预期路径之外，或 1.x 安装 transaction 被中断(`manifest-invalid`、`manifest-unsupported-schema`、`target-outside-allowlist`、`transaction-pending`)。如果安装 1.x 时设置了 `CODEX_HOME`、`CLAUDE_HOME`、`ANTIGRAVITY_HOME`、`ANTIGRAVITY_CLI_HOME` 或 `CODEX_CONFIG_PATH`，请为 host 设置相同的值。否则，仅在还没有任何 host 的部分被删除时，运行 `npx @comento/pota-harness@1.5.0 uninstall` 后重启。
+
+只要有一个 host 的部分已被删除，由于 manifest 不会被改写，1.x 的 uninstall 会以 "Refusing to uninstall modified managed artifacts" 拒绝。这时拒绝提示会让你先处理 `doctor` 列出的手动项，再为该 host 运行 `node "<pluginRoot>/scripts/pota.mjs" migrate run --host <host>`。
 
 被拒绝的删除会在 24 小时后重试，提示最多每 7 天一次。1.3 之前的安装没有 ownership manifest，不会被处理；请在安装 plugin 之前用 `npx @comento/pota-harness@1.5.0 uninstall` 删除它。查看状态或手动执行删除(`<pluginRoot>` 见下文)：
 

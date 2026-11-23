@@ -73,14 +73,16 @@ update は同じ command をもう一度実行します。Antigravity の文書�
 Pota 2.x は npm に公開せず、global な `pota` command もありません。npm package `@comento/pota-harness` はこの install 案内だけを表示する 1.5.0 が最後で、package は deprecated です。
 
 1. Claude Code のみ: 先に `claude plugin uninstall pota@pota --scope user` で 1.x の plugin を削除します。
-2. 使うすべての host に plugin を install します。下の削除は host ごとに行われるため、plugin を入れていない host は install するまで 1.x の install で動き続けます。
+2. **使うすべての host に plugin を install します。** 下の削除は host ごとに行われ、1.x の install のまま残った host は、別の host の分が削除されたあとは upgrade(自動 upgrade を含む)が "Managed artifact was modified" で拒否され、更新できなくなります。
 3. session を始めます。plugin の session start が 1.x の ownership manifest(`~/.pota/install/lifecycle.json`)を見つけると、その host の分の 1.x install を background process で削除し、そのことを知らせます。session を一度再起動してください。次の session が結果を一度だけ知らせます。共有の 1.x runtime、`~/.pota/update/`、manifest は、どの host の分も残っていなくなってから削除されます。
 
 削除するのは、1.x manifest に記録され digest が変わっていない files・directories と、Codex の `config.toml` にある Pota 自身の sections だけです。`~/.pota/projects/`(goal state)、`~/.pota/config.json`、`~/.pota/tools/comment-checker/`、利用者が変更した files(残した項目として報告)、manifest にないもの、global npm package(`npm uninstall -g @comento/pota-harness` で削除)は残します。次の場合はその host で何も削除せず、理由を知らせます。
 
 - host の path 上の directory が symlink の場合(`symlinked-path`。報告された path を手で削除します)
 - host の登録を安全に解除できない場合(`host-unregister-failed`): `claude` CLI がない・失敗する場合、または Codex の `config.toml` で Pota の sections を安全に特定できない、書き直すと他の sections が変わる場合
-- manifest が不正、schema が未対応、想定外の path を指す、または 1.x の install transaction が中断している場合(`manifest-invalid`、`manifest-unsupported-schema`、`target-outside-allowlist`、`transaction-pending`)。1.x を `CODEX_HOME`、`CLAUDE_HOME`、`ANTIGRAVITY_HOME`、`ANTIGRAVITY_CLI_HOME`、`CODEX_CONFIG_PATH` を指定して install した場合は、host にも同じ値を設定します。それ以外は `npx @comento/pota-harness@1.5.0 uninstall` を実行してから再起動します。
+- manifest が不正、schema が未対応、想定外の path を指す、または 1.x の install transaction が中断している場合(`manifest-invalid`、`manifest-unsupported-schema`、`target-outside-allowlist`、`transaction-pending`)。1.x を `CODEX_HOME`、`CLAUDE_HOME`、`ANTIGRAVITY_HOME`、`ANTIGRAVITY_CLI_HOME`、`CODEX_CONFIG_PATH` を指定して install した場合は、host にも同じ値を設定します。それ以外は、まだどの host の分も削除されていない間に限り `npx @comento/pota-harness@1.5.0 uninstall` を実行してから再起動します。
+
+いずれかの host の分が削除されたあとは manifest を書き換えないため、1.x の uninstall は "Refusing to uninstall modified managed artifacts" で拒否します。その場合、拒否の通知は `doctor` が示す手動の項目を片付けてから、その host について `node "<pluginRoot>/scripts/pota.mjs" migrate run --host <host>` を実行するよう案内します。
 
 拒否された削除は 24 時間後に再試行し、通知は 7 日に 1 回までです。1.3 より前の install には ownership manifest がなく触れないため、plugin を install する前に `npx @comento/pota-harness@1.5.0 uninstall` で削除します。状態を見る、または削除を手動で実行するには(`<pluginRoot>` は下で説明):
 

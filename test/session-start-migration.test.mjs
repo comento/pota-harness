@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { runLegacyRemoval } from "../scripts/pota-legacy-migration.mjs";
 import { runStateResult } from "../scripts/pota-state.mjs";
 import { createLegacyInstall, isolatedEnv } from "./support/legacy-install.mjs";
@@ -176,6 +176,45 @@ test("the hook CLI names the pota.mjs beside it and starts nothing without a kno
     }
     assert.equal(existsSync(join(env.POTA_HOME, "migration")), false, "no runner state without a host argument");
     assert.equal(existsSync(join(env.POTA_HOME, "tools")), false, "no comment-checker download without a host argument");
+  } finally {
+    await rm(temp, { recursive: true, force: true });
+  }
+});
+
+test("a plugin copy whose path has a space and quotes prints a quoted, usable Pota CLI line", async () => {
+  const temp = realpathSync(await mkdtemp(join(tmpdir(), "pota-quoted-copy-")));
+  try {
+    const env = isolatedEnv(temp, join(temp, "home"));
+    const repo = join(temp, "repo");
+    await mkdir(join(repo, ".git"), { recursive: true });
+    await mkdir(env.HOME, { recursive: true });
+    // Windows file names cannot hold a double quote.
+    const plugin = join(temp, process.platform === "win32" ? "Pota's plugin copy" : `Pota's "plugin" copy`);
+    const listed = spawnSync("git", ["ls-files", "--cached", "-z", "--", "scripts", "templates", "package.json"], { cwd: resolve("."), encoding: "utf8" });
+    assert.equal(listed.status, 0, listed.stderr);
+    for (const path of listed.stdout.split("\0").filter((entry) => entry && existsSync(resolve(entry)))) {
+      await mkdir(dirname(join(plugin, path)), { recursive: true });
+      await cp(resolve(path), join(plugin, path));
+    }
+
+    const hook = spawnSync(process.execPath, [join(plugin, "scripts", "pota-state.mjs"), "session-start", "claude"], {
+      cwd: repo, env, input: JSON.stringify({ cwd: repo, session_id: sessionId }), encoding: "utf8",
+    });
+    assert.equal(hook.status, 0, hook.stderr);
+    assert.equal(hook.stderr, "");
+    const line = JSON.parse(hook.stdout).hookSpecificOutput.additionalContext.split("\n").at(-1);
+    const cli = join(plugin, "scripts", "pota.mjs");
+    assert.equal(line, `Pota CLI: node ${JSON.stringify(cli)} goal <command>`);
+    const quoted = line.match(/^Pota CLI: node ("(?:[^"\\]|\\.)*") goal <command>$/)[1];
+    assert.equal(JSON.parse(quoted), cli);
+    if (process.platform !== "win32") {
+      // The line is pasted into a shell by the agent: the quoted path must survive POSIX sh unchanged.
+      const shell = spawnSync("/bin/sh", ["-c", `node ${quoted} --version`], { cwd: repo, env, encoding: "utf8" });
+      assert.equal(shell.status, 0, shell.stderr);
+      assert.match(shell.stdout, /^pota \d+\.\d+\.\d+/);
+    }
+    assert.equal(existsSync(join(env.POTA_HOME, "migration")), false, "no legacy manifest, so no runner state");
+    assert.equal(existsSync(join(env.POTA_HOME, "tools")), false, "the comment-checker download is off");
   } finally {
     await rm(temp, { recursive: true, force: true });
   }

@@ -778,6 +778,9 @@ Codex(대체 수단) — ① `test/plugin-manifests.test.mjs`의 소스 기반 �
   - `migration-hardening` writeScope: `scripts/pota-legacy-migration.mjs`, `scripts/pota-doctor.mjs`, `test/legacy-migration.test.mjs`, `test/doctor.test.mjs`, `test/support/legacy-install.mjs`. 검증 1: `node --test test/legacy-migration.test.mjs test/doctor.test.mjs`. 검증 2: `node --test test/session-start-migration.test.mjs test/antigravity-hooks.test.mjs test/cli-contract-hardening.test.mjs`. `layout-cutover`와 범위가 겹치지 않아 병렬로 돌린다.
 - **R12 `runtime-cutover` 편차**: comment-checker 자동 내려받기(`autoFetch`)는 호스트 인자가 `claude|codex`일 때만 켠다(호스트 인자 없는 테스트 실행이 네트워크로 나가지 않게). 제거된 명령 안내는 stderr, exit 2. `runStateResult`의 옵션 이름은 `migration`.
 
+- **R13 최종 검토 반영(2026-11-23, `opus`/`xhigh`, 읽기 전용)**: blocker 없음. major 1건: 한 호스트라도 이전된 뒤에는 1.x `uninstall`이 거부되므로, npx uninstall 안내는 아직 어느 호스트 몫도 지워지지 않았을 때만 내고 그 밖에는 doctor의 수동 항목 정리 뒤 `migrate run --host <h>`를 안내한다(알림 kind `blockedRerun`, README 8개, 메모 노트). minor: comment-checker 내려받기 전에 `POTA_HOME` 생성, Antigravity 입력에 작업 경로가 없으면 `{}`, `stopBlockedFor` 정리, manifest 참조 경로를 git 추적 파일로 검사, 공백·따옴표 경로 hook 테스트. 한계로 기록: Antigravity pending 경쟁, 쓰이지 않는 export 두 개, 일부만 지워진 호스트가 "남은 호스트"로 세어지는 판정 빈틈.
+- **격리 환경 실제 설치(2026-11-23)**: 임시 홈에서 `claude` 2.1.327과 `agy` 1.5.14로 로컬 경로 설치 성공. 1.5.0 설치본(`claude,antigravity`)에서 안내 문구 확인, `pota@pota`와 `pota@pota-harness` 공존 가능, 설치된 사본의 SessionStart로 Claude 몫 13개 → Antigravity 몫 31개와 core·manifest 제거, doctor `legacy install: none`. hook은 설치된 사본에서 직접 실행했고 호스트 세션 안의 호출은 `release`에서 확인한다.
+
 ## Module Tasks
 
 ### Task 0: planned triage and plan finalization

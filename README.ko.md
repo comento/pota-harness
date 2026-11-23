@@ -73,14 +73,16 @@ agy plugin install https://github.com/comento/pota-harness
 Pota 2.x는 npm에 게시하지 않으며 전역 `pota` 명령이 없습니다. npm 패키지 `@comento/pota-harness`는 이 설치 안내만 보여 주는 1.5.0이 마지막이고, 패키지는 deprecated로 표시됩니다.
 
 1. Claude Code만: 먼저 `claude plugin uninstall pota@pota --scope user`로 1.x 플러그인을 지웁니다.
-2. 쓰는 모든 호스트에 플러그인을 설치합니다. 아래 제거는 호스트 단위로 일어나므로, 플러그인을 설치하지 않은 호스트는 설치할 때까지 1.x 설치본으로 계속 동작합니다.
+2. **쓰는 모든 호스트에 플러그인을 설치합니다.** 아래 제거는 호스트 단위로 일어나며, 1.x 설치본에 남은 호스트는 다른 호스트 몫이 지워진 뒤 업그레이드(자동 업그레이드 포함)가 "Managed artifact was modified"로 거부되어 더 이상 갱신되지 않습니다.
 3. 세션을 시작합니다. 플러그인의 세션 시작이 1.x ownership manifest(`~/.pota/install/lifecycle.json`)를 찾으면 그 호스트 몫의 1.x 설치본을 백그라운드 프로세스로 제거하고 그 사실을 알립니다. 세션을 한 번 다시 시작하세요. 다음 세션이 결과를 한 번 알려 줍니다. 공유 1.x runtime, `~/.pota/update/`, manifest는 모든 호스트 몫이 없어진 뒤에만 지웁니다.
 
 제거는 1.x manifest에 기록되고 digest가 그대로인 파일·디렉터리와, Codex `config.toml`의 Pota 구획만 지웁니다. `~/.pota/projects/`(goal 상태), `~/.pota/config.json`, `~/.pota/tools/comment-checker/`, 사용자가 고친 파일(남긴 항목으로 보고), manifest에 없는 모든 것, 전역 npm 패키지(`npm uninstall -g @comento/pota-harness`로 지웁니다)는 남깁니다. 다음 경우에는 그 호스트에서 아무것도 지우지 않고 이유를 알립니다.
 
 - 호스트 경로의 디렉터리가 symlink인 경우(`symlinked-path`. 보고된 경로를 직접 지웁니다)
 - 호스트 등록을 안전하게 해제할 수 없는 경우(`host-unregister-failed`): `claude` CLI가 없거나 실패하는 경우, Codex `config.toml`에서 Pota 구획을 안전하게 가려낼 수 없거나 다시 쓰면 다른 구획이 바뀌는 경우
-- manifest가 잘못됐거나, schema를 지원하지 않거나, 예상 경로 밖을 가리키거나, 1.x 설치 트랜잭션이 중단된 경우(`manifest-invalid`, `manifest-unsupported-schema`, `target-outside-allowlist`, `transaction-pending`). 1.x를 `CODEX_HOME`, `CLAUDE_HOME`, `ANTIGRAVITY_HOME`, `ANTIGRAVITY_CLI_HOME`, `CODEX_CONFIG_PATH`를 지정해 설치했다면 호스트에도 같은 값을 둡니다. 그 밖에는 `npx @comento/pota-harness@1.5.0 uninstall`을 실행한 뒤 다시 시작합니다.
+- manifest가 잘못됐거나, schema를 지원하지 않거나, 예상 경로 밖을 가리키거나, 1.x 설치 트랜잭션이 중단된 경우(`manifest-invalid`, `manifest-unsupported-schema`, `target-outside-allowlist`, `transaction-pending`). 1.x를 `CODEX_HOME`, `CLAUDE_HOME`, `ANTIGRAVITY_HOME`, `ANTIGRAVITY_CLI_HOME`, `CODEX_CONFIG_PATH`를 지정해 설치했다면 호스트에도 같은 값을 둡니다. 그 밖에는 아직 어느 호스트 몫도 지워지지 않았을 때 `npx @comento/pota-harness@1.5.0 uninstall`을 실행한 뒤 다시 시작합니다.
+
+한 호스트 몫이라도 지워진 뒤에는 manifest를 고쳐 쓰지 않으므로 1.x uninstall이 "Refusing to uninstall modified managed artifacts"로 거부합니다. 이때 거부 알림은 `doctor`가 보여 주는 수동 항목을 정리한 뒤 그 호스트에 대해 `node "<pluginRoot>/scripts/pota.mjs" migrate run --host <host>`를 실행하라고 안내합니다.
 
 거부된 제거는 24시간 뒤 다시 시도하고, 알림은 7일에 한 번까지만 냅니다. 1.3 이전 설치본은 ownership manifest가 없어 건드리지 않으므로, 플러그인을 설치하기 전에 `npx @comento/pota-harness@1.5.0 uninstall`로 지웁니다. 상태를 보거나 제거를 직접 실행하려면(`<pluginRoot>`는 아래 설명):
 

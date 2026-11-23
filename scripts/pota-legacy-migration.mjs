@@ -59,6 +59,7 @@ const MESSAGES = {
       return `Pota: removed the legacy npm install (${version}).${clause} Details: ${doctor}`;
     },
     blocked: ({ reason, doctor }) => `Pota: could not remove the legacy npm install (${reason}). Run npx @comento/pota-harness@1.5.0 uninstall, then restart. Details: ${doctor}`,
+    blockedRerun: ({ reason, cli, host }) => `Pota: could not remove the legacy npm install (${reason}). Fix the manual items doctor lists, then run: ${cli} migrate run --host ${host}`,
     symlinked: ({ doctor }) => `Pota: left this host's legacy npm install untouched (a symlinked directory). Remove what doctor lists by hand, then restart. Details: ${doctor}`,
   },
   ko: {
@@ -71,6 +72,7 @@ const MESSAGES = {
       return `Pota: 기존 npm 설치본(${version})을 제거했습니다.${clause} 자세히: ${doctor}`;
     },
     blocked: ({ reason, doctor }) => `Pota: 기존 npm 설치본을 제거하지 못했습니다(${reason}). npx @comento/pota-harness@1.5.0 uninstall을 실행한 뒤 다시 시작하세요. 자세히: ${doctor}`,
+    blockedRerun: ({ reason, cli, host }) => `Pota: 기존 npm 설치본을 제거하지 못했습니다(${reason}). doctor가 보여 주는 수동 항목을 정리한 뒤 실행하세요: ${cli} migrate run --host ${host}`,
     symlinked: ({ doctor }) => `Pota: 경로의 디렉터리가 symlink라서 이 호스트의 기존 npm 설치본을 아무것도 지우지 않고 남겼습니다. doctor가 보여 주는 항목을 직접 정리한 뒤 다시 시작하세요. 자세히: ${doctor}`,
   },
 };
@@ -130,7 +132,8 @@ export function sessionStartMigration({
     if (typeof raw === "string" && OFF_VALUES.has(raw.trim().toLowerCase())) return { notice: null, spawned: false };
     if (!LEGACY_HOSTS.includes(host)) return { notice: null, spawned: false };
     const layout = legacyLayout(env);
-    const doctor = doctorCommand(pluginRoot);
+    const cli = cliCommand(pluginRoot);
+    const doctor = `${cli} doctor`;
     const report = readReportsSync(layout)[host] ?? null;
     let manifestInfo = null;
     try { manifestInfo = lstatSync(layout.manifestPath); } catch { manifestInfo = null; }
@@ -154,7 +157,7 @@ export function sessionStartMigration({
         if (decision.first) return { notice: { kind: "removing", doctor }, spawned };
       }
     }
-    return { notice: claimReportNotice(layout, host, report, now, doctor, Boolean(manifestInfo)), spawned };
+    return { notice: claimReportNotice(layout, host, report, now, { cli, doctor }, Boolean(manifestInfo)), spawned };
   } catch {
     return { notice: null, spawned: false };
   }
@@ -261,7 +264,9 @@ async function removeUnderLock(context) {
   if (read.status === "none") return { status: "none" };
   if (read.status === "blocked") return { status: "blocked", reason: read.reason, version: read.version ?? null, results: {} };
   const { manifest } = read;
-  if (await pathExists(layout.transactionPath)) return { status: "blocked", reason: "transaction-pending", version: manifest.version, results: {} };
+  if (await pathExists(layout.transactionPath)) {
+    return { status: "blocked", reason: "transaction-pending", version: manifest.version, results: {}, remainingHosts: await remainingHostsOf(manifest, layout), manifestHosts: manifest.hosts };
+  }
   if (await updateRunnerActive(layout)) return { status: "deferred", reason: "update-running", version: manifest.version, results: {} };
   const results = {};
   let stopped = false;
@@ -325,14 +330,19 @@ async function removeUnderLock(context) {
     result.missing += shared.missing;
     if (result.status === "unchanged" && shared.removed.length > 0) result.status = "completed";
   }
-  const remainingHosts = [];
-  for (const name of manifest.hosts) if (!(await hostTargetsGone(manifest, layout, (candidate) => candidate === name))) remainingHosts.push(name);
+  const remainingHosts = await remainingHostsOf(manifest, layout);
   const statuses = Object.values(results).map((result) => result.status);
   const status = statuses.includes("blocked") ? "blocked"
     : statuses.includes("deferred") ? "deferred"
       : statuses.includes("completed") ? "completed" : "unchanged";
   context.changed = statuses.includes("completed") || shared.removed.length > 0;
-  return { status, version: manifest.version, results, remainingHosts, legacyRemoved };
+  return { status, version: manifest.version, results, remainingHosts, manifestHosts: manifest.hosts, legacyRemoved };
+}
+
+async function remainingHostsOf(manifest, layout) {
+  const remaining = [];
+  for (const name of manifest.hosts) if (!(await hostTargetsGone(manifest, layout, (candidate) => candidate === name))) remaining.push(name);
+  return remaining;
 }
 
 function unregisterManual(host, manifest, layout) {
@@ -373,6 +383,7 @@ function recordReports(context, outcome) {
       missing: result.missing ?? 0,
       manual: result.manual ?? [],
       remainingHosts: outcome.remainingHosts ?? [],
+      manifestHosts: outcome.manifestHosts ?? null,
       legacyRemoved: Boolean(outcome.legacyRemoved),
     };
     const weak = reports[name].status === "unchanged" || (reports[name].status === "deferred" && ["lock-busy", "error"].includes(reports[name].reason));
@@ -973,7 +984,7 @@ function runDecision(entry, key, report, now) {
 
 // A completed report is shown once; a blocked one at most every 7 days and only while the manifest remains. The claim
 // is an exclusive create named after the notice file content it replaces, so only one session wins each change.
-function claimReportNotice(layout, host, report, now, doctor, manifestPresent) {
+function claimReportNotice(layout, host, report, now, { cli, doctor }, manifestPresent) {
   if (!report || !["completed", "blocked"].includes(report.status)) return null;
   if (report.status === "blocked" && !manifestPresent) return null;
   const path = join(layout.migrationRoot, `notice-${host}.json`);
@@ -1005,7 +1016,8 @@ function claimReportNotice(layout, host, report, now, doctor, manifestPresent) {
     try { if (now.getTime() - lstatSync(old).mtimeMs > CLAIM_KEEP_MS) rmSync(old, { force: true }); } catch { /* already gone */ }
   }
   if (report.status === "blocked" && report.reason === "symlinked-path") return { kind: "symlinked", doctor };
-  if (report.status === "blocked") return { kind: "blocked", reason: report.reason ?? "unknown", doctor };
+  if (report.status === "blocked" && untouchedInstall(report)) return { kind: "blocked", reason: report.reason ?? "unknown", doctor };
+  if (report.status === "blocked") return { kind: "blockedRerun", reason: report.reason ?? "unknown", cli, host };
   return {
     kind: "removed",
     version: report.version ?? "unknown",
@@ -1015,8 +1027,16 @@ function claimReportNotice(layout, host, report, now, doctor, manifestPresent) {
   };
 }
 
-function doctorCommand(pluginRoot) {
-  return `node "${join(pluginRoot, "scripts", "pota.mjs")}" doctor`;
+// The 1.x uninstall refuses once any host's part is gone (the manifest is never rewritten), so it is suggested only
+// while every host the manifest lists still has its part. An unreadable manifest does not count as untouched.
+function untouchedInstall(report) {
+  const { manifestHosts, remainingHosts } = report;
+  return Array.isArray(manifestHosts) && manifestHosts.length > 0 && Array.isArray(remainingHosts)
+    && manifestHosts.length === remainingHosts.length && manifestHosts.every((name) => remainingHosts.includes(name));
+}
+
+function cliCommand(pluginRoot) {
+  return `node "${join(pluginRoot, "scripts", "pota.mjs")}"`;
 }
 
 function readReportsSync(layout) {

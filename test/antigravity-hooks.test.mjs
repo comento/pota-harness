@@ -233,6 +233,67 @@ test("without continuation_active the recorded prompt hash stops a no-progress l
   });
 });
 
+test("without a workspace path every event prints {} and never reads the plugin folder as the repository", async () => {
+  await withWorkspace(async ({ env }) => {
+    const calls = [];
+    const run = async (event) => {
+      calls.push(event);
+      return { status: 0, message: "", hookOutput: { hookSpecificOutput: { additionalContext: "capsule" }, decision: "block", reason: "r" } };
+    };
+    for (const event of ["session-start", "pre-invocation", "post-tool-use", "stop"]) {
+      for (const workspacePaths of [undefined, [], [""]]) {
+        const input = {
+          conversationId, workspacePaths, invocationNum: 0, terminationReason: "model_stop", lastUserInput: "Go",
+          toolCall: { name: "write_to_file", args: { TargetFile: "a", CodeContent: "" } },
+        };
+        assert.deepEqual(await runAntigravityHook(event, input, { env, run }), {}, `${event} ${JSON.stringify(workspacePaths)}`);
+      }
+    }
+    assert.deepEqual(calls, []);
+    assert.equal(await sessionFiles(env), null);
+
+    // Antigravity runs hooks in the plugin folder, which has its own MEMORY.md and PLAN.md.
+    const pluginRoot = resolve(".");
+    assert.equal(existsSync(join(pluginRoot, "MEMORY.md")), true);
+    const result = spawnSync(process.execPath, [adapter, "session-start"], {
+      cwd: pluginRoot, env, input: JSON.stringify({ conversationId }), encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "{}\n");
+  });
+});
+
+test("a new turn or an allowed stop clears the blocked-Stop record, so the same prompt text later is not a continuation", async () => {
+  await withWorkspace(async ({ repo, env }) => {
+    const stopCalls = [];
+    let block = true;
+    const run = async (event, options) => {
+      if (event !== "stop") return { status: 0, message: "", hookOutput: {} };
+      stopCalls.push(options.payload.stop_hook_active);
+      return { status: 0, message: "", hookOutput: block ? { decision: "block", reason: "keep going" } : {} };
+    };
+    const base = { conversationId, workspacePaths: [repo], lastUserInput: "Same words" };
+    const stopHook = () => runAntigravityHook("stop", { ...base, terminationReason: "model_stop" }, { env, run });
+    const recorded = async () => (existsSync(sessionPath(env)) ? JSON.parse(await readFile(sessionPath(env), "utf8")).stopBlockedFor : null);
+
+    assert.equal((await stopHook()).decision, "continue");
+    assert.equal(await recorded(), sha256("Same words"));
+    await runAntigravityHook("pre-invocation", { ...base, invocationNum: 1 }, { env, run });
+    assert.equal(await recorded(), sha256("Same words"), "a later call in the same turn keeps the record");
+    await runAntigravityHook("pre-invocation", { ...base, invocationNum: 0 }, { env, run });
+    assert.equal(await recorded(), null, "a new turn clears the record");
+    assert.equal((await stopHook()).decision, "continue");
+    assert.deepEqual(stopCalls, [false, false], "the new turn's first stop is not a continuation");
+
+    block = false;
+    assert.deepEqual(await stopHook(), {});
+    assert.equal(stopCalls.at(-1), true);
+    assert.equal(await recorded(), null, "an allowed stop clears the record");
+    assert.deepEqual(await stopHook(), {});
+    assert.equal(stopCalls.at(-1), false);
+  });
+});
+
 test("malformed stdin, unknown events, and hook failures print {} and exit 0", async () => {
   await withWorkspace(async ({ repo, env }) => {
     for (const event of ["session-start", "pre-invocation", "post-tool-use", "stop"]) {
