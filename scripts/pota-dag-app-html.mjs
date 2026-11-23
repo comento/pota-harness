@@ -1164,9 +1164,9 @@ const APP_SCRIPT = `(() => {
  * @param {{ title?: string, version?: string }} [options]
  * @returns {string}
  */
-export function renderDagAppHtml({ title = "Pota DAG", version = "2.2.0" } = {}) {
+export function renderDagAppHtml({ title = "Pota DAG", version = "2.2.1" } = {}) {
   const appTitle = typeof title === "string" && title.length > 0 ? title : "Pota DAG";
-  const appVersion = typeof version === "string" && version.length > 0 ? version : "2.2.0";
+  const appVersion = typeof version === "string" && version.length > 0 ? version : "2.2.1";
   const scriptConstants = `const APP_TITLE = ${escapeJsonForScript(appTitle)};\n  const APP_VERSION = ${escapeJsonForScript(appVersion)};\n`;
   const scriptBody = APP_SCRIPT.replace("(() => {\n", `(() => {\n  ${scriptConstants}`);
 

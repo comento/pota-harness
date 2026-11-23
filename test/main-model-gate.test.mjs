@@ -65,17 +65,30 @@ test("model tiers classify aliases, full IDs, and unknown values per host", () =
     ["flash_lite", "fast", "antigravity"],
     ["flash", "balanced", "antigravity"],
     ["pro", "strongest", "antigravity"],
+    ["gemini-3.5-flash-lite", "fast", "antigravity"],
+    ["gemini-3.8-flash-medium", "balanced", "antigravity"],
+    ["gpt-oss-120b-medium", "balanced", "antigravity"],
+    ["gemini-4-hydrogen-tiered-xhigh", "stronger", "antigravity"],
+    ["gemini-4-neon-high", "stronger", "antigravity"],
+    ["gemini-pro-orchestrator-neon", "stronger", "antigravity"],
+    ["gemini-4-argon-high", "strongest", "antigravity"],
   ];
   for (const [value, tier, host] of expected) {
     assert.deepEqual(classifyModel(value), { tier, host }, value);
     assert.deepEqual(classifyModel(value, host), { tier, host }, `${value} on ${host}`);
+  }
+  assert.deepEqual(classifyModel("claude-sonnet-5-5-medium", "antigravity"), { tier: "balanced", host: "antigravity" });
+  assert.deepEqual(classifyModel("claude-opus-5-5-high", "antigravity"), { tier: "stronger", host: "antigravity" });
+  assert.deepEqual(classifyModel("claude-sonnet-5-5-medium"), { tier: "balanced", host: "claude-code" });
+  assert.deepEqual(classifyModel("claude-opus-5-5-high"), { tier: "stronger", host: "claude-code" });
+  for (const value of ["opus", "haiku", "fable", "claude-haiku-4-5", "claude-fable-5-2", "gemini-3-pro", "gpt-6-sol"]) {
+    assert.equal(classifyModel(value, "antigravity"), null, `${value} on antigravity`);
   }
   for (const value of ["opusplan", "default", "haiku-opus", "gpt-6-solar", "gpt-6-sol.5", "gpt-5", "gemini-3-pro"]) {
     assert.equal(classifyModel(value), null, value);
   }
   assert.equal(classifyModel("pro", "claude-code"), null);
   assert.equal(classifyModel("opus", "codex"), null);
-  assert.equal(classifyModel("gpt-6-sol", "antigravity"), null);
   for (const value of [42, null, undefined, {}, ["opus"], "", "   ", `haiku-${"x".repeat(123)}`]) {
     assert.equal(classifyModel(value), null, String(value));
   }
@@ -383,6 +396,45 @@ test("goal finish refuses before running verification, and goal complete refuses
   });
 });
 
+test("Antigravity balanced main model triggers SessionStart notice, planning gate, and review gate", async () => {
+  await withTempRoot(async (root) => {
+    const start = await hook(root, "session-start", { session_id: "agy-1", model: "gemini-3.8-flash-medium" });
+    assert.equal(
+      lastLine(start),
+      mainModelLine({ ko: false, model: "gemini-3.8-flash-medium", tier: "balanced", host: "antigravity" }),
+    );
+    assert.equal(
+      start.hookOutput.systemMessage,
+      mainModelNotice({ ko: false, model: "gemini-3.8-flash-medium", host: "antigravity" }),
+    );
+    const { model, tier, host } = await readRecordFile(root, "agy-1");
+    assert.deepEqual({ model, tier, host }, { model: "gemini-3.8-flash-medium", tier: "balanced", host: "antigravity" });
+
+    await startPlanningGoal(root, { tasks: [triageTask(), { id: "review", title: "Review" }] });
+    await recordTriageEvidence(root);
+    await assert.rejects(
+      setTaskStatus({ root, taskId: "triage-plan", status: "completed", sessionId: "agy-1" }),
+      /Planning task triage-plan was not dispatched at the stronger tier: this session's main model is gemini-3\.8-flash-medium \(balanced tier\)\. Dispatch planning and triage to pro/,
+    );
+    await assignTask({ root, taskId: "triage-plan", agentId: "planner", model: "gpt-oss-120b-medium", modelHost: "antigravity" });
+    await assert.rejects(
+      setTaskStatus({ root, taskId: "triage-plan", status: "completed", sessionId: "agy-1" }),
+      /Planning task triage-plan was not dispatched at the stronger tier/,
+    );
+    await assignTask({ root, taskId: "triage-plan", agentId: "planner", model: "gemini-4-neon-high", modelHost: "antigravity" });
+    assert.equal(task(await setTaskStatus({ root, taskId: "triage-plan", status: "completed", sessionId: "agy-1" }), "triage-plan").status, "completed");
+
+    await recordTaskEvidence(root, "review");
+    await assert.rejects(
+      finishGoal({ root, argv: passArgv, sessionId: "agy-1" }),
+      /Goal goal-[0-9a-f-]+ has no review dispatched at the stronger tier: this session's main model is gemini-3\.8-flash-medium \(balanced tier\)/,
+    );
+    await assignTask({ root, taskId: "review", kind: "review", agentId: "reviewer", model: "claude-opus-5-5-high", modelHost: "antigravity" });
+    const finished = await finishGoal({ root, argv: passArgv, sessionId: "agy-1" });
+    assert.equal(finished.goal.status, "completed");
+  });
+});
+
 test("review dispatch tier is judged per host and unknown or non-host-option models do not pass", async () => {
   const passing = [
     { model: "opus", modelHost: "claude-code" },
@@ -392,11 +444,16 @@ test("review dispatch tier is judged per host and unknown or non-host-option mod
     { model: "gpt-6-astra", modelHost: "codex" },
     { model: "pro", modelHost: "antigravity" },
     { model: "pro" },
+    { model: "gemini-4-neon-high", modelHost: "antigravity" },
+    { model: "gemini-4-argon-high", modelHost: "antigravity" },
+    { model: "claude-opus-5-5-high", modelHost: "antigravity" },
   ];
   const refused = [
     { kind: "review", model: "sonnet", modelHost: "claude-code" },
     { kind: "review", model: "gpt-6.1-terra", modelHost: "codex" },
     { kind: "review", model: "flash", modelHost: "antigravity" },
+    { kind: "review", model: "gemini-3.8-flash-medium", modelHost: "antigravity" },
+    { kind: "review", model: "claude-sonnet-5-5-medium", modelHost: "antigravity" },
     { kind: "review", model: "opus", modelSource: "inherited", modelHost: "claude-code" },
     { kind: "review", model: "pro", modelHost: "claude-code" },
     { kind: "review", model: "opusplan" },

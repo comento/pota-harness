@@ -124,7 +124,7 @@ test("Heavy completion passes with host-option effort or an assign waiver and ig
   });
 });
 
-test("goal finish applies the Heavy effort check when it completes the active task", async () => {
+test("goal finish applies the Heavy effort check when it completes the active task and supports --allow-inherited-effort", async () => {
   await withTempRoot(async (root) => {
     await startGoal({
       root,
@@ -137,6 +137,31 @@ test("goal finish applies the Heavy effort check when it completes the active ta
     await recordTaskEvidence(root, "heavy");
     await assert.rejects(finishGoal({ root, argv: [process.execPath, "-e", "process.exit(0)"] }), /Heavy task heavy .* no applied effort/);
     assert.equal(task(await readGoalState({ root }), "heavy").status, "active");
+  });
+  await withTempRoot(async (root) => {
+    await startGoal({
+      root,
+      goal: "Finish a Heavy task with inherited effort waiver",
+      planId: "docs/plan/effort-finish-waiver.md",
+      evidencePolicy: "declared",
+      tasks: [{ id: "heavy", title: "Heavy task", route: "heavy" }],
+    });
+    await assignTask({ root, taskId: "heavy", agentId: "worker-1", effort: "inherited", designWaiver: "design gate covered elsewhere" });
+    await recordTaskEvidence(root, "heavy");
+    const passArgv = [process.execPath, "-e", "process.exit(0)"];
+    await assert.rejects(finishGoal({ root, argv: passArgv }), /Heavy task heavy .* no applied effort/);
+    assert.equal(task(await readGoalState({ root }), "heavy").status, "active");
+
+    const out = [];
+    const io = { stdout: (line) => out.push(line), stderr: () => {} };
+    await handleGoalCli([
+      "goal", "finish",
+      "--allow-inherited-effort", "Antigravity host has no per-agent effort option",
+      "--root", root,
+      "--", ...passArgv,
+    ], io);
+    assert.equal(JSON.parse(out.at(-1)).status, "completed");
+    assert.equal(await readGoalState({ root }), null);
   });
 });
 
@@ -570,4 +595,29 @@ test("the code strongest table matches the strongest values documented in skills
   const doc = await readFile(resolve("skills/pota-plan/delegation.md"), "utf8");
   assert.deepEqual({ ...STRONGEST_MODEL_BY_HOST }, { "claude-code": "fable", codex: "gpt-6-astra", antigravity: "pro" });
   for (const value of Object.values(STRONGEST_MODEL_BY_HOST)) assert.ok(doc.includes(`\`${value}\``), value);
+});
+
+test("Antigravity real model IDs integrate with the design gate without affecting Claude Code or Codex", async () => {
+  for (const [modelHost, model, ok] of [
+    ["antigravity", "gemini-4-argon-high", true],
+    [null, "gemini-4-argon-high", true],
+    ["antigravity", "gemini-4-neon-high", false],
+    ["antigravity", "claude-opus-5-5-high", false],
+    ["claude-code", "gemini-4-argon-high", false],
+    ["codex", "gemini-4-argon-high", false],
+  ]) {
+    await withTempRoot(async (root) => {
+      await startDesignGoal(root);
+      await assignTask({ root, taskId: "design", kind: "design", model, ...(modelHost ? { modelHost } : {}) });
+      if (ok) {
+        assert.equal(task(await completeDesign(root), "design").status, "completed", `${modelHost} ${model}`);
+      } else {
+        await recordTaskEvidence(root, "design");
+        const pattern = modelHost
+          ? new RegExp(`Design task design recorded model ${model}, expected ${STRONGEST_MODEL_BY_HOST[modelHost]} for host ${modelHost}.*--allow-no-design-model <reason>`)
+          : designGateError;
+        await assert.rejects(setTaskStatus({ root, taskId: "design", status: "completed" }), pattern, `${modelHost} ${model}`);
+      }
+    });
+  }
 });

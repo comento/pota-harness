@@ -287,8 +287,13 @@ function ensureHeavyDesignRecorded(state, task, ceiling = null) {
     if (!(task.model && task.modelSource === "host-option")) {
       throw new Error(`Design task ${task.id} has no recorded design model (model ${task.model ?? "none"}, source ${task.modelSource ?? "none"}); dispatch it to ${target} and record goal assign ${task.id} --model <value> --model-source host-option, or complete with --allow-no-design-model <reason>`);
     }
-    const expected = [...new Set(hosts.flatMap((host) => modelsAtOrAbove(host, effectiveTier("strongest", ceiling))))];
+    const floor = effectiveTier("strongest", ceiling);
+    const expected = [...new Set(hosts.flatMap((host) => modelsAtOrAbove(host, floor)))];
     if (expected.includes(task.model)) return;
+    if (hosts.includes("antigravity")) {
+      const classified = classifyModel(task.model, "antigravity");
+      if (classified && isAtOrAboveTier(classified.tier, floor)) return;
+    }
     throw new Error(`Design task ${task.id} recorded model ${task.model}, expected ${expected.join(" | ")}${task.modelHost ? ` for host ${task.modelHost}` : ""}${ceilingNote(ceiling)}; dispatch it to ${target} and record goal assign ${task.id} --model <value> --model-source host-option, or complete with --allow-no-design-model <reason>${ceilingHint(ceiling === "stronger" ? "balanced" : "stronger|balanced", ceiling)}`);
   }
   if (task.route !== "heavy" || !task.assignedAgentId) return;

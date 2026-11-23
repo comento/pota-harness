@@ -134,7 +134,7 @@ export async function verifyAndRecord({
 
 // Completes the active task, proves every goal-level evidence kind with one run, and completes the goal.
 export async function finishGoal({
-  root = process.cwd(), argv = [], watchPaths = [], runner, timeoutMs = 600_000, onTerminal, mainModelWaiver, sessionId = null,
+  root = process.cwd(), argv = [], watchPaths = [], runner, timeoutMs = 600_000, onTerminal, effortWaiver, mainModelWaiver, sessionId = null,
   mainModelGate = true, modelCeiling = null, requestBriefWaiver,
 } = {}) {
   const waiver = optionalText(mainModelWaiver, "mainModelWaiver");
@@ -151,7 +151,7 @@ export async function finishGoal({
   // Checked before the verification run so a missing review dispatch never costs a full check first.
   await ensureMainModelReview(root, initialState, { sessionId, waiver, enabled: mainModelGate, ceiling: modelCeiling });
   if (active) {
-    await setTaskStatus({ root, taskId: active.id, status: "completed", mainModelWaiver: waiver, sessionId, mainModelGate, modelCeiling, requestBriefWaiver });
+    await setTaskStatus({ root, taskId: active.id, status: "completed", effortWaiver, mainModelWaiver: waiver, sessionId, mainModelGate, modelCeiling, requestBriefWaiver });
   }
   if (goalKinds.length > 0) {
     await verifyAndRecord({ root, scope: "goal", kind: goalKinds, argv, watchPaths, runner, timeoutMs });
