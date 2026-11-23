@@ -25,6 +25,7 @@ const manifestPaths = [
   "hooks.json",
   "hooks/hooks.json",
   "hooks/codex.json",
+  "mcp_config.json",
 ];
 const versionSurfaces = ["package.json", ".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "plugin.json"];
 const stateEvents = {
@@ -43,7 +44,7 @@ const antigravityEvents = {
 
 const commandsOf = (hooks) => Object.entries(hooks).flatMap(([event, groups]) => groups.flatMap((group) => (group.hooks ?? [group]).map((hook) => [event, hook.command])));
 
-test("the nine plugin JSON files parse and the four version surfaces agree", () => {
+test("the ten plugin JSON files parse and the four version surfaces agree", () => {
   for (const path of manifestPaths) assert.doesNotThrow(() => readJson(path), path);
   const version = readJson("package.json").version;
   assert.match(version, /^\d+\.\d+\.\d+$/);
@@ -126,6 +127,34 @@ test("Antigravity reads the root plugin.json and root hooks.json with plugin-roo
     assert.equal(command, `node ./scripts/pota-state-antigravity.mjs ${antigravityEvents[event]}`, `hooks.json ${event}`);
     const script = command.match(/^node \.\/(\S+)/)[1];
     assert.ok(isTracked(script), `hooks.json ${script} is tracked`);
+  }
+});
+
+test("Antigravity mcp_config.json registers pota-dag and all DAG MCP scripts are tracked and syntax-checked", () => {
+  // Antigravity MCP 서버 등록과 추적·문법 검사 대상 스크립트 계약을 고정한다.
+  const mcpConfig = readJson("mcp_config.json");
+  assert.deepEqual(Object.keys(mcpConfig), ["mcpServers"]);
+  assert.deepEqual(Object.keys(mcpConfig.mcpServers), ["pota-dag"]);
+  const potaDag = mcpConfig.mcpServers["pota-dag"];
+  assert.equal(potaDag.command, "node");
+  assert.deepEqual(potaDag.args, ["${PLUGIN_ROOT}/scripts/pota-dag-mcp.mjs"]);
+
+  for (const path of [
+    "mcp_config.json",
+    "scripts/pota-dag-mcp.mjs",
+    "scripts/pota-dag-mcp-core.mjs",
+    "scripts/pota-dag-app-html.mjs",
+  ]) {
+    assert.ok(isTracked(path), `${path} is tracked`);
+  }
+
+  const checkScript = readJson("package.json").scripts.check;
+  for (const script of [
+    "scripts/pota-dag-mcp.mjs",
+    "scripts/pota-dag-mcp-core.mjs",
+    "scripts/pota-dag-app-html.mjs",
+  ]) {
+    assert.ok(checkScript.includes(`node --check ${script}`), `package.json check includes node --check ${script}`);
   }
 });
 
