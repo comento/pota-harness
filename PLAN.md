@@ -4,6 +4,8 @@
 
 ## Active Plans
 
+- [plugin-native-install](docs/plan/plugin-native-install.md): 호스트 플러그인 설치로 전환, Pota 2.0.0
+
 ## Superseded Plans
 
 - [Pota 0.2.0 설치본 런타임 릴리스](docs/plan/release-0.2.0-installed-runtime.md): 후속 0.2.1·0.2.2 릴리스로 대체된 미완료 릴리스 계획입니다. 활성 작업으로 취급하지 않습니다.
