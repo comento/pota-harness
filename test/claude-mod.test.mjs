@@ -13,7 +13,7 @@ import {
   taskState,
 } from "../hooks/dag-model.mjs";
 import { layoutDag, panelWidth, textWidth, truncateText } from "../hooks/dag-layout.mjs";
-import { cardLines, cellWidth, formatElapsed, formatSummary, pickLocale, runningRows, textRows } from "../hooks/dag-text.mjs";
+import { cardLines, cellWidth, detailSections, formatElapsed, formatSummary, messages, pickLocale, runningRows, taskDetail, textRows } from "../hooks/dag-text.mjs";
 import { escapeXml, renderDagSvg } from "../hooks/dag-svg.mjs";
 import {
   describeToolCall,
@@ -689,5 +689,60 @@ test("default view is all: an unset or unknown view builds the all model and reg
   const register = readFileSync(join(modRoot, "hooks/register.tsx"), "utf8");
   const dagUi = register.slice(register.indexOf("const dagUi = atom("), register.indexOf("const dagAgents"));
   assert.match(dagUi, /view: "all"/);
-  assert.match(dagUi, /\{ shape: "ui-2" \}/);
+  assert.match(dagUi, /expandedTaskId: null/);
+  assert.match(dagUi, /\{ shape: "ui-3" \}/);
+});
+
+test("a running task names the subagent's engine id to open, and none when main works on it", () => {
+  const snap = snapshot([
+    task("a", [], "completed"),
+    task("sub", ["a"], "active", { assignedAgentId: "worker-sub" }),
+    task("own", ["a"], "active"),
+  ]);
+  const agents = [
+    { id: "agent-7f3", name: "worker-sub", description: "", model: "opus", parentId: null, mentions: [], status: "running", activity: "Read x", activityAt: 0, calls: 2 },
+    { id: "main", name: "main", description: "", model: null, parentId: null, mentions: [], status: "running", activity: "Edit y", activityAt: 0, calls: 1 },
+  ];
+  const linked = resolveAgentTasks(agents, snap.tasks);
+  assert.deepEqual(linked, { "agent-7f3": "sub", main: "own" });
+  const running = detailSections(snap, linked, agents, { locale: "en", minute: 0, timeline: {}, snapshot: snap }).running;
+  assert.deepEqual(running.map((item) => [item.id, item.agentId, item.who]), [["sub", "agent-7f3", "@worker-sub"], ["own", null, "main"]]);
+  // A task assigned in the plan with no agent heard yet has nothing to open either.
+  const quiet = detailSections(snap, {}, [], { locale: "en", minute: 0, timeline: {}, snapshot: snap }).running;
+  assert.deepEqual(quiet.map((item) => item.agentId), [null, null]);
+  // The rows a text-only surface draws are unchanged by the id.
+  assert.deepEqual(runningRows(snap, linked, agents, { locale: "en", minute: 0, timeline: {}, snapshot: snap }).slice(0, 2).map((row) => row.text), ["● Task sub", "  @worker-sub · Read x · 2 calls"]);
+});
+
+test("a main-run task's detail lists scope, models, effort, dependencies, evidence and blocker in both languages", () => {
+  const one = task("own", ["a", "b"], "active", {
+    writeScope: ["hooks/register.tsx", "tests/pane.test.tsx"], model: "opus", effectiveModel: "claude-opus", effort: "medium",
+    requiredEvidence: ["moduleAcceptance", "surfaceIntegration"], evidence: ["moduleAcceptance"], blocker: "waiting on review",
+  });
+  assert.deepEqual(taskDetail(one, "en"), [
+    "scope: hooks/register.tsx, tests/pane.test.tsx",
+    "model: opus · effective: claude-opus · effort: medium",
+    "after: a, b",
+    "evidence required: moduleAcceptance, surfaceIntegration",
+    "evidence recorded: moduleAcceptance",
+    "blocker: waiting on review",
+  ]);
+  assert.deepEqual(taskDetail(task("bare", [], "active"), "ko"), [
+    "범위: 없음",
+    "모델: 없음 · 적용 모델: 없음 · effort: 없음",
+    "선행: 없음",
+    "증거 필요: 없음",
+    "증거 기록: 없음",
+  ]);
+  for (const locale of ["en", "ko"]) {
+    const words = messages(locale);
+    for (const key of ["backToMain", "viewing", "viewDenied", "effectiveModel", "effort", "required", "recorded", "blocker", "none"]) {
+      assert.equal(typeof words[key], "string", `${locale}.${key}`);
+      assert.ok(words[key].length > 0, `${locale}.${key}`);
+    }
+  }
+  assert.equal(messages("en").backToMain, "Back to main");
+  assert.equal(messages("ko").backToMain, "메인으로");
+  assert.equal(messages("en").viewDenied, "Could not open the agent: ");
+  assert.equal(messages("ko").viewDenied, "에이전트 대화를 열지 못했습니다: ");
 });

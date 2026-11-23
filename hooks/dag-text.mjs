@@ -57,6 +57,15 @@ const MESSAGES = {
     closed: "Pota DAG 패널을 닫았습니다.",
     refreshing: "Pota DAG를 다시 읽습니다.",
     usage: "사용법: /dag [previous|current|next|all|refresh|close]",
+    backToMain: "메인으로",
+    viewing: "보는 중",
+    viewDenied: "에이전트 대화를 열지 못했습니다: ",
+    effectiveModel: "적용 모델",
+    effort: "effort",
+    required: "필요",
+    recorded: "기록",
+    blocker: "막힘 사유",
+    none: "없음",
   },
   en: {
     noGoal: "No active Pota goal. Plan one with `pota-plan` and its DAG appears here.",
@@ -96,6 +105,15 @@ const MESSAGES = {
     closed: "Closed the Pota DAG pane.",
     refreshing: "Reading the Pota DAG again.",
     usage: "Usage: /dag [previous|current|next|all|refresh|close]",
+    backToMain: "Back to main",
+    viewing: "viewing",
+    viewDenied: "Could not open the agent: ",
+    effectiveModel: "effective",
+    effort: "effort",
+    required: "required",
+    recorded: "recorded",
+    blocker: "blocker",
+    none: "none",
   },
 };
 
@@ -226,6 +244,8 @@ export function detailSections(snapshot, agentTask, agents, ctx) {
     return {
       id: task.id,
       title: task.title,
+      // The engine's id of the subagent on it, which `$.ui.view` opens; null when main works on it.
+      agentId: agent && agent.id !== "main" ? agent.id : null,
       who,
       activity: agent?.activity ?? "",
       calls: agent?.calls ?? 0,
@@ -251,25 +271,32 @@ export function detailSections(snapshot, agentTask, agents, ctx) {
 }
 
 /**
- * The same sections as plain rows, for a surface that draws only text.
- * @param {DagSnapshot} snapshot
- * @param {Record<string, string>} agentTask
- * @param {DagAgent[]} agents
- * @param {TextContext} ctx
+ * A running task's rows: its title, who works on it, and the evidence it still lacks.
+ * @param {DetailSections["running"][number]} task
+ * @param {Locale} locale
  * @returns {Row[]}
  */
-export function runningRows(snapshot, agentTask, agents, ctx) {
-  const words = messages(ctx.locale);
-  const sections = detailSections(snapshot, agentTask, agents, ctx);
+export function runningTaskRows(task, locale) {
+  const words = messages(locale);
+  /** @type {Row[]} */
+  const rows = [{ text: `● ${task.title}`, tone: "run", bold: true }];
+  const parts = [task.who, task.activity, task.calls > 0 ? words.calls(task.calls) : "", task.elapsed].filter(Boolean);
+  rows.push({ text: `  ${parts.join(" · ")}`, tone: "dim" });
+  const left = task.evidence.filter((item) => !item.done).map((item) => item.kind);
+  if (left.length > 0) rows.push({ text: `  ${words.remaining}${left.join(", ")}`, tone: "dim" });
+  return rows;
+}
+
+/**
+ * The rows after the running tasks: blocked, next up, and agents no task was matched to.
+ * @param {DetailSections} sections
+ * @param {Locale} locale
+ * @returns {Row[]}
+ */
+export function restRows(sections, locale) {
+  const words = messages(locale);
   /** @type {Row[]} */
   const rows = [];
-  for (const task of sections.running) {
-    rows.push({ text: `● ${task.title}`, tone: "run", bold: true });
-    const parts = [task.who, task.activity, task.calls > 0 ? words.calls(task.calls) : "", task.elapsed].filter(Boolean);
-    rows.push({ text: `  ${parts.join(" · ")}`, tone: "dim" });
-    const left = task.evidence.filter((item) => !item.done).map((item) => item.kind);
-    if (left.length > 0) rows.push({ text: `  ${words.remaining}${left.join(", ")}`, tone: "dim" });
-  }
   for (const task of sections.blocked) rows.push({ text: `! ${task.title} — ${task.reason || words.state.blocked}`, tone: "bad" });
   if (sections.next.length > 0) rows.push({ text: words.nextUp, tone: "dim", bold: true });
   for (const task of sections.next) {
@@ -278,6 +305,40 @@ export function runningRows(snapshot, agentTask, agents, ctx) {
   if (sections.more > 0) rows.push({ text: `  ${words.more(sections.more)}`, tone: "dim" });
   for (const agent of sections.strays) rows.push({ text: `◦ ${[agent.name, agent.activity].filter(Boolean).join(" · ")}`, tone: "dim" });
   return rows;
+}
+
+/**
+ * The same sections as plain rows, for a surface that draws only text.
+ * @param {DagSnapshot} snapshot
+ * @param {Record<string, string>} agentTask
+ * @param {DagAgent[]} agents
+ * @param {TextContext} ctx
+ * @returns {Row[]}
+ */
+export function runningRows(snapshot, agentTask, agents, ctx) {
+  const sections = detailSections(snapshot, agentTask, agents, ctx);
+  return [...sections.running.flatMap((task) => runningTaskRows(task, ctx.locale)), ...restRows(sections, ctx.locale)];
+}
+
+/**
+ * What a task the main agent works on shows when opened in the pane: write scope, model and effort,
+ * what it depends on, required and recorded evidence, and its blocker.
+ * @param {DagTask} task
+ * @param {Locale} locale
+ * @returns {string[]}
+ */
+export function taskDetail(task, locale) {
+  const words = messages(locale);
+  const list = (items) => (items && items.length > 0 ? items.join(", ") : words.none);
+  const lines = [
+    `${words.writeScope}: ${list(task.writeScope)}`,
+    `${words.model}: ${task.model ?? words.none} · ${words.effectiveModel}: ${task.effectiveModel ?? words.none} · ${words.effort}: ${task.effort ?? words.none}`,
+    `${words.after}: ${list(task.dependsOn)}`,
+    `${words.evidence} ${words.required}: ${list(task.requiredEvidence)}`,
+    `${words.evidence} ${words.recorded}: ${list(task.evidence)}`,
+  ];
+  if (task.blocker) lines.push(`${words.blocker}: ${task.blocker}`);
+  return lines;
 }
 
 /**

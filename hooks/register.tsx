@@ -7,7 +7,7 @@ import type { EngineInterface, Register } from "claude-code";
 import type { DagAgent, DagState, DagUi } from "../types";
 import { VIEWS, buildDagModel, parseGoalStatus, planKey, summarize } from "./dag-model.mjs";
 import { panelWidth } from "./dag-layout.mjs";
-import { detailSections, formatSummary, messages, pickLocale, runningRows } from "./dag-text.mjs";
+import { detailSections, formatSummary, messages, pickLocale, restRows, runningTaskRows, taskDetail } from "./dag-text.mjs";
 import { renderDagSvg } from "./dag-svg.mjs";
 import { termGraph } from "./dag-term.mjs";
 import {
@@ -62,8 +62,8 @@ const dag = atom({ plugin: "pota", key: "dag" } as const, {
   seq: 0, snapshot: null, ended: null, error: null, fetchedAt: 0, root: null, home: null, timeline: {},
 }, { shape: "dag-2" });
 const dagUi = atom({ plugin: "pota", key: "dagUi" } as const, {
-  view: "all", epoch: 0, minute: 0, autoOpenedPlanKey: null, closedGoalId: null,
-}, { shape: "ui-2" });
+  view: "all", epoch: 0, minute: 0, autoOpenedPlanKey: null, closedGoalId: null, expandedTaskId: null,
+}, { shape: "ui-3" });
 const dagAgents = atom({ plugin: "pota", key: "dagAgents" } as const, [], { shape: "agents-1" });
 
 // Scheduling state: a reload drops it with the old environment's timers, which is what it describes.
@@ -328,6 +328,21 @@ async function setView($: Engine, view: View): Promise<void> {
   await update($, dagUi, ui => ({ ...ui, view, epoch: now, minute: minuteOf(now) }));
 }
 
+/** One running task's detail block open at a time: a second press on the same task closes it. */
+async function toggleDetail($: Engine, taskId: string): Promise<void> {
+  await update($, dagUi, ui => ({ ...ui, expandedTaskId: ui.expandedTaskId === taskId ? null : taskId }));
+}
+
+/** Puts an agent's transcript in the main view, or the main one back for `{}`; a refusal is said, not dropped. */
+async function showView($: Engine, view: { agentId?: string }, words: ReturnType<typeof messages>): Promise<void> {
+  try {
+    const shown = await $.ui.view(view);
+    if (shown.deny !== undefined) $.ui.toast(`${words.viewDenied}${shown.deny}`);
+  } catch (error) {
+    $.ui.toast(`${words.viewDenied}${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 const toneProps = (tone: Tone): { color?: string; dimColor?: boolean } =>
   tone === "ok" ? { color: "success" }
     : tone === "run" ? { color: "suggestion" }
@@ -499,6 +514,11 @@ export const register: Register = on => {
     const summary = snapshot === null ? null : summarize(snapshot);
     const summaryText = summary === null ? null : formatSummary(summary, ctx);
     const failure = state.error !== null && state.error !== RUNTIME_MISSING ? `${words.refreshFailed}${state.error}` : null;
+    // The transcript on screen beside the pane: an agent's while one is opened, absent for the main one.
+    const viewed = e.props.view?.agentId;
+    const back = viewed === undefined
+      ? null
+      : <Button key="back-main" label={words.backToMain} variant="primary" onPress={() => showView($, {}, words)} />;
     const otherRoot = state.root !== null && state.home !== null && !samePath(state.root, state.home)
       ? <Text color="warning" wrap="truncate-end">{words.otherRoot(rootLabel(state.root))}</Text>
       : null;
@@ -522,7 +542,8 @@ export const register: Register = on => {
           {otherRoot}
           <Text dimColor>{line}</Text>
           {failure !== null && <Text dimColor>{failure}</Text>}
-          <Box flexDirection="row">
+          <Box flexDirection="row" columnGap={1}>
+            {back}
             <Button key="refresh" label={words.refresh} onPress={() => void requestRefresh($, "command").catch(ignore)} />
           </Box>
         </Box>
@@ -556,8 +577,21 @@ export const register: Register = on => {
     }
     const agentTask = resolveAgentTasks(agents, snapshot.tasks);
     // Where sizes and borders draw, the sections are framed; a text-only surface gets the same as rows.
-    const sections = drawsSvg ? detailSections(snapshot, agentTask, agents, ctx) : null;
-    const rows = sections === null ? runningRows(snapshot, agentTask, agents, ctx) : [];
+    const all = detailSections(snapshot, agentTask, agents, ctx);
+    const sections = drawsSvg ? all : null;
+    const rest = sections === null ? restRows(all, lang) : [];
+    // A running task's title is a button: a subagent's opens its transcript, main's own opens its detail here.
+    const openTask = (task: (typeof all.running)[number]) => {
+      const agentId = task.agentId;
+      // The promise is returned so the press stays the person's own input until the view call settles.
+      return agentId === null ? () => toggleDetail($, task.id).catch(ignore) : () => showView($, { agentId }, words);
+    };
+    const isMarked = (task: (typeof all.running)[number]) =>
+      task.agentId === null ? ui.expandedTaskId === task.id : task.agentId === viewed;
+    // Only a running task main works on opens; an id left from a task that moved on shows nothing.
+    const expanded = all.running.find(task => task.agentId === null && task.id === ui.expandedTaskId);
+    const expandedTask = expanded === undefined ? undefined : snapshot.tasks.find(item => item.id === expanded.id);
+    const detail = expandedTask === undefined ? null : { id: expandedTask.id, lines: taskDetail(expandedTask, lang) };
     const goalState = state.ended !== null
       ? words.ended[state.ended.status]
       : snapshot.status !== "active" ? words.goalStatus[snapshot.status] : null;
@@ -583,11 +617,30 @@ export const register: Register = on => {
             />
           ))}
           <Button key="refresh" label={words.refresh} onPress={() => void requestRefresh($, "command").catch(ignore)} />
+          {back}
         </Box>
         {graph}
-        {rows.length > 0 && (
+        {sections === null && all.running.length > 0 && (
           <Box flexDirection="column">
-            {rows.map(row => <Text bold={row.bold === true} {...toneProps(row.tone)}>{row.text}</Text>)}
+            {all.running.map(task => {
+              const [title, ...lines] = runningTaskRows(task, lang);
+              const marked = isMarked(task);
+              return (
+                <Box key={`run-${task.id}`} flexDirection="column">
+                  <Box flexDirection="row" columnGap={1}>
+                    <Button key={`task-${task.id}`} label={title?.text ?? task.title} {...(marked ? { variant: "primary" as const } : {})} onPress={openTask(task)} />
+                    {task.agentId !== null && task.agentId === viewed && <Text color="suggestion">{words.viewing}</Text>}
+                  </Box>
+                  {lines.map(row => <Text bold={row.bold === true} {...toneProps(row.tone)}>{row.text}</Text>)}
+                  {detail !== null && detail.id === task.id && detail.lines.map(line => <Text dimColor>{`    ${line}`}</Text>)}
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+        {rest.length > 0 && (
+          <Box flexDirection="column">
+            {rest.map(row => <Text bold={row.bold === true} {...toneProps(row.tone)}>{row.text}</Text>)}
           </Box>
         )}
         {sections !== null && sections.running.length > 0 && (
@@ -596,11 +649,11 @@ export const register: Register = on => {
             {sections.running.map(task => (
               <Box key={`run-${task.id}`} flexDirection="column">
                 <Box flexDirection="row" justifyContent="space-between" columnGap={1}>
-                  <Text weight="semibold" wrap="truncate-end">{task.title}</Text>
+                  <Button key={`task-${task.id}`} label={task.title} {...(isMarked(task) ? { variant: "primary" as const } : {})} onPress={openTask(task)} />
                   <Text size="footnote" dimColor>{task.elapsed}</Text>
                 </Box>
                 <Text size="footnote" dimColor wrap="truncate-end">
-                  {[task.who, task.calls > 0 ? words.calls(task.calls) : ""].filter(Boolean).join(" · ")}
+                  {[task.who, task.calls > 0 ? words.calls(task.calls) : "", task.agentId !== null && task.agentId === viewed ? words.viewing : ""].filter(Boolean).join(" · ")}
                 </Text>
                 {task.activity.length > 0 && <Text size="footnote" mono wrap="truncate-end">{task.activity}</Text>}
                 {task.evidence.length > 0 && (
@@ -610,6 +663,11 @@ export const register: Register = on => {
                         {item.done ? "●" : "○"} {item.kind}
                       </Text>
                     ))}
+                  </Box>
+                )}
+                {detail !== null && detail.id === task.id && (
+                  <Box flexDirection="column" paddingLeft={1}>
+                    {detail.lines.map(line => <Text size="footnote" dimColor wrap="wrap">{line}</Text>)}
                   </Box>
                 )}
               </Box>

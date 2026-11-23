@@ -53,6 +53,8 @@ export type DagUi = {
   minute: number
   autoOpenedPlanKey: string | null
   closedGoalId: string | null
+  /** The running task whose detail block is open in the pane: one at a time, null when none. */
+  expandedTaskId: string | null
 }
 
 export type DagAgent = {
