@@ -4,6 +4,8 @@
 
 ## Active Plans
 
+- [dag-open-running-task](docs/plan/dag-open-running-task.md): DAG 창에서 실행 중인 task 열기 (Pota 2.1.0)
+
 
 ## Superseded Plans
 

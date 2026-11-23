@@ -405,3 +405,95 @@ test("a goal command's answer is handed on unchanged, before its root is looked 
   await clock.settle();
   expect(statusRoots(world.calls).at(-1)).toBe("/repo");
 });
+
+/** A goal with one task a subagent works on and one main works on, as `goal status` prints it. */
+const RUNNING = JSON.stringify({
+  schemaVersion: 3,
+  revision: 1,
+  goal: { id: "goal-run", title: "Running goal", planId: "docs/plan/x.md", status: "active", requiredEvidence: [], createdAt: new Date(NOW - 600_000).toISOString() },
+  tasks: [
+    task("a", [], "completed"),
+    { ...task("sub", ["a"], "active"), assignedAgentId: "worker-sub" },
+    { ...task("own", ["a"], "active"), writeScope: ["hooks/register.tsx"], model: "opus", effectiveModel: "claude-opus", effort: "medium" },
+  ],
+  receipts: [],
+});
+
+/** The engine's `$.ui.view` and `$.ui.toast`: what each was asked, and the next view answer. */
+function viewEngine(on: On) {
+  const seen = { views: [] as { agentId?: string }[], toasts: [] as string[], answer: {} as { deny?: string } };
+  on("ui.view", (_, e) => {
+    seen.views.push({ ...e });
+    return { value: seen.answer };
+  });
+  on("ui.toast", (_, e) => {
+    seen.toasts.push(e.text);
+    return { value: undefined };
+  });
+  on("agent.spawn", () => ({ model: "claude-opus", agentId: "agent-sub-1" }));
+  return seen;
+}
+
+async function startRunning($: Engine, on: On) {
+  const { clock } = engine(on, () => RUNNING);
+  const seen = viewEngine(on);
+  await $.session.start({ cwd: "/repo", surface: "desktop", isInteractive: true });
+  await runGoal($, clock, "start");
+  await $.agent.spawn({
+    tool_use_id: "toolu_sub",
+    prompt: "Work on the sub task",
+    description: "sub",
+    subagentType: "worker",
+    provider: { plugin: "engine", tier: "builtin" },
+    parentModel: "claude-opus",
+    background: false,
+    fork: false,
+    name: "worker-sub",
+  });
+  await clock.advance(1_500);
+  await clock.settle();
+  return { clock, seen };
+}
+
+for (const surface of ["desktop", "terminal"] as const) {
+  test(`${surface}: a running card with a subagent opens its transcript, and a refusal is said`, async ($, on) => {
+    const { seen } = await startRunning($, on);
+    const ui = await $.ui.mount({ ...PANE, surface });
+    expect(await ui.find({ key: "back-main" })).toBeUndefined();
+    await ui.press({ key: "task-sub" });
+    expect(seen.views).toEqual([{ agentId: "agent-sub-1" }]);
+    expect(seen.toasts).toEqual([]);
+
+    seen.answer = { deny: "no agent holds the id" };
+    await ui.press({ key: "task-sub" });
+    expect(seen.views.at(-1)).toEqual({ agentId: "agent-sub-1" });
+    expect(seen.toasts).toEqual(["Could not open the agent: no agent holds the id"]);
+    await ui.unmount();
+  });
+
+  test(`${surface}: while an agent is viewed its card is marked and the back button returns to main`, async ($, on) => {
+    const { seen } = await startRunning($, on);
+    const ui = await $.ui.mount({ ...PANE, props: { ...PANE.props, view: { agentId: "agent-sub-1" } }, surface });
+    expect((await ui.find({ key: "task-sub" }))?.props.variant).toBe("primary");
+    expect((await ui.find({ key: "task-own" }))?.props.variant).toBeUndefined();
+    expect(await ui.find({ type: "Text", text: /viewing/ })).toBeDefined();
+    await ui.press({ key: "back-main" });
+    expect(seen.views).toEqual([{}]);
+    await ui.unmount();
+  });
+
+  test(`${surface}: a running card main works on opens and closes its detail in the pane`, async ($, on) => {
+    const { seen } = await startRunning($, on);
+    const ui = await $.ui.mount({ ...PANE, surface });
+    expect(await ui.find({ type: "Text", text: /scope: hooks\/register\.tsx/ })).toBeUndefined();
+    await ui.press({ key: "task-own" });
+    expect(seen.views).toEqual([]);
+    expect((await ui.find({ key: "task-own" }))?.props.variant).toBe("primary");
+    for (const text of [/scope: hooks\/register\.tsx/, /model: opus · effective: claude-opus · effort: medium/, /after: a/, /evidence required: moduleAcceptance/, /evidence recorded: none/]) {
+      expect(await ui.find({ type: "Text", text })).toBeDefined();
+    }
+    await ui.press({ key: "task-own" });
+    expect(await ui.find({ type: "Text", text: /scope: hooks\/register\.tsx/ })).toBeUndefined();
+    await ui.unmount();
+  });
+}
