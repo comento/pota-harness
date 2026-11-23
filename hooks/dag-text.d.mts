@@ -48,6 +48,15 @@ export type Messages = {
   closed: string;
   refreshing: string;
   usage: string;
+  backToMain: string;
+  viewing: string;
+  viewDenied: string;
+  effectiveModel: string;
+  effort: string;
+  required: string;
+  recorded: string;
+  blocker: string;
+  none: string;
 };
 
 export declare function messages(locale: Locale): Messages;
@@ -58,13 +67,16 @@ export declare function waveHeader(wave: DagWave, locale: Locale, shown?: number
 export declare function roleLine(task: DagTask, separator: string): string;
 export declare function cardLines(node: DagNode, ctx: TextContext): { title: string; status: string; meta: string; progress: string; tooltip: string };
 export type DetailSections = {
-  running: { id: string; title: string; who: string; activity: string; calls: number; elapsed: string; evidence: { kind: string; done: boolean }[] }[];
+  running: { id: string; title: string; agentId: string | null; who: string; activity: string; calls: number; elapsed: string; evidence: { kind: string; done: boolean }[] }[];
   blocked: { id: string; title: string; reason: string }[];
   next: { id: string; title: string; waits: string[] }[];
   more: number;
   strays: { id: string; name: string; activity: string }[];
 };
 export declare function detailSections(snapshot: DagSnapshot, agentTask: Record<string, string>, agents: readonly DagAgent[], ctx: TextContext): DetailSections;
+export declare function runningTaskRows(task: DetailSections["running"][number], locale: Locale): Row[];
+export declare function restRows(sections: DetailSections, locale: Locale): Row[];
+export declare function taskDetail(task: DagTask, locale: Locale): string[];
 export declare function runningRows(snapshot: DagSnapshot, agentTask: Record<string, string>, agents: readonly DagAgent[], ctx: TextContext): Row[];
 export declare function cellWidth(text: string): number;
 export declare function truncateCells(text: string, columns: number): string;
