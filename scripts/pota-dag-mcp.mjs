@@ -140,6 +140,28 @@ export function runStdioServer({
   });
 }
 
+/**
+ * CLI 인자에서 `--host <name>` 또는 `--host=<name>` 값을 추출한다.
+ * @param {string[]} [argv]
+ * @returns {string | null}
+ */
+export function parseHostArg(argv = process.argv.slice(2)) {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    if (arg === "--host") {
+      const value = argv[index + 1];
+      return typeof value === "string" && value.trim().length > 0 && !value.startsWith("--")
+        ? value.trim()
+        : null;
+    }
+    if (arg.startsWith("--host=")) {
+      const value = arg.slice("--host=".length).trim();
+      return value.length > 0 ? value : null;
+    }
+  }
+  return null;
+}
+
 function isCliEntry() {
   if (!process.argv[1]) return false;
   try {
@@ -157,13 +179,16 @@ if (isCliEntry()) {
     }));
     console.log(JSON.stringify(result));
   } else {
+    const host = parseHostArg();
+    const trackAntigravityPid = host !== "codex";
     process.on("uncaughtException", () => {});
     process.on("unhandledRejection", () => {});
-    await recordDagMcpServerPid().catch(() => {});
+    // Codex 실행 시 Antigravity의 server.json PID를 덮어쓰지 않도록 기본 실행만 PID를 기록한다.
+    if (trackAntigravityPid) await recordDagMcpServerPid().catch(() => {});
     try {
       await runStdioServer();
     } finally {
-      await clearDagMcpServerPid().catch(() => {});
+      if (trackAntigravityPid) await clearDagMcpServerPid().catch(() => {});
     }
   }
 }

@@ -6,12 +6,13 @@ import { invalidModelCeilingWarning, resolveModelCeiling } from "./pota-model-ce
 import { classifyModel, isBelowTier, isStrongerOrAbove } from "./pota-model-tier.mjs";
 import { resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
 
-const GOAL_COMMANDS = ["start", "status", "ready", "stats", "task", "replan", "steer", "claim", "assign", "receipt", "verify", "finish", "pause", "resume", "block", "cancel", "complete"];
+const GOAL_COMMANDS = ["start", "status", "ready", "stats", "task", "gate", "replan", "steer", "claim", "assign", "receipt", "verify", "finish", "pause", "resume", "block", "cancel", "complete"];
 const GOAL_USAGE = [
   `Usage: pota goal <${GOAL_COMMANDS.join("|")}> [options] [--root PATH]`,
   "Note: --criteria (completionCriteria) is advisory and is not enforced; completion is gated only by required evidence.",
   "Request Brief: completing a triageDecision task (goal task --status completed, goal finish) needs a filled \"## Request Brief\" in a plan file; bypass with --allow-no-request-brief <reason>.",
   "Steering: goal steer --kind <correction|addition|redirect> --reason <text>; with a plan file, goal replan needs --steer <correction|addition|redirect|none> --reason <text>.",
+  "Approval gate: goal gate --task <id> --on|--off [--reason <text>]; activate a gated task with goal task --status active --approve-gate.",
 ].join("\n");
 
 export async function runGoalCli(args, {
@@ -109,6 +110,7 @@ export async function runGoalCli(args, {
       taskId: options.task ?? (taskAction ? positional[1] : positional[0]),
       status: options.status ?? taskAction ?? positional[1],
       blocker: options.reason,
+      approveGate: Boolean(options["approve-gate"]),
       effortWaiver: options["allow-inherited-effort"],
       designWaiver: options["allow-no-design-model"],
       mainModelWaiver,
@@ -120,6 +122,21 @@ export async function runGoalCli(args, {
     emit(JSON.stringify(state));
     reportMainModelWaiver();
     reportRequestBriefWaiver();
+    return state;
+  }
+  if (command === "gate") {
+    // --on과 --off의 정확한 XOR만 허용한다.
+    if ((options.on !== undefined && options.off !== undefined) || Boolean(options.on) === Boolean(options.off)) {
+      throw new Error("goal gate requires exactly one of --on or --off");
+    }
+    const state = await operations.setTaskApprovalGate({
+      root,
+      taskId: options.task ?? positional[0],
+      enabled: Boolean(options.on),
+      reason: options.reason,
+      sessionId,
+    });
+    emit(JSON.stringify(state));
     return state;
   }
   if (command === "replan") {
@@ -239,7 +256,14 @@ export async function runGoalCli(args, {
   if (command === "ready") {
     const state = await operations.readGoalState({ root });
     const ids = (status) => (state ? state.tasks.filter((task) => task.status === status).map((task) => task.id) : []);
-    const summary = { active: ids("active"), ready: operations.readyTasks(state).map((task) => task.id), blocked: ids("blocked") };
+    // Gated ready tasks need the user's approval before activation, so they never appear under ready; the gated key is
+    // present only when such a task exists, keeping the 2.2.x shape otherwise.
+    const readyList = operations.readyTasks(state);
+    const gated = readyList.filter((task) => task.approvalGate === true).map((task) => task.id);
+    const ready = readyList.filter((task) => task.approvalGate !== true).map((task) => task.id);
+    const summary = gated.length > 0
+      ? { active: ids("active"), ready, gated, blocked: ids("blocked") }
+      : { active: ids("active"), ready, blocked: ids("blocked") };
     stdout(JSON.stringify(summary));
     return summary;
   }
@@ -280,7 +304,7 @@ function parseArgs(args, command) {
   const options = {};
   const positional = [];
   const passthrough = [];
-  const booleanOptions = new Set(["quiet", "history"]);
+  const booleanOptions = new Set(["quiet", "history", "on", "off", "approve-gate"]);
   const allowed = allowedOptions(command);
   const seenCanonicalOptions = new Set();
   for (let index = 0; index < args.length; index += 1) {
@@ -331,7 +355,8 @@ function allowedOptions(command) {
   const byCommand = {
     start: ["goal", "plan", "tasks", "criteria", "requiredEvidence", "session", "evidencePolicy", "evidence-policy"],
     status: [],
-    task: ["task", "status", "reason", "allow-inherited-effort", "allow-no-design-model", "allow-main-model", "allow-no-request-brief"],
+    task: ["task", "status", "reason", "allow-inherited-effort", "allow-no-design-model", "allow-main-model", "allow-no-request-brief", "approve-gate"],
+    gate: ["task", "on", "off", "reason"],
     replan: ["tasks", "steer", "reason"],
     steer: ["kind", "reason"],
     claim: ["session"],

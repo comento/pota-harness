@@ -1,6 +1,6 @@
 {
   "name": "@comento/pota-harness",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "private": true,
   "description": "Token-efficient agent harness with tool readiness for Codex, Claude Code, and Antigravity",
   "license": "MIT",
@@ -13,7 +13,7 @@
     "url": "git+https://github.com/comento/pota-harness.git"
   },
   "scripts": {
-    "check": "node --check scripts/pota.mjs && node --check scripts/pota-paths.mjs && node --check scripts/pota-safe-fs.mjs && node --check scripts/pota-goal.mjs && node --check scripts/pota-state.mjs && node --check scripts/pota-state-antigravity.mjs && node --check scripts/pota-dag-mcp.mjs && node --check scripts/pota-dag-mcp-core.mjs && node --check scripts/pota-dag-app-html.mjs && node --check scripts/pota-cleanup.mjs && node --check scripts/pota-legacy-migration.mjs && node --check scripts/pota-doctor.mjs && node --check scripts/pota-lifecycle-lock.mjs && node --check scripts/pota-comment-checker.mjs && node --check scripts/pota-toolcheck.mjs && npm test",
+    "check": "node --check scripts/pota.mjs && node --check scripts/pota-paths.mjs && node --check scripts/pota-safe-fs.mjs && node --check scripts/pota-goal.mjs && node --check scripts/pota-state.mjs && node --check scripts/pota-state-antigravity.mjs && node --check scripts/pota-dag-workspaces.mjs && node --check scripts/pota-dag-mcp.mjs && node --check scripts/pota-dag-mcp-core.mjs && node --check scripts/pota-dag-app-html.mjs && node --check scripts/pota-dag-transcript.mjs && node --check scripts/pota-dag-git.mjs && node --check scripts/pota-cleanup.mjs && node --check scripts/pota-legacy-migration.mjs && node --check scripts/pota-doctor.mjs && node --check scripts/pota-lifecycle-lock.mjs && node --check scripts/pota-comment-checker.mjs && node --check scripts/pota-toolcheck.mjs && npm test",
     "test": "node --test"
   },
   "engines": {

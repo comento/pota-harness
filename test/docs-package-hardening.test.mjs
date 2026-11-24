@@ -7,13 +7,13 @@ const root = resolve(".");
 const read = (path) => readFile(resolve(root, path), "utf8");
 
 const expectedAgentNames = ["explorer", "worker"];
-const expectedSkillNames = ["pota-memory", "pota-plan", "pota-review", "pota-work"];
+const expectedSkillNames = ["dag", "pota-memory", "pota-plan", "pota-review", "pota-work"];
 
 test("the retired shell state runtime stays deleted", async () => {
   await assert.rejects(stat(resolve(root, "scripts/pota-state.sh")), { code: "ENOENT" });
 });
 
-test("plugin inventory covers two Claude agents and four skills and no command or workflow surfaces", async () => {
+test("plugin inventory covers two Claude agents and five skills and no command or workflow surfaces", async () => {
   const agents = (await readdir(resolve(root, "claude", "agents"))).filter((name) => name.endsWith(".md")).map((name) => name.slice(0, -3));
   assert.deepEqual(agents.sort(), expectedAgentNames);
   const skills = (await readdir(resolve(root, "skills"), { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
@@ -22,6 +22,14 @@ test("plugin inventory covers two Claude agents and four skills and no command o
   for (const path of ["commands", "agents", ".claude/commands", ".claude/agents", ".agents/workflows"]) {
     await assert.rejects(stat(resolve(root, path)), { code: "ENOENT" }, `${path} is gone`);
   }
+});
+
+test("the dag skill only opens the Pota DAG panel and stays tiny", async () => {
+  const body = await read("skills/dag/SKILL.md");
+  assert.match(body, /^---\nname: dag\ndescription: [^\n]+\n---\n/);
+  assert.match(body, /open_pota_dag/);
+  assert.match(body, /Claude Code[^\n]*`\/dag`/);
+  assert.ok(Buffer.byteLength(body) < 2000, "dag skill stays under 2,000 bytes");
 });
 
 test("CI is least-privilege, bounded, SHA-pinned, and keeps host validation out of the required check", async () => {

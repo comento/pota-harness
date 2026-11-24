@@ -63,7 +63,7 @@ update は同じ command をもう一度実行します。Antigravity の文書�
 
 | | Claude Code | Codex | Antigravity CLI |
 | --- | --- | --- | --- |
-| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` |
+| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory`, `/dag` (mod コマンド) | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | 同じ 5 つ(`/hooks` で承認した後) | SessionStart, PreInvocation(prompt context), PostToolUse, Stop。SubagentStop なし |
 | Agents `explorer`, `worker` | あり | なし | なし |
 | DAG パネル(mod) | あり | なし | なし |
@@ -208,7 +208,7 @@ Pota は data を `POTA_HOME`(既定 `~/.pota`)の下に置き、すべての ho
 
 ## Claude Code DAG Panel
 
-Claude Code デスクトップは、現在の Pota goal を wave ごとの列に分けた DAG パネルで表示します。Claude Code 専用で、Codex と Antigravity にはありません。mod 機能のある Claude Code が必要です(Claude Code 2.1.325 の mod API を基準に作成)。ターミナルのようにグラフを描けない surface では文字の一覧で表示します。
+Claude Code デスクトップは、現在の Pota goal を wave ごとの列に分けた DAG パネルで表示します。Claude Code は独自の mod パネル(`/dag`)を使います。2.3.0 以降、Antigravity と Codex/ChatGPT Desktop も `open_pota_dag` ツールで開く MCP App として同じ DAG を表示します。`goal start` の後に自動で実行されるほか、`dag` skill(Antigravity `/dag`、Codex `$dag`)でも開けます。mod 機能のある Claude Code が必要です(Claude Code 2.1.325 の mod API を基準に作成)。ターミナルのようにグラフを描けない surface では文字の一覧で表示します。
 
 - `/dag [previous|current|next|all|refresh|close]` でパネルを開きます。表示は前、現在、次、全体の 4 つです。既定は全体(all)表示で、ほかは選択オプションです。完了した接続は実線、進行中の接続は点線と移動する点です。
 - `pota goal start` と `pota goal replan` の後に自動で一度だけ開きます。閉じると、同じ goal では再び開きません。
@@ -223,7 +223,7 @@ Pota は Antigravity CLI(`agy`)に対応し、Antigravity IDE には対応しま
 - `write_to_file`、`replace_file_content`、`multi_replace_file_content` の `PostToolUse` は comment checker と goal reminder を実行し、結果は次の `PreInvocation` で追加されます。
 - `Stop` は active goal に未完了の task があれば agent に作業を続けさせます。`SubagentStop` はありません。
 
-skills は `/pota-plan`、`/pota-work`、`/pota-review`、`/pota-memory` で呼び出します。workflows は Antigravity plugin の構成要素ではありません。adapter は Antigravity の hook 文書に基づくもので、実際の `agy` session 内での動作はまだ確認していません。
+skills は `/pota-plan`、`/pota-work`、`/pota-review`、`/pota-memory`、`/dag` で呼び出します。workflows は Antigravity plugin の構成要素ではありません。adapter は Antigravity の hook 文書に基づくもので、実際の `agy` session 内での動作はまだ確認していません。
 
 ## Locale Policy
 

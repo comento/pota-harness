@@ -72,15 +72,17 @@ export function readyTasks(state) {
 
 // Keeps the goal moving after a task leaves "active": when nothing is active, activate the first ready task in
 // list order (the sequential behavior); when nothing is active or ready while work remains, block the goal.
+// 승인 게이트가 걸린 ready task는 자동 활성화하지 않고, 모든 ready task가 게이트 대기 중이면 goal을 active로 유지한다.
 export function advanceGoal(state, preferredBlocker = null, { block = true } = {}) {
   if (state.tasks.some((task) => task.status === "active")) return;
-  const next = readyTasks(state)[0];
+  const ready = readyTasks(state);
+  const next = ready.find((task) => task.approvalGate !== true);
   if (next) {
     next.status = "active";
     next.updatedAt = new Date().toISOString();
     return;
   }
-  if (!block || state.tasks.every((task) => task.status === "completed")) return;
+  if (!block || ready.length > 0 || state.tasks.every((task) => task.status === "completed")) return;
   state.goal.status = "blocked";
   state.goal.blocker = preferredBlocker ?? state.tasks.find((task) => task.status === "blocked")?.blocker
     ?? "No task is ready: remaining tasks wait on unfinished dependencies";

@@ -12,6 +12,7 @@ const contextLimits = {
   planNames: 3,
   mainModel: 40,
   modelCeilingValue: 40,
+  activePromptCapsule: 700,
 };
 
 export function prependContext(result, notice) {
@@ -30,6 +31,7 @@ export function prependContext(result, notice) {
   };
 }
 
+import { readyTasks } from "./pota-goal-operations-mutations.mjs";
 import { currentTask } from "./pota-goal-policy.mjs";
 import { MODEL_TIER_BY_HOST } from "./pota-model-tier.mjs";
 
@@ -57,9 +59,14 @@ export function contextResult({ ko, state, event, index = null }) {
   const task = currentTask(state);
   const planId = state.goal.planId;
   const phase = task ? "pota-work" : "pota-review";
+  // Only gated ready tasks remain and nothing is active: none of them is work to continue until the user approves.
+  const hasActive = state.tasks.some((item) => item.status === "active");
+  const ready = !hasActive ? readyTasks(state) : [];
+  const gatedReady = ready.length > 0 && ready.every((item) => item.approvalGate === true) ? ready : [];
+  const showTask = Boolean(task) && gatedReady.length === 0;
   const activeHeader = ko
-    ? `${base} ${phase}를 로드하고 정확한 plan ${planId}${task ? "과 아래 current task" : "의 완료 기준"}를 복원하세요. 압축·재시작·handoff 뒤 다시 읽으세요.${failClosed}`
-    : `${base} Load ${phase}; restore exact plan ${planId}${task ? " and the current task below" : " completion criteria"}. Re-read after compaction/restart/handoff.${failClosed}`;
+    ? `${base} ${phase}를 로드하고 정확한 plan ${planId}${showTask ? "과 아래 current task" : task ? "" : "의 완료 기준"}를 복원하세요. 압축·재시작·handoff 뒤 다시 읽으세요.${failClosed}`
+    : `${base} Load ${phase}; restore exact plan ${planId}${showTask ? " and the current task below" : task ? "" : " completion criteria"}. Re-read after compaction/restart/handoff.${failClosed}`;
   if (!task) {
     return contextHookResult({
       event,
@@ -84,7 +91,44 @@ export function contextResult({ ko, state, event, index = null }) {
         ? `곁가지 질문·조향 뒤 ${taskId}를 재개하고 남은 task를 최종 검토까지 진행하세요(일시정지·중단·전환 요청 제외).`
         : `After a side question or steer, resume ${taskId}, then advance remaining tasks to final review unless asked to pause, stop, or switch.`))
     : "";
-  return contextHookResult({ event, message: withBlocks([activeHeader, taskRoadmap(ko, state), continuation, parallelLine(ko, state), resume].filter(Boolean).join("\n"), memory) });
+  const baseMessage = [
+    activeHeader,
+    taskRoadmap(ko, state),
+    showTask ? continuation : "",
+    parallelLine(ko, state),
+    showTask ? resume : "",
+  ].filter(Boolean).join("\n");
+  const gateNote = approvalGateLine(ko, gatedReady, baseMessage.length);
+  const message = gateNote ? `${baseMessage}\n${gateNote}` : baseMessage;
+  return contextHookResult({ event, message: withBlocks(message, memory) });
+}
+
+// 활성 task 없이 ready task들이 approvalGate 대기 중일 때 700자 캡슐 예산 안에서 대기 task ID와 사용자 승인 규칙을 안내한다.
+// 해제 명령은 싣지 않는다: 게이트는 사용자가 DAG 패널에서 승인하거나 에이전트에게 요청할 때만 풀린다.
+function approvalGateLine(ko, gatedTasks, usedLength) {
+  if (gatedTasks.length === 0) return "";
+  const budget = Math.max(0, contextLimits.activePromptCapsule - usedLength - 1);
+  if (budget === 0) return "";
+  const head = ko ? "사용자 승인 대기: " : "Awaiting user approval: ";
+  const tails = ko
+    ? [". 게이트를 직접 해제하지 말고 사용자가 DAG 패널에서 승인하거나 요청할 때까지 기다리세요.", ". 게이트를 직접 해제하지 말고 사용자를 기다리세요."]
+    : [". Do not release the gate yourself; wait until the user approves in the DAG panel or asks you to.", ". Do not release the gate yourself; wait for the user."];
+  const ids = gatedTasks.map((task) => plainText(task.id));
+  const moreText = (remaining) => (remaining > 0 ? (ko ? ` 외 ${remaining}개` : ` +${remaining} more`) : "");
+  for (const tail of tails) {
+    let shown = "";
+    let count = 0;
+    for (const id of ids) {
+      const candidate = count === 0 ? id : `${shown}, ${id}`;
+      if (head.length + candidate.length + moreText(ids.length - count - 1).length + tail.length > budget) break;
+      shown = candidate;
+      count += 1;
+    }
+    if (count > 0) return `${head}${shown}${moreText(ids.length - count)}${tail}`;
+  }
+  const tail = tails.at(-1);
+  const avail = Math.max(1, budget - head.length - tail.length);
+  return clipText(`${head}${clipText(ids[0], avail)}${tail}`, budget);
 }
 
 // Only when several tasks run at once: their ids and clipped titles, never the dependency graph.

@@ -15,6 +15,7 @@ import { NO_MODEL_CEILING, resolveModelCeiling } from "./pota-model-ceiling.mjs"
 import { classifyModel, effectiveTier, isBelowTier } from "./pota-model-tier.mjs";
 import { hookIndexSnapshot } from "./pota-index.mjs";
 import { resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
+import { recordActiveWorkspace } from "./pota-dag-workspaces.mjs";
 import { migrationNoticeLine, sessionStartMigration } from "./pota-legacy-migration.mjs";
 import { checkPostToolUse, startFetchWhenNeeded } from "./pota-comment-checker.mjs";
 
@@ -72,6 +73,20 @@ export async function runStateResult(event = "manual", {
   }
 
   if (event === "session-start" || event === "user-prompt-submit") {
+    if (host === "codex") {
+      // Codex 훅도 공용 워크스페이스 레지스트리에 활성 저장소를 비간섭 기록한다(process.cwd() 폴백 금지).
+      const workspaceCandidate = typeof root === "string" && root.trim().length > 0
+        ? root
+        : (typeof payload?.cwd === "string" && payload.cwd.trim().length > 0 ? payload.cwd : null);
+      if (workspaceCandidate) {
+        await recordActiveWorkspace({
+          workspacePath: workspaceCandidate,
+          conversationId: payload?.session_id ?? null,
+          env: migration?.env ?? commentChecker?.env ?? process.env,
+          now: migration?.now ?? new Date(),
+        }).catch(() => {});
+      }
+    }
     const context = await promptContextResult(event, { ko, resolvedRoot, payload });
     const ceilinged = event === "session-start" ? withModelCeiling(context, { ko, setting: modelCeiling }) : context;
     const result = await withObservedMainModel(ceilinged, {

@@ -177,10 +177,11 @@ test("task status returns the active task or a requested task", async () => {
 
 const initUsage = "Usage: pota init [--root PATH]\n";
 const goalUsage = [
-  "Usage: pota goal <start|status|ready|stats|task|replan|steer|claim|assign|receipt|verify|finish|pause|resume|block|cancel|complete> [options] [--root PATH]",
+  "Usage: pota goal <start|status|ready|stats|task|gate|replan|steer|claim|assign|receipt|verify|finish|pause|resume|block|cancel|complete> [options] [--root PATH]",
   "Note: --criteria (completionCriteria) is advisory and is not enforced; completion is gated only by required evidence.",
   "Request Brief: completing a triageDecision task (goal task --status completed, goal finish) needs a filled \"## Request Brief\" in a plan file; bypass with --allow-no-request-brief <reason>.",
   "Steering: goal steer --kind <correction|addition|redirect> --reason <text>; with a plan file, goal replan needs --steer <correction|addition|redirect|none> --reason <text>.",
+  "Approval gate: goal gate --task <id> --on|--off [--reason <text>]; activate a gated task with goal task --status active --approve-gate.",
   "",
 ].join("\n");
 
@@ -420,4 +421,117 @@ test("goal --tasks rejects comma id lists and broken JSON but keeps pipe, prose 
     await rm(root, { recursive: true, force: true });
     await rm(stateHome, { recursive: true, force: true });
   }
+});
+
+test("goal gate enforces exact XOR between --on and --off and toggles approvalGate", async () => {
+  await withIsolatedCli(async ({ root, env }) => {
+    const started = run(rootCli, [
+      "goal", "start", "--quiet", "--root", root,
+      "--goal", "Gate CLI", "--plan", "plan-gate",
+      "--tasks", JSON.stringify([{ id: "first", title: "First" }, { id: "second", title: "Second" }]),
+    ], { env });
+    assert.equal(started.status, 0, started.stderr);
+    const before = run(rootCli, ["goal", "status", "--root", root], { env }).stdout;
+
+    for (const args of [
+      ["goal", "gate", "--root", root, "--task", "second"],
+      ["goal", "gate", "--root", root, "--task", "second", "--on", "--off"],
+      ["goal", "gate", "--root", root, "--task", "second", "--on=false"],
+      ["goal", "gate", "--root", root, "--task", "second", "--on=true", "--off=false"],
+    ]) {
+      const invalid = run(rootCli, args, { env });
+      assert.equal(invalid.status, 1, args.join(" "));
+      assert.equal(invalid.stdout, "");
+      assert.match(invalid.stderr, /requires exactly one of --on or --off/);
+      assert.equal(run(rootCli, ["goal", "status", "--root", root], { env }).stdout, before);
+    }
+
+    const badValue = run(rootCli, ["goal", "gate", "--root", root, "--task", "second", "--on=yes"], { env });
+    assert.equal(badValue.status, 1);
+    assert.match(badValue.stderr, /--on must be true or false/);
+    assert.equal(run(rootCli, ["goal", "status", "--root", root], { env }).stdout, before);
+
+    const enabled = run(rootCli, ["goal", "gate", "--quiet", "--root", root, "--task", "second", "--on", "--reason", "Manual signoff"], { env });
+    assert.equal(enabled.status, 0, enabled.stderr);
+    assert.equal(enabled.stdout, "");
+
+    const stats = JSON.parse(run(rootCli, ["goal", "stats", "--root", root], { env }).stdout);
+    assert.equal("approvalGate" in stats.tasks[0], false);
+    assert.equal(stats.tasks[1].approvalGate, true);
+
+    const disabled = run(rootCli, ["goal", "gate", "--root", root, "--task", "second", "--off"], { env });
+    assert.equal(disabled.status, 0, disabled.stderr);
+    assert.equal(JSON.parse(disabled.stdout).tasks[1].approvalGate, false);
+  });
+});
+
+test("goal ready lists gated ready tasks under gated instead of ready", async () => {
+  await withIsolatedCli(async ({ root, env }) => {
+    const started = run(rootCli, [
+      "goal", "start", "--quiet", "--root", root,
+      "--goal", "Ready gate CLI", "--plan", "plan-ready-gate",
+      "--tasks", JSON.stringify([
+        { id: "first", title: "First", dependsOn: [], writeScope: ["src/first"] },
+        { id: "deploy", title: "Deploy", dependsOn: [], approvalGate: true, writeScope: ["src/deploy"] },
+        { id: "other", title: "Other", dependsOn: [], writeScope: ["src/other"] },
+      ]),
+    ], { env });
+    assert.equal(started.status, 0, started.stderr);
+    const ready = run(rootCli, ["goal", "ready", "--root", root], { env });
+    assert.equal(ready.status, 0, ready.stderr);
+    assert.equal(ready.stdout, `${JSON.stringify({ active: ["first"], ready: ["other"], gated: ["deploy"], blocked: [] })}\n`);
+
+    // 게이트가 없으면 출력은 2.2.x와 같은 모양을 유지한다.
+    const released = run(rootCli, ["goal", "gate", "--quiet", "--root", root, "--task", "deploy", "--off"], { env });
+    assert.equal(released.status, 0, released.stderr);
+    assert.deepEqual(JSON.parse(run(rootCli, ["goal", "ready", "--root", root], { env }).stdout), { active: ["first"], ready: ["deploy", "other"], blocked: [] });
+  });
+});
+
+test("goal task --status active enforces approvalGate fail-closed unless --approve-gate is passed", async () => {
+  await withIsolatedCli(async ({ root, env }) => {
+    const started = run(rootCli, [
+      "goal", "start", "--quiet", "--root", root,
+      "--goal", "Approve gate CLI", "--plan", "plan-approve-gate",
+      "--evidence-policy", "declared",
+      "--tasks", JSON.stringify([{ id: "first", title: "First" }, { id: "second", title: "Second", approvalGate: true }]),
+    ], { env });
+    assert.equal(started.status, 0, started.stderr);
+
+    for (const kind of ["moduleAcceptance", "surfaceIntegration"]) {
+      const receipt = run(rootCli, [
+        "goal", "receipt", "--quiet", "--root", root,
+        "--task", "first", "--kind", kind, "--command", `check ${kind}`, "--exit-code", "0",
+      ], { env });
+      assert.equal(receipt.status, 0, receipt.stderr);
+    }
+    const doneFirst = run(rootCli, ["goal", "task", "complete", "first", "--root", root], { env });
+    assert.equal(doneFirst.status, 0, doneFirst.stderr);
+    const afterFirst = JSON.parse(doneFirst.stdout);
+    assert.equal(afterFirst.goal.status, "active");
+    assert.equal(afterFirst.tasks[1].status, "pending");
+    assert.equal(afterFirst.tasks[1].approvalGate, true);
+
+    const badFlag = run(rootCli, ["goal", "task", "--root", root, "--task", "second", "--status", "blocked", "--reason", "wait", "--approve-gate"], { env });
+    assert.equal(badFlag.status, 1);
+    assert.match(badFlag.stderr, /--approve-gate can only be used when transitioning a task to active/);
+
+    for (const args of [
+      ["goal", "task", "--root", root, "--task", "second", "--status", "active"],
+      ["goal", "task", "--root", root, "--task", "second", "--status", "active", "--approve-gate=false"],
+    ]) {
+      const rejected = run(rootCli, args, { env });
+      assert.equal(rejected.status, 1, args.join(" "));
+      assert.match(rejected.stderr, /Task second has a manual approval gate\. Run 'pota goal gate --task second --off' or pass --approve-gate\./);
+      const current = JSON.parse(run(rootCli, ["goal", "status", "--root", root], { env }).stdout);
+      assert.equal(current.tasks[1].status, "pending");
+      assert.equal(current.tasks[1].approvalGate, true);
+    }
+
+    const approved = run(rootCli, ["goal", "task", "--root", root, "--task", "second", "--status", "active", "--approve-gate"], { env });
+    assert.equal(approved.status, 0, approved.stderr);
+    const updated = JSON.parse(approved.stdout);
+    assert.equal(updated.tasks[1].status, "active");
+    assert.equal(updated.tasks[1].approvalGate, false);
+  });
 });

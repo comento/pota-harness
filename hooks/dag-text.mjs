@@ -66,6 +66,27 @@ const MESSAGES = {
     recorded: "기록",
     blocker: "막힘 사유",
     none: "없음",
+    tabs: { dag: "DAG", diff: "Diff", plan: "Plan", stats: "에이전트·통계" },
+    pause: "일시정지",
+    resume: "재개",
+    gateOn: "게이트 설정",
+    gateOff: "게이트 해제",
+    gateBadge: "게이트",
+    inspector: "태스크 상세",
+    receipts: "증거 영수증",
+    writeScopeDiff: "범위 내 변경 (Diff)",
+    followUp: "후속 요청 보내기",
+    resolvedModel: "실제 모델",
+    tokens: "토큰",
+    cacheHit: "캐시 적중률",
+    noDiff: "작업 트리에 변경 사항이 없습니다.",
+    noPlan: "Plan 문서를 찾지 못했습니다.",
+    noReceipts: "기록된 증거 영수증이 없습니다.",
+    sensitiveFile: "민감 파일 (미리보기 차단)",
+    agent: "에이전트",
+    elapsedCol: "소요 시간",
+    passes: "횟수",
+    bottleneck: "병목",
   },
   en: {
     noGoal: "No active Pota goal. Plan one with `pota-plan` and its DAG appears here.",
@@ -114,6 +135,27 @@ const MESSAGES = {
     recorded: "recorded",
     blocker: "blocker",
     none: "none",
+    tabs: { dag: "DAG", diff: "Diff", plan: "Plan", stats: "Agents & Stats" },
+    pause: "Pause",
+    resume: "Resume",
+    gateOn: "Enable gate",
+    gateOff: "Disable gate",
+    gateBadge: "Gate",
+    inspector: "Task Inspector",
+    receipts: "Receipts",
+    writeScopeDiff: "Scoped Diff",
+    followUp: "Send follow-up",
+    resolvedModel: "Resolved model",
+    tokens: "Tokens",
+    cacheHit: "Cache hit",
+    noDiff: "No working-tree changes.",
+    noPlan: "Plan document not found.",
+    noReceipts: "No receipts recorded.",
+    sensitiveFile: "Sensitive file (preview blocked)",
+    agent: "Agent",
+    elapsedCol: "Elapsed",
+    passes: "Passes",
+    bottleneck: "Bottleneck",
   },
 };
 
@@ -213,6 +255,7 @@ export function cardLines(node, ctx) {
   const tooltip = [
     `${task.id} · ${task.title}`,
     `${words.state[node.state]}${task.blocker ? ` — ${task.blocker}` : ""}`,
+    task.approvalGate === true ? `⏸ ${words.gateBadge}` : null,
     task.dependsOn.length > 0 ? `${words.after}: ${task.dependsOn.join(", ")}` : null,
     required.length > 0 ? `${words.evidence}: ${required.map((kind) => `${kind} ${task.evidence.includes(kind) ? "●" : "○"}`).join(", ")}` : null,
     task.writeScope && task.writeScope.length > 0
@@ -323,6 +366,14 @@ export function runningRows(snapshot, agentTask, agents, ctx) {
   return [...sections.running.flatMap((task) => runningTaskRows(task, ctx.locale)), ...restRows(sections, ctx.locale)];
 }
 
+/** @param {number} count */
+function compactTokens(count) {
+  if (!Number.isFinite(count) || count <= 0) return "0";
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(Math.round(count));
+}
+
 /**
  * What a task the main agent works on shows when opened in the pane: write scope, model and effort,
  * what it depends on, required and recorded evidence, and its blocker.
@@ -341,6 +392,33 @@ export function taskDetail(task, locale) {
     `${words.evidence} ${words.recorded}: ${list(task.evidence)}`,
   ];
   if (task.blocker) lines.push(`${words.blocker}: ${task.blocker}`);
+  if (task.approvalGate === true) lines.push(`⏸ ${words.gateBadge}`);
+  if (task.resolvedModel || task.resolvedEffort || task.resolvedTier) {
+    const resolved = [];
+    if (task.resolvedModel) resolved.push(`${words.resolvedModel}: ${task.resolvedModel}`);
+    if (task.resolvedTier) resolved.push(task.resolvedTier);
+    if (task.resolvedEffort) resolved.push(`${words.effort}: ${task.resolvedEffort}`);
+    lines.push(resolved.join(" · "));
+  }
+  if (task.transcript && typeof task.transcript === "object") {
+    const t = task.transcript;
+    const tok = t.tokens && typeof t.tokens === "object" ? t.tokens : {};
+    const parts = [];
+    if (typeof t.turns === "number" && Number.isFinite(t.turns)) {
+      parts.push(locale === "ko" ? `${t.turns}턴` : `${t.turns} ${t.turns === 1 ? "turn" : "turns"}`);
+    }
+    const inTok = typeof tok.input === "number" && Number.isFinite(tok.input) ? tok.input : 0;
+    const cacheTok = typeof tok.cacheRead === "number" && Number.isFinite(tok.cacheRead) ? tok.cacheRead : 0;
+    const outTok = typeof tok.output === "number" && Number.isFinite(tok.output) ? tok.output : 0;
+    parts.push(locale === "ko"
+      ? `입력 ${compactTokens(inTok)}${cacheTok > 0 ? ` / 캐시 ${compactTokens(cacheTok)}` : ""} / 출력 ${compactTokens(outTok)}`
+      : `in ${compactTokens(inTok)}${cacheTok > 0 ? ` / cache ${compactTokens(cacheTok)}` : ""} / out ${compactTokens(outTok)}`);
+    if (typeof tok.cacheHitRate === "number" && Number.isFinite(tok.cacheHitRate)) {
+      const pct = Math.round(tok.cacheHitRate <= 1 ? tok.cacheHitRate * 100 : tok.cacheHitRate);
+      parts.push(`${words.cacheHit}: ${pct}%`);
+    }
+    lines.push(`${words.tokens}: ${parts.join(" · ")}${tok.truncated === true ? " (…)" : ""}`);
+  }
   return lines;
 }
 

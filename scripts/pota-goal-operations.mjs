@@ -142,17 +142,23 @@ function applyGoalTransition(state, nextStatus, blocker, root) {
   if (nextStatus === "active") state.goal.blocker = null;
   state.goal.status = nextStatus;
   state.goal.updatedAt = timestamp();
-  if (nextStatus === "active" && currentStatus === "blocked") advanceGoal(state, null, { block: false });
+  if (nextStatus === "active") advanceGoal(state, null, { block: false });
   return state;
 }
 
-export async function setTaskStatus({
-  root = process.cwd(), taskId, status, blocker, effortWaiver, designWaiver, mainModelWaiver, sessionId = null, mainModelGate = true,
-  modelCeiling = null, requestBriefWaiver,
-} = {}) {
+export async function setTaskStatus(rootOrOptions = {}, maybeOptions) {
+  const {
+    root = process.cwd(), taskId, status, blocker, reason, approveGate = false, effortWaiver, designWaiver, mainModelWaiver,
+    sessionId = null, mainModelGate = true, modelCeiling = null, requestBriefWaiver,
+  } = normalizeRootOptions(rootOrOptions, maybeOptions);
+  if (typeof approveGate !== "boolean") throw new Error("approveGate must be a boolean");
   const ceiling = validCeiling(modelCeiling);
   const nextStatus = validTaskStatus(status);
+  if (approveGate === true && nextStatus !== "active") {
+    throw new Error("--approve-gate can only be used when transitioning a task to active");
+  }
   const normalizedTaskId = requiredText(taskId, "taskId");
+  const resolvedBlocker = blocker !== undefined ? blocker : reason;
   const normalizedWaiver = optionalText(effortWaiver, "effortWaiver");
   if (normalizedWaiver !== null && nextStatus !== "completed") throw new Error("--allow-inherited-effort applies only when completing a task");
   const normalizedDesignWaiver = optionalText(designWaiver, "designWaiver");
@@ -167,7 +173,11 @@ export async function setTaskStatus({
     if (task.status === nextStatus) return state;
     if (!taskTransitions[task.status].has(nextStatus)) throw new Error(`Cannot transition task ${task.id} from ${task.status} to ${nextStatus}`);
     if (nextStatus === "active") {
+      if (task.approvalGate === true && !approveGate) {
+        throw new Error(`Task ${task.id} has a manual approval gate. Run 'pota goal gate --task ${task.id} --off' or pass --approve-gate.`);
+      }
       assertCanBeActive(state.tasks, task, state.tasks.filter((item) => item.id !== task.id && item.status === "active"));
+      if (approveGate === true) task.approvalGate = false;
     }
     if (nextStatus === "completed") {
       if (normalizedWaiver !== null) task.effortWaiver = normalizedWaiver;
@@ -181,7 +191,7 @@ export async function setTaskStatus({
       ensureTaskCanComplete(state, task, root);
       await ensureMainModelPlanning(root, state, task, { sessionId, waiver: normalizedMainModelWaiver, enabled: mainModelGate, ceiling });
     }
-    if (nextStatus === "blocked") task.blocker = requiredText(blocker, "blocker");
+    if (nextStatus === "blocked") task.blocker = requiredText(resolvedBlocker, "blocker");
     if (nextStatus === "active" || nextStatus === "pending") task.blocker = null;
     task.status = nextStatus;
     task.updatedAt = timestamp();
@@ -399,6 +409,74 @@ export async function assignTask({
     if (normalizedRoute !== undefined) task.route = normalizedRoute;
     if (normalizedWaiver !== undefined) task.effortWaiver = normalizedWaiver;
     task.updatedAt = timestamp();
+    state.goal.updatedAt = timestamp();
+    return state;
+  });
+}
+
+// 위치 인자(root, options)와 단일 옵션 객체({ root, ... }) 호출 규약을 모두 수용한다.
+function normalizeRootOptions(rootOrOptions = {}, maybeOptions) {
+  if (typeof rootOrOptions === "string") {
+    return { ...(maybeOptions ?? {}), root: rootOrOptions };
+  }
+  if (maybeOptions && typeof maybeOptions === "object") {
+    return { ...maybeOptions, ...(rootOrOptions == null ? {} : { root: rootOrOptions }) };
+  }
+  return rootOrOptions ?? {};
+}
+
+// 명시적 락 기반 일시정지 전이를 수행한다.
+export async function pauseGoal(rootOrOptions = {}, maybeOptions) {
+  const { root = process.cwd(), reason = null, sessionId = null } = normalizeRootOptions(rootOrOptions, maybeOptions);
+  optionalText(reason, "reason");
+  optionalText(sessionId, "sessionId");
+  return mutateGoal(root, (state) => applyGoalTransition(state, "paused", null, root));
+}
+
+// 명시적 락 기반 재개 전이를 수행하며 active 복귀 시 게이트가 없는 ready task만 활성화한다.
+export async function resumeGoal(rootOrOptions = {}, maybeOptions) {
+  const { root = process.cwd(), reason = null, sessionId = null } = normalizeRootOptions(rootOrOptions, maybeOptions);
+  optionalText(reason, "reason");
+  optionalText(sessionId, "sessionId");
+  return mutateGoal(root, (state) => applyGoalTransition(state, "active", null, root));
+}
+
+// 단일 락 안에서 task의 수동 승인 게이트를 설정하거나 해제한다.
+export async function setTaskApprovalGate(rootOrOptions = {}, maybeOptions) {
+  const { root = process.cwd(), taskId, enabled, reason = null, sessionId = null } = normalizeRootOptions(rootOrOptions, maybeOptions);
+  const normalizedTaskId = requiredText(taskId, "taskId");
+  if (typeof enabled !== "boolean") throw new Error("enabled must be a boolean");
+  optionalText(reason, "reason");
+  optionalText(sessionId, "sessionId");
+  return updateTaskApprovalGate(root, normalizedTaskId, () => enabled);
+}
+
+// 단일 락 안에서 task의 현재 approvalGate 값을 읽고 원자적으로 반전한다.
+export async function toggleTaskApprovalGate(rootOrOptions = {}, maybeOptions) {
+  const { root = process.cwd(), taskId, reason = null, sessionId = null } = normalizeRootOptions(rootOrOptions, maybeOptions);
+  const normalizedTaskId = requiredText(taskId, "taskId");
+  optionalText(reason, "reason");
+  optionalText(sessionId, "sessionId");
+  return updateTaskApprovalGate(root, normalizedTaskId, (task) => !task.approvalGate);
+}
+
+async function updateTaskApprovalGate(root, taskId, resolveNextEnabled) {
+  return mutateGoal(root, (state) => {
+    assertGoalMutable(state);
+    const task = taskById(state, taskId);
+    const nextEnabled = Boolean(resolveNextEnabled(task));
+    if (task.status === "completed") {
+      throw new Error(`Cannot change approval gate on completed task ${task.id}`);
+    }
+    if (task.status === "active" && nextEnabled) {
+      throw new Error(`Cannot enable approval gate on active task ${task.id}`);
+    }
+    task.approvalGate = nextEnabled;
+    task.updatedAt = timestamp();
+    // paused 등 비-active 목표는 상태를 유지하고, active 목표에서만 게이트 해제 후 ready task를 진행한다.
+    if (!nextEnabled && state.goal.status === "active") {
+      advanceGoal(state, null, { block: false });
+    }
     state.goal.updatedAt = timestamp();
     return state;
   });

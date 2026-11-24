@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "pota-dag": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/scripts/pota-dag-mcp.mjs", "--host", "codex"]
+    }
+  }
+}
