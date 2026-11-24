@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import http from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,8 +17,15 @@ import {
   transitionGoal,
 } from "../scripts/pota-goal.mjs";
 import {
+  DAG_MCP_REFRESH_THROTTLE_MS,
+  DAG_MCP_SERVER_NAME,
+  clearDagMcpServerPid,
+  dagMcpServerStatePath,
+  ensureAntigravityDagMcp,
+  readDagMcpServerState,
   readWorkspaceRegistry,
   recordActiveWorkspace,
+  recordDagMcpServerPid,
   runAntigravityHook,
   workspaceRegistryPath,
 } from "../scripts/pota-state-antigravity.mjs";
@@ -762,6 +770,284 @@ test("5. 보안 검증: SVG XSS 이스케이프, file:// URI 경로 검증 및 H
   });
 });
 
+test("6. DAG MCP 서버 PID 수명주기, ensureAntigravityDagMcp 자동 복구, SSRF 방어 및 훅/CLI 연동", async () => {
+  await withWorkspace(async ({ base, repo, env }) => {
+    const secretToken = "super-secret-csrf-token-12345";
+    const t0 = new Date("2026-11-24T01:00:00.000Z");
+
+    // 6-1. recordDagMcpServerPid / clearDagMcpServerPid 소유권 및 lastRefreshAt 보존 검증
+    const firstRecord = await recordDagMcpServerPid({ pid: 424242, env, now: t0 });
+    assert.equal(firstRecord.recorded, true);
+    assert.equal(existsSync(dagMcpServerStatePath(env)), true);
+    assert.equal(existsSync(join(env.POTA_HOME, "hosts", "antigravity")), false);
+
+    const wrongClear = await clearDagMcpServerPid({ pid: 999999, env });
+    assert.equal(wrongClear.cleared, false);
+    assert.equal((await readDagMcpServerState({ env })).pid, 424242);
+
+    // 6-2. 살아 있는 PID는 RefreshMcpServers를 호출하지 않고 alive를 반환한다.
+    let fetchCalls = 0;
+    const countingFetch = async () => {
+      fetchCalls += 1;
+      return { ok: true, status: 200 };
+    };
+    const aliveResult = await ensureAntigravityDagMcp({
+      env: { ...env, ANTIGRAVITY_CSRF_TOKEN: secretToken },
+      now: new Date("2026-11-24T01:00:05.000Z"),
+      fetchImpl: countingFetch,
+      isPidAlive: (pid) => pid === 424242,
+    });
+    assert.deepEqual(aliveResult, { status: "alive", pid: 424242 });
+    assert.equal(fetchCalls, 0);
+
+    // 6-3. 정상 종료 시 자기 PID일 때만 pid: null로 정리한다.
+    const ownClear = await clearDagMcpServerPid({ pid: 424242, env });
+    assert.equal(ownClear.cleared, true);
+    assert.equal((await readDagMcpServerState({ env })).pid, null);
+
+    // 6-4. CSRF 토큰 부재 및 POTA_ANTIGRAVITY_DAG_REFRESH=0 비활성화 시 네트워크를 호출하지 않는다.
+    const noTokenResult = await ensureAntigravityDagMcp({
+      env,
+      now: t0,
+      fetchImpl: countingFetch,
+      isPidAlive: () => false,
+    });
+    assert.deepEqual(noTokenResult, { status: "skipped", reason: "no-csrf-token" });
+    assert.equal(fetchCalls, 0);
+
+    for (const offValue of ["0", "false", "off", "no"]) {
+      const disabledResult = await ensureAntigravityDagMcp({
+        env: { ...env, ANTIGRAVITY_CSRF_TOKEN: secretToken, POTA_ANTIGRAVITY_DAG_REFRESH: offValue },
+        now: t0,
+        fetchImpl: countingFetch,
+        isPidAlive: () => false,
+      });
+      assert.deepEqual(disabledResult, { status: "skipped", reason: "disabled" });
+    }
+    assert.equal(fetchCalls, 0);
+
+    // 6-5. 비-loopback / 비정상 ANTIGRAVITY_LS_ADDRESS는 CSRF 토큰 유출 방지를 위해 차단한다.
+    for (const badAddr of [
+      "evil.example:5387",
+      "192.168.1.10:5387",
+      "user@localhost:5387",
+      "http://localhost:5387",
+      "localhost:5387/extra",
+      "localhost:99999",
+      "localhost:0",
+      "localhost.evil.com:5387",
+    ]) {
+      const blocked = await ensureAntigravityDagMcp({
+        env: { ...env, ANTIGRAVITY_CSRF_TOKEN: secretToken, ANTIGRAVITY_LS_ADDRESS: badAddr },
+        now: t0,
+        fetchImpl: countingFetch,
+        isPidAlive: () => false,
+      });
+      assert.deepEqual(blocked, { status: "skipped", reason: "non-loopback-address" }, `must reject ${badAddr}`);
+    }
+    assert.equal(fetchCalls, 0);
+
+    // 6-6. dead PID 상태에서 loopback RefreshMcpServers POST 호출 및 30초 스로틀 / --force 검증
+    await recordDagMcpServerPid({ pid: 777777, env, now: t0 });
+    const capturedRequests = [];
+    const mockFetch = async (url, init) => {
+      capturedRequests.push({ url, init });
+      return { ok: true, status: 200 };
+    };
+    const tRefresh1 = new Date(t0.getTime() + 1_000);
+    const refreshed = await ensureAntigravityDagMcp({
+      env: { ...env, ANTIGRAVITY_CSRF_TOKEN: secretToken, ANTIGRAVITY_LS_ADDRESS: "127.0.0.1:5399" },
+      now: tRefresh1,
+      fetchImpl: mockFetch,
+      isPidAlive: () => false,
+    });
+    assert.deepEqual(refreshed, { status: "refreshed" });
+    assert.equal(capturedRequests.length, 1);
+    assert.equal(
+      capturedRequests[0].url,
+      "http://127.0.0.1:5399/exa.language_server_pb.LanguageServerService/RefreshMcpServers",
+    );
+    assert.equal(capturedRequests[0].init.method, "POST");
+    assert.equal(capturedRequests[0].init.headers["Content-Type"], "application/json");
+    assert.equal(capturedRequests[0].init.headers["x-codeium-csrf-token"], secretToken);
+    assert.deepEqual(JSON.parse(capturedRequests[0].init.body), { serverName: DAG_MCP_SERVER_NAME });
+
+    const afterRefreshState = await readDagMcpServerState({ env });
+    assert.equal(afterRefreshState.pid, null);
+    assert.equal(afterRefreshState.lastRefreshAt, tRefresh1.toISOString());
+
+    // 30초 이내 재호출은 스로틀된다.
+    const throttled = await ensureAntigravityDagMcp({
+      env: { ...env, ANTIGRAVITY_CSRF_TOKEN: secretToken },
+      now: new Date(tRefresh1.getTime() + DAG_MCP_REFRESH_THROTTLE_MS - 1),
+      fetchImpl: mockFetch,
+      isPidAlive: () => false,
+    });
+    assert.deepEqual(throttled, { status: "throttled" });
+    assert.equal(capturedRequests.length, 1);
+
+    // force: true는 스로틀을 우회한다.
+    const forced = await ensureAntigravityDagMcp({
+      env: { ...env, ANTIGRAVITY_CSRF_TOKEN: secretToken, ANTIGRAVITY_LS_ADDRESS: "[::1]:5400" },
+      now: new Date(tRefresh1.getTime() + 2_000),
+      force: true,
+      fetchImpl: mockFetch,
+      isPidAlive: () => false,
+    });
+    assert.deepEqual(forced, { status: "refreshed" });
+    assert.equal(capturedRequests.length, 2);
+    assert.equal(
+      capturedRequests[1].url,
+      "http://[::1]:5400/exa.language_server_pb.LanguageServerService/RefreshMcpServers",
+    );
+
+    // recordDagMcpServerPid는 기존 lastRefreshAt을 보존한다.
+    await recordDagMcpServerPid({ pid: 888888, env, now: new Date(tRefresh1.getTime() + 3_000) });
+    const preservedState = await readDagMcpServerState({ env });
+    assert.equal(preservedState.pid, 888888);
+    assert.equal(preservedState.lastRefreshAt, new Date(tRefresh1.getTime() + 2_000).toISOString());
+    await clearDagMcpServerPid({ pid: 888888, env });
+
+    // 6-7. HTTP 500 및 fetch 예외 시 throw 없이 실패를 반환하고 토큰을 노출하지 않는다.
+    const http500 = await ensureAntigravityDagMcp({
+      env: { ...env, ANTIGRAVITY_CSRF_TOKEN: secretToken },
+      now: new Date(tRefresh1.getTime() + DAG_MCP_REFRESH_THROTTLE_MS + 5_000),
+      fetchImpl: async () => ({ ok: false, status: 500 }),
+      isPidAlive: () => false,
+    });
+    assert.deepEqual(http500, { status: "failed", statusCode: 500 });
+    assert.equal(JSON.stringify(http500).includes(secretToken), false);
+
+    const threw = await ensureAntigravityDagMcp({
+      env: { ...env, ANTIGRAVITY_CSRF_TOKEN: secretToken },
+      now: new Date(tRefresh1.getTime() + DAG_MCP_REFRESH_THROTTLE_MS * 2 + 10_000),
+      fetchImpl: async () => {
+        throw new Error(`network failure with ${secretToken}`);
+      },
+      isPidAlive: () => false,
+    });
+    assert.deepEqual(threw, { status: "failed", reason: "request-error" });
+    assert.equal(JSON.stringify(threw).includes(secretToken), false);
+
+    // 6-8. symlink된 server.json은 읽지 않고 빈 상태로 폴백한다.
+    const symHome = join(base, "sym-server-home");
+    const outsideServer = join(base, "outside-server.json");
+    await mkdir(join(symHome, "hosts", "antigravity-dag"), { recursive: true });
+    await writeFile(outsideServer, JSON.stringify({ schemaVersion: 1, pid: 12345 }), "utf8");
+    await symlink(outsideServer, join(symHome, "hosts", "antigravity-dag", "server.json"));
+    const symState = await readDagMcpServerState({ env: { ...env, POTA_HOME: symHome } });
+    assert.deepEqual(symState, { schemaVersion: 1, pid: null, startedAt: null, lastRefreshAt: null });
+
+    // 6-9. 실제 로컬 loopback HTTP 서버로 `pota-dag-mcp.mjs ensure` CLI와 `runAntigravityHook` 연동을 검증한다.
+    const serverRequests = [];
+    const testServer = http.createServer((req, res) => {
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        serverRequests.push({
+          method: req.method,
+          url: req.url,
+          csrf: req.headers["x-codeium-csrf-token"],
+          body,
+        });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end("{}");
+      });
+    });
+    await new Promise((resolveListen) => testServer.listen(0, "127.0.0.1", resolveListen));
+    try {
+      const address = testServer.address();
+      const cliHome = join(base, "cli-ensure-home");
+      const cliEnv = {
+        ...env,
+        POTA_HOME: cliHome,
+        ANTIGRAVITY_CSRF_TOKEN: secretToken,
+        ANTIGRAVITY_LS_ADDRESS: `127.0.0.1:${address.port}`,
+      };
+
+      const cliRes = await runCliAsync(process.execPath, [mcpEntry, "ensure"], {
+        cwd: pluginRoot,
+        env: cliEnv,
+      });
+      assert.equal(cliRes.status, 0);
+      assert.equal(cliRes.stderr, "");
+      assert.equal(cliRes.stdout.includes(secretToken), false);
+      assert.deepEqual(JSON.parse(cliRes.stdout.trim()), { status: "refreshed" });
+      assert.equal(serverRequests.length, 1);
+      assert.equal(serverRequests[0].url, "/exa.language_server_pb.LanguageServerService/RefreshMcpServers");
+      assert.equal(serverRequests[0].csrf, secretToken);
+      assert.deepEqual(JSON.parse(serverRequests[0].body), { serverName: DAG_MCP_SERVER_NAME });
+
+      const cliForceRes = await runCliAsync(process.execPath, [mcpEntry, "ensure", "--force"], {
+        cwd: pluginRoot,
+        env: cliEnv,
+      });
+      assert.equal(cliForceRes.status, 0);
+      assert.equal(cliForceRes.stderr, "");
+      assert.equal(cliForceRes.stdout.includes(secretToken), false);
+      assert.deepEqual(JSON.parse(cliForceRes.stdout.trim()), { status: "refreshed" });
+      assert.equal(serverRequests.length, 2);
+
+      // runAntigravityHook은 session-start와 pre-invocation(invocationNum: 0)에서 ensureAntigravityDagMcp를 호출하고
+      // hosts/antigravity/ 세션 파일과 훅 출력에는 영향을 주지 않는다.
+      const hookHome = join(base, "hook-ensure-home");
+      const hookEnv = {
+        ...env,
+        POTA_HOME: hookHome,
+        ANTIGRAVITY_CSRF_TOKEN: secretToken,
+        ANTIGRAVITY_LS_ADDRESS: `127.0.0.1:${address.port}`,
+      };
+      const stubRun = async () => ({
+        status: 0,
+        message: "",
+        hookOutput: { hookSpecificOutput: { additionalContext: "capsule" } },
+      });
+
+      const hookStart = await runAntigravityHook(
+        "session-start",
+        { conversationId: "conv-recover", workspacePaths: [repo] },
+        { env: hookEnv, now: new Date("2026-11-24T02:00:00.000Z"), run: stubRun },
+      );
+      assert.deepEqual(hookStart, { injectSteps: [{ systemMessage: { systemMessage: "capsule" } }] });
+      assert.equal(serverRequests.length, 3);
+      assert.equal(existsSync(join(hookHome, "hosts", "antigravity")), false);
+
+      // 30초 경과 후 pre-invocation(invocationNum: 0)에서 다시 복구 호출이 수행된다.
+      const hookPre = await runAntigravityHook(
+        "pre-invocation",
+        { conversationId: "conv-recover", workspacePaths: [repo], invocationNum: 0, lastUserInput: "Go" },
+        { env: hookEnv, now: new Date("2026-11-24T02:01:00.000Z"), run: stubRun },
+      );
+      assert.deepEqual(hookPre, { injectSteps: [{ systemMessage: { systemMessage: "capsule" } }] });
+      assert.equal(serverRequests.length, 4);
+      assert.equal(existsSync(join(hookHome, "hosts", "antigravity")), false);
+
+      // stdio MCP 서버 기동/종료 시 server.json PID 기록 및 정리를 검증한다.
+      const mcpClient = spawnMcpClient(hookEnv, { cwd: pluginRoot });
+      try {
+        mcpClient.send({ jsonrpc: "2.0", id: 1, method: "ping" });
+        const ping = await mcpClient.nextResponse();
+        assert.equal(ping.id, 1);
+        const liveState = await readDagMcpServerState({ env: hookEnv });
+        assert.equal(typeof liveState.pid, "number");
+        assert.ok(liveState.pid > 0);
+        const exit = await mcpClient.close();
+        assert.equal(exit.code, 0);
+        assert.equal(exit.stderr, "");
+        const closedState = await readDagMcpServerState({ env: hookEnv });
+        assert.equal(closedState.pid, null);
+      } finally {
+        await mcpClient.dispose();
+      }
+    } finally {
+      await new Promise((resolveClose) => testServer.close(resolveClose));
+    }
+  });
+});
+
 function svgDimensions(source) {
   const match = source.match(/^<svg\b[^>]*\bwidth="(\d+)"[^>]*\bheight="(\d+)"/);
   assert.ok(match, "SVG root element must expose width and height");
@@ -777,6 +1063,26 @@ function runHookCli(env, event, input) {
   });
   assert.equal(result.stderr, "", result.stderr);
   return { status: result.status, output: JSON.parse(result.stdout) };
+}
+
+function runCliAsync(command, args, { cwd, env }) {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", rejectRun);
+    child.on("close", (status) => {
+      resolveRun({ status, stdout, stderr });
+    });
+  });
 }
 
 function spawnMcpClient(env, { cwd = pluginRoot } = {}) {
