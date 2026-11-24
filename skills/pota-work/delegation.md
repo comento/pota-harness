@@ -16,7 +16,7 @@ Reference for `pota-work`. Read before dispatching a `worker` or `explorer`, or 
 
 ## Parallel Tasks
 
-- `goal ready` (read-only) prints `{"active":[...],"ready":[...],"blocked":[...]}` task ids. A ready task is pending with every dependency completed.
+- `goal ready` (read-only) prints `{"active":[...],"ready":[...],"gated":[...],"blocked":[...]}` task ids. A ready task is pending with every dependency completed. `gated` (present only when non-empty) lists ready tasks held by a manual approval gate; they are never in `ready`, and only the user releases them (`recovery.md`).
 - Only ready tasks can be activated: `goal task --task <id> --status active`. At most 4 tasks are active at once; active `writeScope`s must not overlap (segment-wise prefix, case-insensitive), and a task without `writeScope` is active only alone. start/replan/completion auto-activate only the first ready task when nothing is active; open further parallel tasks explicitly.
 - Assign one `worker` per active task (`goal assign`); assignment, evidence, and completion stay per task. Workers stay inside their `writeScope` and exchange data only through the plan's handoff files.
 - Parallel workers must run in the same Git worktree: goal state is stored per worktree, so another worktree sees no goal.

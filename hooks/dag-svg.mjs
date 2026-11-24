@@ -57,6 +57,8 @@ function style(hasFlow, epoch) {
     ".s-wait .c{stroke-dasharray:3 3}.s-wait .d{fill:none;stroke:var(--idle);stroke-width:1.5}.s-wait .t{fill:var(--mut)}",
     ".s-blk .c{stroke:var(--bad)}.s-blk .d{fill:var(--bad)}.s-blk .st,.s-blk .pr{fill:var(--bad)}",
     ".on{fill:var(--ok)}.off{fill:var(--idle)}",
+    ".card{cursor:pointer}",
+    ".gate{font-size:10px;font-weight:700;fill:var(--rdy)}",
     ".n:hover .c{stroke:var(--run)}",
     ".ctx{opacity:.55}",
     ".e{fill:none;stroke-width:1.5;stroke-linecap:round}",
@@ -90,21 +92,31 @@ function progressText(node, lines, words, maxWidth, y) {
 function card(node, box, density, ctx, begin) {
   const words = messages(ctx.locale);
   const lines = cardLines(node, ctx);
+  const isGated = node.task.approvalGate === true;
   const maxWidth = box.w - TEXT_X - TEXT_RIGHT;
+  const gateText = isGated ? (density === 2 ? "⏸" : `⏸ ${words.gateBadge}`) : "";
+  const gateWidth = isGated ? textWidth(gateText, 10) + 4 : 0;
+  const titleMaxWidth = Math.max(24, maxWidth - gateWidth);
   const cy = density === 2 ? 14 : 16;
   const classes = `n ${STATE_CLASS[node.state]}${node.role === "context" ? " ctx" : ""}`;
-  const parts = [`<svg x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" class="${classes}">`];
+  const parts = [
+    `<g class="card" data-task-id="${escapeXml(node.id)}">`,
+    `<svg x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" class="${classes}">`,
+  ];
   if (density < 2) parts.push(`<title>${escapeXml(lines.tooltip)}</title>`);
   parts.push(`<rect class="c" x=".75" y=".75" width="${box.w - 1.5}" height="${box.h - 1.5}" rx="8"/>`);
   if (node.state === "active" && density < 2) parts.push(PULSE(13, cy, begin));
   parts.push(`<circle class="d" cx="13" cy="${cy}" r="4"/>`);
-  parts.push(`<text class="t" x="${TEXT_X}" y="${cy + 4}">${escapeXml(truncateText(lines.title, maxWidth, 12))}</text>`);
+  parts.push(`<text class="t" x="${TEXT_X}" y="${cy + 4}">${escapeXml(truncateText(lines.title, titleMaxWidth, 12))}</text>`);
+  if (isGated) {
+    parts.push(`<text class="gate" x="${box.w - 8}" y="${cy + 4}" text-anchor="end">${escapeXml(gateText)}</text>`);
+  }
   if (density < 2) parts.push(`<text class="st" x="${TEXT_X}" y="${cy + 21}">${escapeXml(truncateText(lines.status, maxWidth, 11))}</text>`);
   if (density === 0) {
     if (lines.meta) parts.push(`<text x="${TEXT_X}" y="${cy + 37}">${escapeXml(truncateText(lines.meta, maxWidth, 11))}</text>`);
     parts.push(progressText(node, lines, words, maxWidth, cy + 53));
   }
-  parts.push("</svg>");
+  parts.push("</svg></g>");
   return parts.join("");
 }
 

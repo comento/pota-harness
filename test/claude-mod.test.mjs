@@ -5,8 +5,13 @@ import { dirname, join, resolve } from "node:path";
 import {
   buildDagModel,
   computeWaves,
+  filterDiffByScope,
   focusIds,
+  isSensitiveRepoPath,
+  normalizeRepoPath,
+  parseGitStatusAndNumstat,
   parseGoalStatus,
+  parsePlanOverview,
   planKey,
   reduceEdges,
   summarize,
@@ -126,7 +131,11 @@ test("1. manifest, hooks.json and the state contract", () => {
   assert.doesNotMatch(register, /pota-runtime\.json|\.\.\/scripts\/pota\.mjs/);
   const contract = readFileSync(join(modRoot, "types/index.d.ts"), "utf8");
   assert.match(contract, /interface PluginState/);
-  assert.match(contract, /pota:\s*\{\s*dag:\s*Shaped<DagState>;\s*dagUi:\s*Shaped<DagUi>;\s*dagAgents:\s*Shaped<DagAgent\[\]>/);
+  assert.match(contract, /interface DagContext/);
+  assert.match(contract, /tab:\s*'dag'\s*\|\s*'diff'\s*\|\s*'plan'\s*\|\s*'stats'/);
+  assert.match(contract, /selectedTaskId:\s*string \| null/);
+  assert.match(contract, /actionError:\s*string \| null/);
+  assert.match(contract, /pota:\s*\{\s*dag:\s*Shaped<DagState>;\s*dagUi:\s*Shaped<DagUi>;\s*dagAgents:\s*Shaped<DagAgent\[\]>;\s*dagContext:\s*Shaped<DagContext>;?\s*\}/);
 });
 
 test("2. pure modules and register.tsx keep to the source constraints", () => {
@@ -689,8 +698,16 @@ test("default view is all: an unset or unknown view builds the all model and reg
   const register = readFileSync(join(modRoot, "hooks/register.tsx"), "utf8");
   const dagUi = register.slice(register.indexOf("const dagUi = atom("), register.indexOf("const dagAgents"));
   assert.match(dagUi, /view: "all"/);
+  assert.match(dagUi, /tab: "dag"/);
   assert.match(dagUi, /expandedTaskId: null/);
-  assert.match(dagUi, /\{ shape: "ui-2" \}/);
+  assert.match(dagUi, /selectedTaskId: null/);
+  assert.match(dagUi, /actionError: null/);
+  assert.match(dagUi, /\{ shape: "ui-3" \}/);
+  const dagCtx = register.slice(register.indexOf("const dagContext = atom("));
+  assert.match(dagCtx, /diff: null/);
+  assert.match(dagCtx, /planOverview: null/);
+  assert.match(dagCtx, /gitCheckedAt: 0/);
+  assert.match(dagCtx, /\{ shape: "ctx-1" \}/);
 });
 
 test("a running task names the subagent's engine id to open, and none when main works on it", () => {
@@ -748,4 +765,157 @@ test("a main-run task's detail lists scope, models, effort, dependencies, eviden
   assert.equal(messages("ko").backToMain, "메인으로");
   assert.equal(messages("en").viewDenied, "Could not open the agent: ");
   assert.equal(messages("ko").viewDenied, "에이전트 대화를 열지 못했습니다: ");
+});
+
+test("parseGoalStatus normalizes approvalGate, receipts, and transcript enrichment fields", () => {
+  const raw = {
+    schemaVersion: 3,
+    revision: 2,
+    goal: { id: "goal-s2", title: "S2 Goal", planId: "docs/plan/s2.md", status: "paused", requiredEvidence: ["finalReview"], createdAt: 1000 },
+    tasks: [
+      {
+        id: "t1",
+        title: "Task 1",
+        status: "completed",
+        dependsOn: [],
+        requiredEvidence: ["moduleAcceptance"],
+        resolvedModel: "claude-opus-4-6",
+        resolvedEffort: "high",
+        resolvedTier: "strongest",
+        transcript: {
+          turns: 4,
+          tokens: { input: 1200, cacheRead: 900, output: 300, cacheHitRate: 0.75, truncated: true },
+          updatedAt: "2026-11-24T01:00:00Z",
+        },
+      },
+      {
+        id: "t2",
+        title: "Task 2",
+        status: "pending",
+        dependsOn: ["t1"],
+        approvalGate: true,
+        requiredEvidence: ["surfaceIntegration"],
+        receipts: [
+          {
+            kind: "surfaceIntegration",
+            command: "node --test test/pane.test.mjs",
+            exitCode: 0,
+            verifiedAt: "2026-11-24T01:05:00Z",
+            fresh: false,
+            outputDigest: "sha256:abc",
+            workspaceFingerprint: "fp-1",
+          },
+        ],
+      },
+    ],
+    receipts: [
+      {
+        scope: "task",
+        taskId: "t1",
+        kind: "moduleAcceptance",
+        command: "npm test",
+        exitCode: 0,
+        timestamp: 2000,
+        fresh: true,
+        outputDigest: "sha256:123",
+        watchFingerprint: "fp-0",
+      },
+    ],
+  };
+
+  const { snapshot: parsed, error } = parseGoalStatus(JSON.stringify(raw));
+  assert.equal(error, null);
+  assert.equal(parsed.status, "paused");
+  const [t1, t2] = parsed.tasks;
+  assert.equal(t1.resolvedModel, "claude-opus-4-6");
+  assert.equal(t1.resolvedEffort, "high");
+  assert.equal(t1.resolvedTier, "strongest");
+  assert.deepEqual(t1.transcript, {
+    turns: 4,
+    tokens: { input: 1200, cacheRead: 900, output: 300, cacheHitRate: 0.75, truncated: true },
+    updatedAt: "2026-11-24T01:00:00Z",
+  });
+  assert.equal(t1.receipts.length, 1);
+  assert.equal(t1.receipts[0].fresh, true);
+  assert.equal(t1.receipts[0].watchFingerprint, "fp-0");
+  assert.equal(t2.approvalGate, true);
+  assert.equal(t2.receipts.length, 1);
+  assert.equal(t2.receipts[0].fresh, false);
+  assert.equal(t2.receipts[0].watchFingerprint, "fp-1");
+});
+
+test("pure Git/Plan helpers validate paths, parse porcelain/numstat, filter scope, and summarize plans", () => {
+  for (const sensitive of [".env", ".env.local", "config/.env.prod", "certs/server.pem", "id_rsa", "auth/credentials.json", "my-secret.txt", "oauth-token.json", ".npmrc", ".envrc", ".env-local", ".env_prod", "service-account.json", "config/.envrc", "app/.env-local", "deploy/.env_prod", "keys/service-account-prod.json"]) {
+    assert.equal(isSensitiveRepoPath(sensitive), true, sensitive);
+  }
+  for (const safe of ["hooks/register.tsx", "docs/plan/x.md", "src/tokenizer.ts", "environment.ts", "src/env.ts", "src/environment/config.ts", "service-account.ts"]) {
+    assert.equal(isSensitiveRepoPath(safe), false, safe);
+  }
+  assert.equal(normalizeRepoPath("./hooks//register.tsx"), "hooks/register.tsx");
+  for (const bad of ["", "/abs/path.md", "C:\\win\\a.md", "../escape.md", "a/../b/../../c.md", "-rf", "hooks/*.tsx", "a\0b"]) {
+    assert.equal(normalizeRepoPath(bad), null, bad);
+  }
+
+  const statusZ = " M hooks/register.tsx\0?? .env.local\0R  hooks/new.tsx\0hooks/old.tsx\0";
+  const unstagedZ = "10\t2\thooks/register.tsx\0-\t-\tassets/logo.png\0";
+  const stagedZ = "5\t1\t\0hooks/old.tsx\0hooks/new.tsx\0";
+  const diff = parseGitStatusAndNumstat(statusZ, unstagedZ, stagedZ);
+  assert.equal(diff.available, true);
+  assert.equal(diff.totals.files, 4);
+  assert.equal(diff.totals.added, 15);
+  assert.equal(diff.totals.deleted, 3);
+  assert.equal(diff.files.find((f) => f.path === ".env.local")?.sensitive, true);
+  assert.equal(diff.files.find((f) => f.path === "assets/logo.png")?.binary, true);
+  assert.equal(diff.files.find((f) => f.path === "hooks/new.tsx")?.added, 5);
+
+  const scoped = filterDiffByScope(diff, ["hooks", "../outside.ts"]);
+  assert.equal(scoped.available, true);
+  assert.deepEqual(scoped.files.map((f) => f.path), ["hooks/register.tsx", "hooks/new.tsx"]);
+  assert.deepEqual(scoped.totals, { files: 2, added: 15, deleted: 3 });
+
+  const planMd = [
+    "# Plan: S2 Dashboard",
+    "",
+    "## Goal",
+    "",
+    "Implement the 4-tab DAG dashboard across all hosts.",
+    "Preserve existing subagent navigation.",
+    "",
+    "- Current request (as of S2): Add 4 tabs and inspector.",
+    "",
+    "```md",
+    "- [ ] ignored inside fence",
+    "```",
+    "",
+    "## Status",
+    "- [x] Design approved",
+    "- [ ] Tests written",
+  ].join("\n");
+  const overview = parsePlanOverview(planMd, { planId: "docs/plan/s2.md", truncated: true });
+  assert.equal(overview.planId, "docs/plan/s2.md");
+  assert.equal(overview.truncated, true);
+  assert.equal(overview.title, "Plan: S2 Dashboard");
+  assert.equal(overview.goalSummary, "Implement the 4-tab DAG dashboard across all hosts. Preserve existing subagent navigation.");
+  assert.equal(overview.currentRequest, "Add 4 tabs and inspector.");
+  assert.deepEqual(overview.checklist, {
+    done: 1,
+    pending: 1,
+    total: 2,
+    items: [
+      { done: true, text: "Design approved" },
+      { done: false, text: "Tests written" },
+    ],
+  });
+});
+
+test("renderDagSvg wraps each card in <g class=\"card\" data-task-id> and draws approvalGate badge", () => {
+  const snap = snapshot([
+    task("a", [], "completed"),
+    task("b", ["a"], "pending", { approvalGate: true }),
+  ]);
+  const { source } = renderDagSvg(buildDagModel(snap, "all"), { width: 500, epoch: 0, ctx: ctxOf(snap) });
+  assertWellFormed(source);
+  assert.match(source, /<g class="card" data-task-id="a">/);
+  assert.match(source, /<g class="card" data-task-id="b">/);
+  assert.match(source, /⏸ Gate/);
 });

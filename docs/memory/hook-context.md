@@ -15,6 +15,7 @@ hook 진입점 `scripts/pota-state.mjs`, Antigravity 어댑터 `scripts/pota-sta
 - 상태별 본문(`pota-state-context.mjs:34-131`):
   - idle: pota-plan 로드 지침. UPS에는 대상이 확정된 Git/GitHub 작업과 상담은 goal 없이 처리한다는 문장이 붙는다.
   - active: plan id, task roadmap(3개 이하면 전부, 넘으면 개수 요약과 현재 위치), current task. UPS에만 곁가지 질문 뒤 복귀 문장이 붙는다.
+  - active인데 실행 중 task가 없고 ready task가 모두 수동 승인 게이트(`approvalGate`)에 걸린 경우(2.3.0): `Current:` 줄과 UPS 복귀 문장을 싣지 않고 `Awaiting user approval: <ids>. Do not release the gate yourself; …` 한 줄을 붙인다(ko `사용자 승인 대기: …`). 해제 명령은 캡슐에 넣지 않는다. 예산이 모자라면 id 목록을 `+N more`로 줄인다. 출처: `pota-state-context.mjs` `approvalGateLine`, `test/goal-state.test.mjs` "gated ready tasks are never presented as work to continue and the capsule leaves the gate to the user".
   - paused/blocked: plan·task·blocker와 "자동으로 상태를 바꾸지 말고 `goal resume`".
   - foreign(다른 session 소유): goal·plan·task 상세 없이 fail-closed 문장과 `goal claim --session` 안내.
 - SessionStart 끝에는 `Pota CLI: node "<이 플러그인 사본의 scripts/pota.mjs>" goal <command>` 한 줄이 붙는다. 경로는 hook이 실행될 때마다 `import.meta.url`로 계산하고 어디에도 저장하지 않는다(`cliPrefixLine`). skill은 이 줄에서 `pluginRoot`를 얻으므로 줄이 없으면 hook이 꺼진 것으로 본다(Codex에서 `/hooks` 승인 전이 대표적). 저장소 경로는 넣지 않는다. 0.3.0 배포 전, 깊은 경로 worktree에서 절대 경로 2개 때문에 blocked 캡슐이 637자로 620 예산을 넘은 적이 있다. 출처: `scripts/pota-state.mjs` `cliPrefixLine`, `test/session-start-migration.test.mjs` "the hook CLI names the pota.mjs beside it and starts nothing without a known host argument", `docs/plan/release-0.3.0.md` Evidence.

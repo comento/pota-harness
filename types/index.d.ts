@@ -1,5 +1,27 @@
 // The Pota DAG pane's $.state contract: what the hooks module keeps for the session.
 
+export type DagTaskReceipt = {
+  kind: string
+  command: string | null
+  exitCode: number | null
+  verifiedAt: string | null
+  fresh: boolean | null
+  outputDigest: string | null
+  watchFingerprint: string | null
+}
+
+export type DagTaskTranscript = {
+  turns: number
+  tokens: {
+    input: number
+    cacheRead: number
+    output: number
+    cacheHitRate: number | null
+    truncated: boolean
+  }
+  updatedAt: string | null
+}
+
 export type DagTask = {
   id: string
   title: string
@@ -18,6 +40,12 @@ export type DagTask = {
   blocker: string | null
   createdAt: number
   updatedAt: number
+  approvalGate?: boolean
+  receipts?: DagTaskReceipt[]
+  resolvedModel?: string
+  resolvedEffort?: string
+  resolvedTier?: string
+  transcript?: DagTaskTranscript
 }
 
 export type DagSnapshot = {
@@ -49,12 +77,15 @@ export type DagState = {
 
 export type DagUi = {
   view: 'previous' | 'current' | 'next' | 'all'
+  tab: 'dag' | 'diff' | 'plan' | 'stats'
   epoch: number
   minute: number
   autoOpenedPlanKey: string | null
   closedGoalId: string | null
   /** The running task whose detail block is open in the pane: one at a time, null when none. */
   expandedTaskId: string | null
+  selectedTaskId: string | null
+  actionError: string | null
 }
 
 export type DagAgent = {
@@ -70,8 +101,48 @@ export type DagAgent = {
   calls: number
 }
 
+export type GitDiffFile = {
+  path: string
+  status: string
+  added: number
+  deleted: number
+  binary: boolean
+  sensitive: boolean
+}
+
+export type GitDiffSummary = {
+  available: boolean
+  files: GitDiffFile[]
+  totals: {
+    files: number
+    added: number
+    deleted: number
+  }
+  truncated?: boolean
+}
+
+export type PlanOverview = {
+  planId: string | null
+  truncated: boolean
+  title: string | null
+  goalSummary: string | null
+  currentRequest: string | null
+  checklist: {
+    done: number
+    pending: number
+    total: number
+    items: { done: boolean; text: string }[]
+  }
+}
+
+export interface DagContext {
+  diff: GitDiffSummary | null
+  planOverview: PlanOverview | null
+  gitCheckedAt: number
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    pota: { dag: Shaped<DagState>; dagUi: Shaped<DagUi>; dagAgents: Shaped<DagAgent[]> }
+    pota: { dag: Shaped<DagState>; dagUi: Shaped<DagUi>; dagAgents: Shaped<DagAgent[]>; dagContext: Shaped<DagContext>; }
   }
 }

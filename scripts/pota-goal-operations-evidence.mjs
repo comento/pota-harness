@@ -196,6 +196,7 @@ export function goalStats(state, root = process.cwd()) {
       ...(task.designWaiver ? { designWaiver: task.designWaiver } : {}),
       ...(task.modelHost ? { modelHost: task.modelHost } : {}),
       ...(task.effectiveModel ? { effectiveModel: task.effectiveModel } : {}),
+      ...(task.approvalGate === true ? { approvalGate: true } : {}),
     })),
   };
 }

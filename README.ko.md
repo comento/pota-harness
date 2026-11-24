@@ -63,7 +63,7 @@ agy plugin install https://github.com/comento/pota-harness
 
 | | Claude Code | Codex | Antigravity CLI |
 | --- | --- | --- | --- |
-| Skill | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` |
+| Skill | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory`, `/dag` (mod 명령) | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hook | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | 같은 5개(`/hooks`에서 승인한 뒤) | SessionStart, PreInvocation(프롬프트 컨텍스트), PostToolUse, Stop. SubagentStop 없음 |
 | Agent `explorer`, `worker` | 있음 | 없음 | 없음 |
 | DAG 패널(mod) | 있음 | 없음 | 없음 |
@@ -225,7 +225,7 @@ Pota는 데이터를 `POTA_HOME`(기본 `~/.pota`) 아래에 두고, 모든 호�
 
 ## Claude Code DAG Panel
 
-Claude Code 데스크탑은 현재 Pota goal을 wave별 열로 나눈 DAG 패널로 보여 줍니다. Claude Code 전용이며 Codex와 Antigravity에는 없습니다. mod 기능이 있는 Claude Code가 필요하고(Claude Code 2.1.325의 mod API 기준으로 작성), 터미널에는 그래픽이 없어서 wave를 위에서 아래로 박스 문자 박스로 그리며 움직이는 점은 없습니다. pane 폭이 24칸보다 좁으면 글자 목록으로 표시합니다.
+Claude Code 데스크탑은 현재 Pota goal을 wave별 열로 나눈 DAG 패널로 보여 줍니다. Claude Code는 자체 mod 패널(`/dag`)을 사용합니다. 2.3.0부터 Antigravity와 Codex/ChatGPT Desktop도 `open_pota_dag` 도구로 열리는 MCP App으로 같은 DAG를 보여 주며, `goal start` 뒤에 자동으로 실행되거나 `dag` skill(Antigravity `/dag`, Codex `$dag`)로 열 수 있습니다. mod 기능이 있는 Claude Code가 필요하고(Claude Code 2.1.325의 mod API 기준으로 작성), 터미널에는 그래픽이 없어서 wave를 위에서 아래로 박스 문자 박스로 그리며 움직이는 점은 없습니다. pane 폭이 24칸보다 좁으면 글자 목록으로 표시합니다.
 
 - `/dag [previous|current|next|all|refresh|close]`로 패널을 엽니다. 보기는 이전, 현재, 다음, 전체입니다. 기본은 전체(all) 보기이고 나머지는 선택 옵션입니다. 완료된 연결은 실선, 진행 중인 연결은 점선과 이동하는 점입니다.
 - `pota goal start`와 `pota goal replan` 뒤에 자동으로 한 번 열립니다. 닫으면 같은 goal에서는 다시 열지 않습니다.
@@ -241,7 +241,7 @@ Pota는 Antigravity CLI(`agy`)를 지원하고 Antigravity IDE는 지원하지 �
 - `write_to_file`, `replace_file_content`, `multi_replace_file_content`의 `PostToolUse`는 comment checker와 goal 알림을 실행하고, 결과는 다음 `PreInvocation`에 들어갑니다.
 - `Stop`은 활성 goal에 끝나지 않은 task가 있으면 에이전트가 작업을 계속하게 합니다. `SubagentStop`은 없습니다.
 
-skill은 `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`로 호출합니다. workflow는 Antigravity 플러그인의 구성요소가 아닙니다. 어댑터는 Antigravity hook 문서를 따른 것이며, 실제 `agy` 세션 안에서의 동작은 아직 확인하지 않았습니다.
+skill은 `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag`로 호출합니다. workflow는 Antigravity 플러그인의 구성요소가 아닙니다. 어댑터는 Antigravity hook 문서를 따른 것이며, 실제 `agy` 세션 안에서의 동작은 아직 확인하지 않았습니다.
 
 ## Locale Policy
 

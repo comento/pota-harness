@@ -20,6 +20,7 @@ const manifestPaths = [
   ".claude-plugin/plugin.json",
   ".claude-plugin/marketplace.json",
   ".codex-plugin/plugin.json",
+  ".codex-plugin/mcp.json",
   ".agents/plugins/marketplace.json",
   "plugin.json",
   "hooks.json",
@@ -44,7 +45,7 @@ const antigravityEvents = {
 
 const commandsOf = (hooks) => Object.entries(hooks).flatMap(([event, groups]) => groups.flatMap((group) => (group.hooks ?? [group]).map((hook) => [event, hook.command])));
 
-test("the ten plugin JSON files parse and the four version surfaces agree", () => {
+test("the eleven plugin JSON files parse and the four version surfaces agree", () => {
   for (const path of manifestPaths) assert.doesNotThrow(() => readJson(path), path);
   const version = readJson("package.json").version;
   assert.match(version, /^\d+\.\d+\.\d+$/);
@@ -147,6 +148,8 @@ test("Antigravity mcp_config.json registers pota-dag and all DAG MCP scripts are
     "scripts/pota-dag-mcp.mjs",
     "scripts/pota-dag-mcp-core.mjs",
     "scripts/pota-dag-app-html.mjs",
+    "scripts/pota-dag-transcript.mjs",
+    "scripts/pota-dag-git.mjs",
   ]) {
     assert.ok(isTracked(path), `${path} is tracked`);
   }
@@ -156,8 +159,81 @@ test("Antigravity mcp_config.json registers pota-dag and all DAG MCP scripts are
     "scripts/pota-dag-mcp.mjs",
     "scripts/pota-dag-mcp-core.mjs",
     "scripts/pota-dag-app-html.mjs",
+    "scripts/pota-dag-transcript.mjs",
+    "scripts/pota-dag-git.mjs",
   ]) {
     assert.ok(checkScript.includes(`node --check ${script}`), `package.json check includes node --check ${script}`);
+  }
+});
+
+test("Codex .codex-plugin/mcp.json registers pota-dag in isolation while keeping hooks/codex.json untouched", () => {
+  // Codex MCP App 설정과 3호스트 격리(루트 .mcp.json 부재, Claude 매니페스트 무변경), 공용 워크스페이스 모듈 검사를 고정한다.
+  const codexManifest = readJson(".codex-plugin/plugin.json");
+  assert.equal(codexManifest.mcpServers, "./.codex-plugin/mcp.json");
+
+  const codexMcp = readJson(".codex-plugin/mcp.json");
+  assert.deepEqual(Object.keys(codexMcp), ["mcpServers"]);
+  assert.deepEqual(Object.keys(codexMcp.mcpServers), ["pota-dag"]);
+  const potaDag = codexMcp.mcpServers["pota-dag"];
+  assert.equal(potaDag.type, "stdio");
+  assert.equal(potaDag.command, "node");
+  assert.deepEqual(potaDag.args, ["${PLUGIN_ROOT}/scripts/pota-dag-mcp.mjs", "--host", "codex"]);
+
+  assert.ok(isTracked(".codex-plugin/mcp.json"), ".codex-plugin/mcp.json is tracked");
+  assert.ok(isTracked("scripts/pota-dag-workspaces.mjs"), "scripts/pota-dag-workspaces.mjs is tracked");
+
+  const checkScript = readJson("package.json").scripts.check;
+  assert.ok(
+    checkScript.includes("node --check scripts/pota-dag-workspaces.mjs"),
+    "package.json check includes node --check scripts/pota-dag-workspaces.mjs",
+  );
+
+  // 루트 .mcp.json을 두지 않고 Claude/Antigravity 매니페스트에 mcpServers를 추가하지 않아 3호스트를 격리한다.
+  assert.equal(existsSync(join(root, ".mcp.json")), false);
+  const claudeManifest = readJson(".claude-plugin/plugin.json");
+  assert.equal(Object.hasOwn(claudeManifest, "mcpServers"), false);
+  assert.equal(claudeManifest.mcpServers, undefined);
+
+  // Codex hook 재승인을 피하기 위해 hooks/codex.json 선언 계약이 유지되는지 검증한다.
+  const codexHooks = readJson("hooks/codex.json");
+  assert.deepEqual(Object.keys(codexHooks), ["hooks"]);
+  assert.deepEqual(Object.keys(codexHooks.hooks), Object.keys(stateEvents));
+  assert.equal(
+    codexHooks.hooks.PostToolUse[0].matcher,
+    "^(apply_patch|write|Write|edit|Edit|multi_edit|multiedit|MultiEdit)$",
+  );
+  const expectedCodexContracts = {
+    SessionStart: {
+      command: 'node "${PLUGIN_ROOT}/scripts/pota-state.mjs" session-start codex',
+      timeout: 10,
+      statusMessage: "Pota: loading read-only repository context",
+    },
+    UserPromptSubmit: {
+      command: 'node "${PLUGIN_ROOT}/scripts/pota-state.mjs" user-prompt-submit codex',
+      timeout: 10,
+      statusMessage: "Pota: loading read-only work context",
+    },
+    PostToolUse: {
+      command: 'node "${PLUGIN_ROOT}/scripts/pota-state.mjs" post-tool-use codex',
+      timeout: 10,
+      statusMessage: "Pota: reminding current goal evidence requirements",
+    },
+    Stop: {
+      command: 'node "${PLUGIN_ROOT}/scripts/pota-state.mjs" stop codex',
+      timeout: 10,
+      statusMessage: "Pota: checking the active goal task",
+    },
+    SubagentStop: {
+      command: 'node "${PLUGIN_ROOT}/scripts/pota-state.mjs" subagent-stop codex',
+      timeout: 10,
+      statusMessage: "Pota: checking this subagent's assigned task",
+    },
+  };
+  for (const [event, expected] of Object.entries(expectedCodexContracts)) {
+    const groups = codexHooks.hooks[event];
+    assert.equal(groups.length, 1, `hooks/codex.json ${event} group count`);
+    assert.equal(groups[0].hooks.length, 1, `hooks/codex.json ${event} hook count`);
+    assert.deepEqual(groups[0].hooks[0], { type: "command", ...expected }, `hooks/codex.json ${event}`);
   }
 });
 

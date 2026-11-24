@@ -1,9 +1,13 @@
 import { readyTasks } from "./pota-goal-operations-mutations.mjs";
 
+// A gated ready task cannot be activated without the user's approval, so it is current only for display when no
+// active or ungated ready task remains; evaluateStop lets the session stop in that case instead of continuing it.
 export function currentTask(state) {
   if (!state) return null;
+  const ready = readyTasks(state);
   return state.tasks.find((task) => task.status === "active")
-    ?? readyTasks(state)[0]
+    ?? ready.find((task) => task.approvalGate !== true)
+    ?? ready[0]
     ?? state.tasks.find((task) => task.status === "pending")
     ?? state.tasks.find((task) => task.status === "blocked")
     ?? null;
@@ -18,6 +22,12 @@ export function isGoalOwnedBySession(state, sessionId) {
 
 export function evaluateStop(state, { subagent = false, agentId } = {}) {
   if (!state || state.goal.status !== "active") return { block: false };
+  const active = state.tasks.filter((item) => item.status === "active");
+  const ready = readyTasks(state);
+  // 대기 중인 ready task가 모두 수동 승인 게이트에 걸려 있으면 Stop 훅 무한 루프를 막기 위해 통과시킨다.
+  if (active.length === 0 && ready.length > 0 && ready.every((item) => item.approvalGate === true)) {
+    return { block: false, reason: "Awaiting manual approval gate on ready tasks" };
+  }
   const task = currentTask(state);
   if (!task) {
     return {
@@ -36,7 +46,6 @@ export function evaluateStop(state, { subagent = false, agentId } = {}) {
       reason: `Pota task ${assigned.id} (${assigned.title}) is assigned to this subagent and is ${assigned.status}. Continue only this assigned task, record a successful evidence record, then hand off.${effortWarning([assigned])}`,
     };
   }
-  const active = state.tasks.filter((item) => item.status === "active");
   if (active.length > 1) {
     const list = active.map((item) => `${item.id} (${clip(item.title, 40)})`).join(", ");
     return {

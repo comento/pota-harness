@@ -14,7 +14,7 @@ export const VERSION_SURFACES = ["package.json", ".claude-plugin/plugin.json", "
 export const REQUIRED_PATHS = [
   { path: "scripts/pota.mjs", type: "file" },
   { path: "scripts/pota-state.mjs", type: "file" },
-  ...["pota-memory", "pota-plan", "pota-work", "pota-review"].map((name) => ({ path: `skills/${name}/SKILL.md`, type: "file" })),
+  ...["pota-memory", "pota-plan", "pota-work", "pota-review", "dag"].map((name) => ({ path: `skills/${name}/SKILL.md`, type: "file" })),
   { path: "templates", type: "directory" },
 ];
 const MIN_NODE_MAJOR = 18;

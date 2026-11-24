@@ -71,7 +71,7 @@ Run the same command again to update; the Antigravity documentation describes a 
 
 | | Claude Code | Codex | Antigravity CLI |
 | --- | --- | --- | --- |
-| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` |
+| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory`, `/dag` (mod command) | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | the same five, after approval in `/hooks` | SessionStart, PreInvocation (prompt context), PostToolUse, Stop; no SubagentStop |
 | Agents `explorer`, `worker` | yes | no | no |
 | DAG panel (mod) | yes | no | no |
@@ -233,7 +233,7 @@ Pota keeps its data under `POTA_HOME` (default `~/.pota`), shared by the plugin 
 
 ## Claude Code DAG Panel
 
-Claude Code desktop shows the current Pota goal as a DAG panel, one column per wave. It is Claude Code only; Codex and Antigravity do not have it. It needs a Claude Code with mod support (written against the Claude Code 2.1.325 mod API); the terminal has no graphics, so there it draws the waves top to bottom as boxes made of box-drawing characters, without the moving dot, and falls back to a text list when the pane is narrower than 24 columns.
+Claude Code desktop shows the current Pota goal as a DAG panel, one column per wave. Claude Code uses its own mod panel (`/dag`). Since 2.3.0, Antigravity and Codex/ChatGPT Desktop show the same DAG as an MCP App opened through the `open_pota_dag` tool, which runs automatically after `goal start` or through the `dag` skill (Antigravity `/dag`, Codex `$dag`). It needs a Claude Code with mod support (written against the Claude Code 2.1.325 mod API); the terminal has no graphics, so there it draws the waves top to bottom as boxes made of box-drawing characters, without the moving dot, and falls back to a text list when the pane is narrower than 24 columns.
 
 - `/dag [previous|current|next|all|refresh|close]` opens the panel. The views are previous, current, next, and all. The default is the all view; the others are options. A finished link is a solid line; a link in progress is dashed with a moving dot.
 - It opens once automatically after `pota goal start` and `pota goal replan`. If you close it, it does not open again for the same goal.
@@ -249,7 +249,7 @@ Pota supports the Antigravity CLI (`agy`); the Antigravity IDE is not supported.
 - `PostToolUse` on `write_to_file`, `replace_file_content`, and `multi_replace_file_content` runs the comment checker and the goal reminder; its result is added at the next `PreInvocation`.
 - `Stop` keeps the agent working while the active goal has an unfinished task. There is no `SubagentStop`.
 
-Skills are called as `/pota-plan`, `/pota-work`, `/pota-review`, and `/pota-memory`; workflows are not part of Antigravity plugins. The adapter follows the Antigravity hook documentation; its behaviour inside a real `agy` session has not been verified yet.
+Skills are called as `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, and `/dag`; workflows are not part of Antigravity plugins. The adapter follows the Antigravity hook documentation; its behaviour inside a real `agy` session has not been verified yet.
 
 ## Locale Policy
 

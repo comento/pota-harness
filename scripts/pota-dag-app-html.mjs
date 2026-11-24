@@ -1,5 +1,5 @@
-// Antigravity MCP App(ui://pota-dag/app.html)용 단일 자체 완결 HTML/CSS/JS 생성기.
-// 기본 CSP(default-src 'none') 준수를 위해 외부 리소스·fetch·WebSocket 없이 인라인 코드만 사용한다.
+// Antigravity(SEP-1865) 및 ChatGPT Desktop/Codex(window.openai) 듀얼 호스트용 단일 자체 완결 HTML/CSS/JS 생성기.
+// 기본 CSP(default-src 'none') 준수를 위해 외부 리소스·네트워크 호출·WebSocket 없이 인라인 코드만 사용한다.
 
 export const DAG_APP_RESOURCE_URI = "ui://pota-dag/app.html";
 export const DAG_APP_MIME_TYPE = "text/html;profile=mcp-app";
@@ -99,6 +99,7 @@ const APP_CSS = `
   --ring: var(--color-ring-info, var(--color-ring-primary, #58a6ff));
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; background: var(--bg-page); color: var(--fg); font-family: var(--font-ui); font-size: 13px; line-height: 1.45; -webkit-font-smoothing: antialiased; }
 button, select { font: inherit; color: inherit; }
 button:focus-visible, select:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
@@ -122,7 +123,7 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--ring); out
 .dag-blocker { padding: 6px 10px; border-radius: 7px; border: 1px solid var(--line-danger); background: var(--bg-danger); color: var(--bad); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .dag-summary { color: var(--mut); font-size: 12px; overflow-wrap: anywhere; }
 .dag-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
-.dag-views { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.dag-views, .dag-toolbar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
 .dag-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 12px; font-weight: 500; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease; }
 .dag-btn:hover:not(:disabled) { background: var(--bg-subtle); }
 .dag-btn:disabled { opacity: 0.55; cursor: default; }
@@ -163,6 +164,48 @@ button.dag-file-chip:hover { background: var(--bg-info); }
 .dag-next-title { color: var(--fg); overflow-wrap: anywhere; }
 .dag-next-waits, .dag-more { font-size: 11px; color: var(--mut); overflow-wrap: anywhere; }
 .dag-footer-error { font-size: 11px; color: var(--bad); overflow-wrap: anywhere; padding: 2px 2px 0; }
+.dag-tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-bottom: 1px solid var(--line-subtle); padding-bottom: 6px; }
+.dag-tab-btn { padding: 4px 10px; border-radius: 6px; font-size: 12px; }
+.dag-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dag-pause-btn.is-paused { border-color: var(--line-ok); background: var(--bg-ok); color: var(--ok); }
+.dag-task-select { max-width: 190px; min-width: 96px; padding: 3px 7px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 12px; cursor: pointer; }
+.dag-svg-wrap g.card { cursor: pointer; }
+.dag-svg-wrap g.card.is-selected .c { stroke: var(--run); stroke-width: 2.25px; }
+.dag-inspector, .dag-tab-panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dag-inspector-card { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 8px; border: 1px solid var(--line-info); background: var(--card); min-width: 0; }
+.dag-inspector-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; }
+.dag-inspector-title-wrap { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.dag-inspector-kicker { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--run); }
+.dag-inspector-title { font-size: 13px; font-weight: 700; color: var(--fg); overflow-wrap: anywhere; }
+.dag-inspector-close { flex: 0 0 auto; padding: 2px 7px; font-size: 12px; line-height: 1.2; }
+.dag-badges-row { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.dag-kv-grid { display: flex; flex-direction: column; gap: 3px; padding: 7px 8px; border-radius: 6px; border: 1px solid var(--line-subtle); background: var(--bg-page); min-width: 0; }
+.dag-kv-row { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 11px; min-width: 0; }
+.dag-kv-key { color: var(--mut); font-weight: 600; flex: 0 0 auto; }
+.dag-kv-val { color: var(--fg); overflow-wrap: anywhere; font-family: var(--font-code); }
+.dag-inspector-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dag-inspector-sub { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dag-inspector-sub-title { font-size: 11px; font-weight: 700; color: var(--mut); }
+.dag-receipt-row { display: flex; flex-direction: column; gap: 2px; padding: 5px 7px; border-radius: 6px; border: 1px solid var(--line-subtle); background: var(--bg-page); font-size: 11px; min-width: 0; }
+.dag-receipt-top { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.dag-receipt-cmd { font-family: var(--font-code); font-size: 11px; color: var(--mut); overflow-wrap: anywhere; }
+.dag-file-chip.is-sensitive { color: var(--rdy); border-color: var(--line); background: var(--bg-warn); cursor: default; }
+.dag-diff-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line-subtle); background: var(--bg-page); min-width: 0; }
+.dag-diff-left { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; flex: 1 1 auto; }
+.dag-diff-stat { font-family: var(--font-code); font-size: 11px; white-space: nowrap; }
+.dag-diff-add { color: var(--ok); }
+.dag-diff-del { color: var(--bad); }
+.dag-plan-list { display: flex; flex-direction: column; gap: 4px; }
+.dag-plan-item { display: flex; align-items: flex-start; gap: 6px; font-size: 12px; overflow-wrap: anywhere; }
+.dag-plan-check { flex: 0 0 auto; font-weight: 700; color: var(--mut); }
+.dag-plan-check.is-done { color: var(--ok); }
+.dag-stats-table-wrap { width: 100%; overflow-x: auto; border-radius: 6px; border: 1px solid var(--line-subtle); background: var(--bg-page); }
+.dag-stats-table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
+.dag-stats-table th, .dag-stats-table td { padding: 5px 7px; border-bottom: 1px solid var(--line-subtle); vertical-align: middle; }
+.dag-stats-table th { font-weight: 700; color: var(--mut); background: var(--card); white-space: nowrap; }
+.dag-stats-table tr.is-selected td { background: var(--bg-info); }
+.dag-stats-task-btn { padding: 2px 5px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--run); font-weight: 600; font-size: 11px; text-align: left; cursor: pointer; }
+.dag-stats-task-btn:hover { background: var(--bg-subtle); border-color: var(--line-info); }
 .dag-toast { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); max-width: calc(100vw - 24px); padding: 7px 12px; border-radius: 8px; background: var(--bg-inv); color: var(--fg-inv); font-size: 12px; font-weight: 500; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22); z-index: 100; cursor: pointer; }
 `;
 
@@ -170,19 +213,31 @@ const APP_SCRIPT = `(() => {
   "use strict";
 
   const VIEW_IDS = ["previous", "current", "next", "all"];
+  const TAB_IDS = ["dag", "diff", "plan", "stats"];
   const ACTIVE_POLL_MS = 5000;
   const IDLE_POLL_MS = 30000;
   const BACKOFF_AFTER = 3;
   const MAX_BACKOFF_MS = 120000;
   const RPC_TIMEOUT_MS = 15000;
+  const OPENAI_PROBE_TIMEOUT_MS = 2000;
+  const HYDRATION_DELAY_MS = 150;
+  const OPEN_RESULT_KIND = "pota-dag-open";
   const MAX_IN_FLIGHT_TOOLS = 4;
   const RESIZE_DEBOUNCE_MS = 150;
   const TOAST_MS = 4000;
+  const VALID_DISPLAY_MODES = new Set(["inline", "pip", "fullscreen"]);
   const SAFE_VAR_RE = /^--(?:color|font)-[a-z0-9-]+$/i;
   const UNSAFE_CSS_VAL_RE = /[;{}<>\\\\]|url\\(|expression\\(/i;
   const BLOCKED_SVG_TAGS = new Set([
     "script", "foreignobject", "iframe", "object", "embed",
     "frame", "frameset", "applet", "base", "link", "meta",
+  ]);
+  const ALLOWED_SVG_ATTRS = new Set([
+    "xmlns", "width", "height", "viewbox", "role", "font-family",
+    "x", "y", "cx", "cy", "r", "rx", "ry", "d", "path",
+    "class", "text-anchor", "dur", "begin", "repeatcount",
+    "attributename", "values", "fill", "stroke", "stroke-width",
+    "opacity", "aria-label", "data-task-id",
   ]);
   const FALLBACK_MESSAGES = {
     ko: {
@@ -191,8 +246,12 @@ const APP_SCRIPT = `(() => {
       loading: "Pota goal 상태를 읽는 중…",
       refreshFailed: "상태 갱신 실패: ",
       openFileFailed: "보조 패널에서 파일을 열지 못했습니다.",
+      displayModeFailed: "화면 모드를 전환하지 못했습니다.",
       refresh: "↻",
       refreshLabel: "새로고침",
+      fullscreen: "전체 화면",
+      exitFullscreen: "인라인 보기",
+      tabs: { dag: "DAG", diff: "Diff", plan: "Plan", stats: "에이전트·통계" },
       views: { previous: "이전", current: "현재", next: "다음", all: "전체" },
       state: { completed: "완료", active: "실행 중", ready: "준비됨", waiting: "대기", blocked: "막힘" },
       goalStatus: { active: "진행 중", paused: "일시 중지", blocked: "막힘", cancelled: "취소됨", completed: "완료" },
@@ -208,6 +267,56 @@ const APP_SCRIPT = `(() => {
       waveBlocked: "막힘",
       summaryModels: (n) => "모델 " + n + "개",
       awaitingFinish: "goal finish 대기",
+      pause: "일시정지",
+      resume: "재개",
+      gateOn: "승인 게이트 켜기",
+      gateOff: "승인 해제",
+      gateBadge: "게이트",
+      inspector: "태스크 상세",
+      close: "닫기",
+      selectTask: "태스크 상세 보기",
+      status: "상태",
+      wave: "Wave",
+      agent: "에이전트",
+      route: "경로",
+      model: "요청 모델",
+      effectiveModel: "적용 모델",
+      resolvedModel: "실제 모델",
+      effort: "effort",
+      tokens: "토큰",
+      cacheHit: "캐시 적중률",
+      truncated: "일부 잘림",
+      turnsUnit: "턴",
+      receipts: "증거 영수증",
+      noReceipts: "기록된 증거 영수증이 없습니다.",
+      fresh: "신선",
+      stale: "오래됨",
+      freshUnknown: "미확인",
+      declared: "선언",
+      writeScopeDiff: "범위 내 변경 (Diff)",
+      noScopedChanges: "범위 내 변경 사항이 없습니다.",
+      sensitiveFile: "민감 파일 (미리보기 차단)",
+      followUp: "재검증/검토 요청",
+      followUpSent: "후속 요청을 보냈습니다.",
+      followUpFailed: "후속 요청을 보내지 못했습니다.",
+      actionFailed: "작업을 실행하지 못했습니다.",
+      noDiff: "작업 트리에 변경 사항이 없습니다.",
+      diffUnavailable: "Git diff를 사용할 수 없습니다.",
+      noPlan: "Plan 문서를 찾지 못했습니다.",
+      goalSummaryLabel: "목표 요약",
+      currentRequestLabel: "현재 요청",
+      checklistLabel: "체크리스트",
+      statsSummary: "전체 통계",
+      tasksCol: "태스크",
+      modelCol: "모델",
+      effortCol: "effort",
+      elapsedCol: "소요 시간",
+      receiptsCol: "영수증",
+      gateCol: "게이트",
+      bottleneck: "병목",
+      none: "없음",
+      blocker: "막힘 사유",
+      filesLabel: "파일",
     },
     en: {
       noGoal: "No active Pota goal. Plan one with \`pota-plan\` and its DAG appears here.",
@@ -215,8 +324,12 @@ const APP_SCRIPT = `(() => {
       loading: "Reading the Pota goal…",
       refreshFailed: "Refresh failed: ",
       openFileFailed: "Could not open file in side pane.",
+      displayModeFailed: "Could not change display mode.",
       refresh: "↻",
       refreshLabel: "Refresh",
+      fullscreen: "Fullscreen",
+      exitFullscreen: "Exit fullscreen",
+      tabs: { dag: "DAG", diff: "Diff", plan: "Plan", stats: "Agents & Stats" },
       views: { previous: "Previous", current: "Current", next: "Next", all: "All" },
       state: { completed: "done", active: "running", ready: "ready", waiting: "waiting", blocked: "blocked" },
       goalStatus: { active: "active", paused: "paused", blocked: "blocked", cancelled: "cancelled", completed: "completed" },
@@ -232,6 +345,56 @@ const APP_SCRIPT = `(() => {
       waveBlocked: "blocked",
       summaryModels: (n) => n + (n === 1 ? " model" : " models"),
       awaitingFinish: "awaiting goal finish",
+      pause: "Pause",
+      resume: "Resume",
+      gateOn: "Enable gate",
+      gateOff: "Disable gate",
+      gateBadge: "Gate",
+      inspector: "Task Inspector",
+      close: "Close",
+      selectTask: "Inspect task",
+      status: "Status",
+      wave: "Wave",
+      agent: "Agent",
+      route: "Route",
+      model: "Model",
+      effectiveModel: "Effective model",
+      resolvedModel: "Resolved model",
+      effort: "Effort",
+      tokens: "Tokens",
+      cacheHit: "Cache hit",
+      truncated: "truncated",
+      turnsUnit: "turns",
+      receipts: "Receipts",
+      noReceipts: "No receipts recorded.",
+      fresh: "fresh",
+      stale: "stale",
+      freshUnknown: "unknown",
+      declared: "declared",
+      writeScopeDiff: "Scoped Diff",
+      noScopedChanges: "No changes in write scope.",
+      sensitiveFile: "Sensitive file (preview blocked)",
+      followUp: "Ask to review",
+      followUpSent: "Follow-up message sent.",
+      followUpFailed: "Could not send follow-up message.",
+      actionFailed: "Could not execute action.",
+      noDiff: "No working-tree changes.",
+      diffUnavailable: "Git diff unavailable.",
+      noPlan: "Plan document not found.",
+      goalSummaryLabel: "Goal",
+      currentRequestLabel: "Current request",
+      checklistLabel: "Checklist",
+      statsSummary: "Rollup",
+      tasksCol: "Task",
+      modelCol: "Model",
+      effortCol: "Effort",
+      elapsedCol: "Elapsed",
+      receiptsCol: "Receipts",
+      gateCol: "Gate",
+      bottleneck: "Bottleneck",
+      none: "none",
+      blocker: "Blocker",
+      filesLabel: "Files",
     },
   };
 
@@ -243,15 +406,113 @@ const APP_SCRIPT = `(() => {
   const footerEl = document.getElementById("dag-footer");
   const toastEl = document.getElementById("dag-toast");
 
+  function ensureSectionEl(id, tag, className, beforeNode) {
+    const existing = document.getElementById(id);
+    if (existing) return existing;
+    const node = document.createElement(tag);
+    node.id = id;
+    if (className) node.className = className;
+    node.hidden = true;
+    if (beforeNode && beforeNode.parentNode === appEl) appEl.insertBefore(node, beforeNode);
+    else appEl.appendChild(node);
+    return node;
+  }
+
+  const tabsEl = ensureSectionEl("dag-tabs", "nav", "dag-tabs", toolbarEl);
+  const inspectorEl = ensureSectionEl("dag-inspector", "section", "dag-inspector", sectionsEl);
+  const tabPanelEl = ensureSectionEl("dag-tab-panel", "section", "dag-tab-panel", footerEl);
+
   const isObj = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
   const isValidView = (v) => VIEW_IDS.includes(v);
   const quantizeWidth = (w) => Math.max(240, Math.min(1600, Math.floor(w / 20) * 20));
   const normalizeLocale = (val) => {
     if (typeof val !== "string" || val.length === 0) return null;
-    const low = val.toLowerCase();
+    const low = val.trim().toLowerCase();
     return low.startsWith("ko") ? "ko" : low.startsWith("en") ? "en" : null;
   };
   const isVerifiedFileUri = (uri) => typeof uri === "string" && uri.startsWith("file://") && uri.length > 7;
+  const hasOpenAiBridge = () => isObj(window.openai);
+
+  function parseJsonIfString(val) {
+    if (typeof val !== "string") return val;
+    const trimmed = val.trim();
+    if (!trimmed) return null;
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return null;
+    }
+  }
+
+  function extractToolInput(raw) {
+    let obj = parseJsonIfString(raw);
+    if (!isObj(obj)) return null;
+    if (Object.prototype.hasOwnProperty.call(obj, "arguments")) {
+      const inner = parseJsonIfString(obj.arguments);
+      if (isObj(inner)) obj = inner;
+    }
+    const out = {};
+    if (typeof obj.root === "string" && obj.root.length > 0) out.root = obj.root;
+    if (isValidView(obj.view)) out.view = obj.view;
+    const loc = normalizeLocale(obj.locale);
+    if (loc) out.locale = loc;
+    return Object.keys(out).length > 0 ? out : null;
+  }
+
+  function isDagPayload(obj) {
+    if (!isObj(obj)) return false;
+    if (typeof obj.schemaVersion === "number") return true;
+    if (Array.isArray(obj.workspaces) && Object.prototype.hasOwnProperty.call(obj, "root")) return true;
+    if (isObj(obj.sections) && isObj(obj.messages)) return true;
+    return false;
+  }
+
+  function extractStructuredContent(raw, depth = 0) {
+    if (depth > 4) return null;
+    const val = parseJsonIfString(raw);
+    if (!isObj(val)) return null;
+    if (isObj(val.structuredContent) || typeof val.structuredContent === "string") {
+      const sc = parseJsonIfString(val.structuredContent);
+      if (isObj(sc) && Object.keys(sc).length > 0) return sc;
+    }
+    if (val.result !== undefined && val.result !== null) {
+      const fromResult = extractStructuredContent(val.result, depth + 1);
+      if (fromResult) return fromResult;
+    }
+    if (val.toolOutput !== undefined && val.toolOutput !== null) {
+      const fromToolOutput = extractStructuredContent(val.toolOutput, depth + 1);
+      if (fromToolOutput) return fromToolOutput;
+    }
+    if (isDagPayload(val)) return val;
+    return null;
+  }
+
+  function normalizeToolResult(raw) {
+    if (raw && raw.__coalesced) return raw;
+    const val = parseJsonIfString(raw);
+    if (val === null && typeof raw === "string") {
+      return {
+        isError: false,
+        content: raw.length > 0 ? [{ type: "text", text: raw }] : [],
+        structuredContent: null,
+      };
+    }
+    if (!isObj(val)) {
+      return { isError: false, content: [], structuredContent: null };
+    }
+    const inner = isObj(val.result)
+      ? val.result
+      : (typeof val.result === "string" ? parseJsonIfString(val.result) : null);
+    const base = isObj(inner) ? inner : val;
+    const isError = val.isError === true || base.isError === true;
+    const content = Array.isArray(base.content)
+      ? base.content
+      : (Array.isArray(val.content)
+        ? val.content
+        : (typeof val.result === "string" && val.result.length > 0 ? [{ type: "text", text: val.result }] : []));
+    const structuredContent = extractStructuredContent(base) ?? extractStructuredContent(val);
+    return { isError, content, structuredContent };
+  }
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -262,23 +523,35 @@ const APP_SCRIPT = `(() => {
 
   const state = {
     initialized: false,
+    bridgeMode: null,
+    sep1865Ready: false,
     hostCapabilities: {},
     hostContext: {},
     payload: null,
+    tab: "dag",
     view: "all",
     root: null,
     locale: null,
     width: 420,
     lastServerWidth: null,
     expandedTaskId: null,
+    selectedTaskId: null,
+    busyAction: null,
     loading: true,
     refreshing: false,
     rpcError: null,
     consecutiveFailures: 0,
     lastMountedSvgSource: null,
     lastHeaderSig: "",
+    lastTabsSig: "",
+    lastInspectorSig: "",
     lastSectionsSig: "",
+    lastTabPanelSig: "",
     lastReportedHeight: null,
+    lastSyncedToolInputSig: null,
+    lastSyncedToolOutputSig: null,
+    hydrationScheduled: false,
+    pendingOpenHydration: false,
     hasUserNavigated: false,
     inFlightTools: 0,
     queuedToolCall: null,
@@ -293,7 +566,19 @@ const APP_SCRIPT = `(() => {
 
   const pendingRequests = new Map();
   const viewButtons = new Map();
+  const tabButtons = new Map();
+  let viewsBoxEl = null;
+  let taskSelectEl = null;
   let refreshBtn = null;
+  let fullscreenBtn = null;
+
+  const canOpenAuxPane = () => state.sep1865Ready || (!hasOpenAiBridge() && state.bridgeMode !== "openai");
+  const canCallTools = () => typeof window.openai?.callTool === "function" || state.sep1865Ready || state.bridgeMode !== "openai";
+  const canToggleFullscreen = () => typeof window.openai?.requestDisplayMode === "function"
+    || (Array.isArray(state.hostContext?.availableDisplayModes) && state.hostContext.availableDisplayModes.includes("fullscreen"));
+  // ChatGPT는 window.openai.sendFollowUpMessage, Antigravity(순수 SEP-1865)는 ui/message 요청으로 후속 요청을 보낸다.
+  const canSendFollowUp = () => typeof window.openai?.sendFollowUpMessage === "function"
+    || (state.sep1865Ready && (Boolean(state.hostCapabilities?.message) || state.bridgeMode === "sep1865"));
 
   function effectiveLocale() {
     return state.payload?.locale === "ko" || state.payload?.locale === "en"
@@ -317,6 +602,44 @@ const APP_SCRIPT = `(() => {
       : fallbackVal;
   }
 
+  function t(key) {
+    const local = dict()[key];
+    const fallbackVal = typeof local === "string" ? local : FALLBACK_MESSAGES.en[key];
+    return msg(key, typeof fallbackVal === "string" ? fallbackVal : key);
+  }
+
+  function payloadTasks() {
+    const tasks = state.payload?.tasks;
+    return Array.isArray(tasks) ? tasks.filter((task) => isObj(task) && typeof task.id === "string" && task.id.length > 0) : [];
+  }
+
+  function findTask(taskId) {
+    if (typeof taskId !== "string" || taskId.length === 0) return null;
+    return payloadTasks().find((task) => task.id === taskId) ?? null;
+  }
+
+  function activeTab() {
+    return state.payload?.goal && TAB_IDS.includes(state.tab) ? state.tab : "dag";
+  }
+
+  function toolErrorText(result) {
+    return Array.isArray(result?.content)
+      ? result.content.map((c) => (typeof c?.text === "string" ? c.text : "")).filter(Boolean).join(" ")
+      : "";
+  }
+
+  function formatCount(value) {
+    const n = typeof value === "number" && Number.isFinite(value) ? value : 0;
+    if (n >= 1000000) return (Math.round(n / 100000) / 10) + "M";
+    if (n >= 1000) return (Math.round(n / 100) / 10) + "k";
+    return String(n);
+  }
+
+  function formatTokens(tokens) {
+    if (!isObj(tokens)) return "";
+    return "in " + formatCount(tokens.input) + " · cache " + formatCount(tokens.cacheRead) + " · out " + formatCount(tokens.output);
+  }
+
   function postToHost(payload) {
     if (window.parent && typeof window.parent.postMessage === "function") {
       window.parent.postMessage(payload, "*");
@@ -327,14 +650,14 @@ const APP_SCRIPT = `(() => {
     postToHost({ jsonrpc: "2.0", method, params: params ?? {} });
   }
 
-  function sendRequest(method, params) {
+  function sendRequest(method, params, timeoutMs = RPC_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
       const id = state.nextRpcId++;
       const timer = window.setTimeout(() => {
         if (!pendingRequests.has(id)) return;
         pendingRequests.delete(id);
         reject(new Error("Request timed out (" + method + ")"));
-      }, RPC_TIMEOUT_MS);
+      }, timeoutMs);
       pendingRequests.set(id, { resolve, reject, timer });
       postToHost({ jsonrpc: "2.0", id, method, params: params ?? {} });
     });
@@ -342,7 +665,10 @@ const APP_SCRIPT = `(() => {
 
   function dispatchToolCall(entry) {
     state.inFlightTools += 1;
-    sendRequest("tools/call", { name: entry.name, arguments: entry.args })
+    const callPromise = typeof window.openai?.callTool === "function"
+      ? Promise.resolve().then(() => window.openai.callTool(entry.name, entry.args)).then(normalizeToolResult)
+      : sendRequest("tools/call", { name: entry.name, arguments: entry.args }).then(normalizeToolResult);
+    callPromise
       .then(entry.resolve, entry.reject)
       .finally(() => {
         state.inFlightTools = Math.max(0, state.inFlightTools - 1);
@@ -359,6 +685,11 @@ const APP_SCRIPT = `(() => {
     return new Promise((resolve, reject) => {
       const entry = { name, args, resolve, reject };
       if (state.inFlightTools >= MAX_IN_FLIGHT_TOOLS) {
+        // 대기 중인 상태 변경(pota_dag_action) 요청은 상태 조회 폴링으로 덮어쓰지 않는다.
+        if (state.queuedToolCall && state.queuedToolCall.name !== "pota_dag_state" && name === "pota_dag_state") {
+          resolve({ __coalesced: true });
+          return;
+        }
         if (state.queuedToolCall) state.queuedToolCall.resolve({ __coalesced: true });
         state.queuedToolCall = entry;
         return;
@@ -413,6 +744,12 @@ const APP_SCRIPT = `(() => {
 
   function isInlineResizeActive() {
     const ctx = state.hostContext;
+    if (hasOpenAiBridge() || state.bridgeMode === "openai") {
+      const mode = isObj(ctx) ? ctx.displayMode : undefined;
+      if (mode === "fullscreen" || mode === "pip") return false;
+      const dims = isObj(ctx) ? ctx.containerDimensions : undefined;
+      return !isObj(dims) || dims.maxHeight !== undefined || dims.height === undefined;
+    }
     if (!isObj(ctx) || ctx.displayMode !== "inline") return false;
     const dims = ctx.containerDimensions;
     return !isObj(dims) || dims.maxHeight !== undefined || dims.height === undefined;
@@ -428,7 +765,16 @@ const APP_SCRIPT = `(() => {
     const nextHeight = Math.min(cap, Math.max(1, measured));
     if (nextHeight !== state.lastReportedHeight) {
       state.lastReportedHeight = nextHeight;
-      sendNotification("ui/notifications/size-changed", { height: nextHeight });
+      if (typeof window.openai?.notifyIntrinsicHeight === "function") {
+        try {
+          window.openai.notifyIntrinsicHeight(nextHeight);
+        } catch {
+          // 호스트 알림 실패는 UI 동작을 차단하지 않는다.
+        }
+      }
+      if (state.sep1865Ready || (!hasOpenAiBridge() && state.bridgeMode !== "openai")) {
+        sendNotification("ui/notifications/size-changed", { height: nextHeight });
+      }
     }
   }
 
@@ -458,7 +804,7 @@ const APP_SCRIPT = `(() => {
   });
 
   async function openAuxPaneFile(uri) {
-    if (!isVerifiedFileUri(uri)) {
+    if (!canOpenAuxPane() || !isVerifiedFileUri(uri)) {
       showToast(msg("openFileFailed", dict().openFileFailed));
       return;
     }
@@ -468,6 +814,112 @@ const APP_SCRIPT = `(() => {
     } catch {
       showToast(msg("openFileFailed", dict().openFileFailed));
     }
+  }
+
+  async function toggleDisplayMode() {
+    const current = state.hostContext?.displayMode;
+    const nextMode = current === "fullscreen" ? "inline" : "fullscreen";
+    try {
+      const res = typeof window.openai?.requestDisplayMode === "function"
+        ? await window.openai.requestDisplayMode({ mode: nextMode })
+        : await sendRequest("ui/request-display-mode", { mode: nextMode });
+      if (res?.isError === true) {
+        showToast(msg("displayModeFailed", dict().displayModeFailed));
+        return;
+      }
+      const grantedMode = isObj(res) && typeof res.mode === "string" && VALID_DISPLAY_MODES.has(res.mode)
+        ? res.mode
+        : nextMode;
+      state.hostContext = mergeHostContext(state.hostContext, { displayMode: grantedMode });
+      state.lastReportedHeight = null;
+      updateToolbar();
+      scheduleSizeReport();
+    } catch {
+      showToast(msg("displayModeFailed", dict().displayModeFailed));
+    }
+  }
+
+  function scheduleInitialHydration() {
+    if (state.hydrationScheduled || state.payload || typeof window.openai?.callTool !== "function") return;
+    state.hydrationScheduled = true;
+    window.setTimeout(() => {
+      if (!state.payload && state.initialized && !state.refreshing) void refreshState("init");
+    }, HYDRATION_DELAY_MS);
+  }
+
+  function syncOpenAiGlobals(globals) {
+    if (!isObj(globals)) return;
+    const prevDisplayMode = state.hostContext?.displayMode;
+    const patch = {};
+    if (globals.theme === "light" || globals.theme === "dark") patch.theme = globals.theme;
+    const loc = normalizeLocale(globals.locale);
+    if (loc) patch.locale = loc;
+    if (typeof globals.displayMode === "string" && VALID_DISPLAY_MODES.has(globals.displayMode)) {
+      patch.displayMode = globals.displayMode;
+    }
+    if (typeof globals.maxHeight === "number" && Number.isFinite(globals.maxHeight) && globals.maxHeight > 0) {
+      patch.containerDimensions = { maxHeight: globals.maxHeight };
+    }
+    if (Array.isArray(globals.availableDisplayModes)) {
+      patch.availableDisplayModes = globals.availableDisplayModes.filter(
+        (m) => typeof m === "string" && VALID_DISPLAY_MODES.has(m),
+      );
+    }
+    if (Object.keys(patch).length > 0) {
+      state.hostContext = mergeHostContext(state.hostContext, patch);
+      if (prevDisplayMode !== state.hostContext?.displayMode) state.lastReportedHeight = null;
+      applyHostContext(state.hostContext);
+    }
+
+    const ti = extractToolInput(globals.toolInput);
+    if (ti) {
+      const tiSig = JSON.stringify(ti);
+      if (tiSig !== state.lastSyncedToolInputSig) {
+        state.lastSyncedToolInputSig = tiSig;
+        if (ti.root) state.root = ti.root;
+        if (ti.view) state.view = ti.view;
+        if (ti.locale) state.locale = ti.locale;
+        if (!state.payload) state.loading = true;
+      }
+    }
+
+    const sc = extractStructuredContent(globals.toolOutput);
+    if (sc && Object.keys(sc).length > 0) {
+      const scSig = JSON.stringify(sc);
+      if (scSig !== state.lastSyncedToolOutputSig) {
+        state.lastSyncedToolOutputSig = scSig;
+        if (isOpenSummary(sc)) {
+          hydrateFromOpenSummary(sc);
+        } else {
+          state.loading = false;
+          state.hasUserNavigated = false;
+          applyPayload(sc, "tool-result");
+        }
+      }
+    }
+  }
+
+  // open_pota_dag 결과는 모델에도 보이는 슬림 요약이므로 대상 root·보기·언어만 받아들이고,
+  // 전체 DAG 상태는 앱 전용 pota_dag_state로 수화한다(브리지 초기화 전이면 초기화 직후로 미룬다).
+  function isOpenSummary(sc) {
+    return isObj(sc) && sc.kind === OPEN_RESULT_KIND;
+  }
+
+  function hydrateFromOpenSummary(sc) {
+    if (typeof sc.root === "string" && sc.root.length > 0) state.root = sc.root;
+    if (isValidView(sc.view)) state.view = sc.view;
+    if (sc.locale === "ko" || sc.locale === "en") state.locale = sc.locale;
+    state.hasUserNavigated = false;
+    if (!state.payload) state.loading = true;
+    state.pendingOpenHydration = true;
+    flushPendingOpenHydration();
+    render();
+  }
+
+  function flushPendingOpenHydration() {
+    if (!state.pendingOpenHydration || !state.initialized || !canCallTools()) return;
+    state.pendingOpenHydration = false;
+    void refreshState("open");
   }
 
   function measureWrapWidth() {
@@ -494,11 +946,11 @@ const APP_SCRIPT = `(() => {
 
   function schedulePoll() {
     clearPollTimer();
-    if (!state.initialized || document.hidden) return;
+    if (!state.initialized || !canCallTools() || document.hidden) return;
     if (state.payload && state.payload.ended !== null && state.payload.ended !== undefined) return;
     state.pollTimer = window.setTimeout(() => {
       state.pollTimer = null;
-      if (!document.hidden && state.payload?.ended == null) void refreshState("poll");
+      if (!document.hidden && canCallTools() && state.payload?.ended == null) void refreshState("poll");
     }, nextPollDelayMs());
   }
 
@@ -588,6 +1040,7 @@ const APP_SCRIPT = `(() => {
       if (sc.locale === "ko" || sc.locale === "en") state.locale = sc.locale;
       if (typeof sc.width === "number" && Number.isFinite(sc.width)) state.lastServerWidth = sc.width;
     }
+    if (state.selectedTaskId !== null && !findTask(state.selectedTaskId)) state.selectedTaskId = null;
 
     render();
     schedulePoll();
@@ -704,6 +1157,7 @@ const APP_SCRIPT = `(() => {
       state.hasUserNavigated = true;
       state.root = select.value || null;
       state.expandedTaskId = null;
+      state.selectedTaskId = null;
       state.consecutiveFailures = 0;
       void refreshState("workspace");
     });
@@ -713,12 +1167,18 @@ const APP_SCRIPT = `(() => {
 
   function renderHeader() {
     const p = state.payload;
+    const allowAux = canOpenAuxPane();
+    const goalStatus = p?.goal?.status;
+    const canControlGoal = Boolean(p?.goal) && !p?.ended && (goalStatus === "active" || goalStatus === "paused") && canCallTools();
     const sig = JSON.stringify({
+      canControlGoal,
+      busyAction: state.busyAction,
       title: p?.goal?.title ?? null,
       status: p?.goal?.status ?? null,
       ended: p?.ended ?? null,
       planId: p?.goal?.planId ?? null,
       planFileUri: p?.goal?.planFileUri ?? null,
+      allowAux,
       blocker: p?.goal?.blocker ?? null,
       summary: p?.summary ?? null,
       root: p?.root ?? null,
@@ -741,7 +1201,7 @@ const APP_SCRIPT = `(() => {
     if (badge) titleGroup.appendChild(el("span", "dag-badge" + (badge.tone ? " " + badge.tone : ""), badge.label));
 
     if (p?.goal?.planId) {
-      if (isVerifiedFileUri(p.goal.planFileUri)) {
+      if (allowAux && isVerifiedFileUri(p.goal.planFileUri)) {
         const planBtn = el("button", "dag-plan-btn", p.goal.planId);
         planBtn.type = "button";
         planBtn.title = p.goal.planId;
@@ -758,6 +1218,19 @@ const APP_SCRIPT = `(() => {
     titleRow.appendChild(titleGroup);
     const wsControl = buildWorkspaceControl(p);
     if (wsControl) titleRow.appendChild(wsControl);
+    if (canControlGoal) {
+      // active goal은 [일시정지], paused goal은 [재개]를 노출하고 pota_dag_action으로 전이한다.
+      const isPaused = goalStatus === "paused";
+      const goalAction = isPaused ? "resume" : "pause";
+      const actionsBox = el("div", "dag-header-actions");
+      const pauseBtn = el("button", "dag-btn dag-pause-btn" + (isPaused ? " is-paused" : ""), t(goalAction));
+      pauseBtn.type = "button";
+      pauseBtn.dataset.action = goalAction;
+      pauseBtn.disabled = state.busyAction !== null;
+      pauseBtn.addEventListener("click", () => void runDagAction(goalAction));
+      actionsBox.appendChild(pauseBtn);
+      titleRow.appendChild(actionsBox);
+    }
     nodes.push(titleRow);
 
     if (p?.goal?.blocker) {
@@ -781,6 +1254,7 @@ const APP_SCRIPT = `(() => {
 
   function initToolbar() {
     const viewsBox = el("div", "dag-views");
+    viewsBoxEl = viewsBox;
     for (const viewId of VIEW_IDS) {
       const btn = el("button", "dag-btn");
       btn.type = "button";
@@ -789,6 +1263,11 @@ const APP_SCRIPT = `(() => {
       viewButtons.set(viewId, btn);
       viewsBox.appendChild(btn);
     }
+    const actionsBox = el("div", "dag-toolbar-actions");
+    fullscreenBtn = el("button", "dag-btn dag-fullscreen-btn");
+    fullscreenBtn.type = "button";
+    fullscreenBtn.hidden = true;
+    fullscreenBtn.addEventListener("click", () => void toggleDisplayMode());
     refreshBtn = el("button", "dag-btn dag-refresh-btn");
     refreshBtn.type = "button";
     refreshBtn.addEventListener("click", () => {
@@ -796,7 +1275,8 @@ const APP_SCRIPT = `(() => {
       state.rpcError = null;
       void refreshState("manual", { forceEpoch: true });
     });
-    toolbarEl.replaceChildren(viewsBox, refreshBtn);
+    actionsBox.append(fullscreenBtn, refreshBtn);
+    toolbarEl.replaceChildren(viewsBox, actionsBox);
     updateToolbar();
   }
 
@@ -809,6 +1289,19 @@ const APP_SCRIPT = `(() => {
       const active = state.view === viewId;
       btn.classList.toggle("is-active", active);
       btn.setAttribute("aria-pressed", active ? "true" : "false");
+    }
+    if (fullscreenBtn) {
+      const showFs = canToggleFullscreen();
+      const isFs = state.hostContext?.displayMode === "fullscreen";
+      const fsLabel = isFs
+        ? msg("exitFullscreen", words.exitFullscreen)
+        : msg("fullscreen", words.fullscreen);
+      fullscreenBtn.hidden = !showFs;
+      fullscreenBtn.textContent = fsLabel;
+      fullscreenBtn.setAttribute("aria-label", fsLabel);
+      fullscreenBtn.title = fsLabel;
+      fullscreenBtn.setAttribute("aria-pressed", isFs ? "true" : "false");
+      fullscreenBtn.classList.toggle("is-active", isFs);
     }
     if (refreshBtn) {
       refreshBtn.textContent = msg("refresh", words.refresh);
@@ -875,14 +1368,16 @@ const APP_SCRIPT = `(() => {
     const detailBox = el("div", "dag-detail-box");
     for (const line of details) detailBox.appendChild(el("div", "dag-detail-line", line));
     if (files.length > 0) {
+      const allowAux = canOpenAuxPane();
       const filesRow = el("div", "dag-files-row");
       for (const file of files) {
         const label = typeof file === "string" ? file : (file.label || file.path || file.uri || "");
         if (!label) continue;
         const uri = typeof file === "object" ? file.uri : null;
-        const chip = el(isVerifiedFileUri(uri) ? "button" : "span", "dag-file-chip", label);
+        const clickable = allowAux && isVerifiedFileUri(uri);
+        const chip = el(clickable ? "button" : "span", "dag-file-chip", label);
         chip.title = (typeof file === "object" && file.path) ? file.path : label;
-        if (isVerifiedFileUri(uri)) {
+        if (clickable) {
           chip.type = "button";
           chip.addEventListener("click", () => void openAuxPaneFile(uri));
         }
@@ -991,6 +1486,7 @@ const APP_SCRIPT = `(() => {
       hasGoal: Boolean(p?.goal),
       sec: sec ?? null,
       expandedTaskId: state.expandedTaskId,
+      allowAux: canOpenAuxPane(),
       locale: effectiveLocale(),
       messages: p?.messages ?? null,
     });
@@ -1022,11 +1518,548 @@ const APP_SCRIPT = `(() => {
     footerEl.replaceChildren(el("div", "dag-footer-error", errText.startsWith(prefix) ? errText : prefix + errText));
   }
 
+  // 승인된 HITL 동작(pause/resume/toggle_gate)만 pota_dag_action으로 보내고 응답 상태로 즉시 다시 그린다.
+  // toggle_gate는 화면에 보인 버튼 의미대로 원하는 게이트 값(enabled)을 명시해 오래된 상태로 게이트를 풀지 않는다.
+  async function runDagAction(action, taskId, enabled) {
+    if (state.busyAction !== null || !canCallTools()) return;
+    const args = { action, view: state.view, width: state.width };
+    if (typeof taskId === "string" && taskId.length > 0) args.taskId = taskId;
+    if (typeof enabled === "boolean") args.enabled = enabled;
+    if (typeof state.root === "string" && state.root.length > 0) args.root = state.root;
+    const loc = state.locale ?? normalizeLocale(state.hostContext?.locale);
+    if (loc) args.locale = loc;
+
+    state.busyAction = args.taskId ? action + ":" + args.taskId : action;
+    render();
+    const reqToken = ++state.latestStateReqToken;
+    try {
+      const result = await callTool("pota_dag_action", args);
+      if (result?.__coalesced) {
+        showToast(t("actionFailed"));
+        return;
+      }
+      if (result?.isError === true) {
+        const detail = toolErrorText(result);
+        showToast(t("actionFailed") + (detail ? " " + detail : ""));
+        return;
+      }
+      const sc = result?.structuredContent;
+      if (isObj(sc) && Object.keys(sc).length > 0) {
+        if (reqToken >= state.latestAppliedReqToken) {
+          state.latestAppliedReqToken = reqToken;
+          state.loading = false;
+          applyPayload(sc, "action");
+        }
+      } else {
+        void refreshState("action");
+      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      showToast(t("actionFailed") + (detail ? " " + detail : ""));
+    } finally {
+      state.busyAction = null;
+      render();
+      scheduleSizeReport();
+    }
+  }
+
+  function followUpPrompt(task) {
+    const goalTitle = typeof state.payload?.goal?.title === "string" ? state.payload.goal.title : "";
+    const title = task.title || task.id;
+    if (effectiveLocale() === "ko") {
+      return "Pota goal" + (goalTitle ? ' "' + goalTitle + '"' : "") + "의 task " + task.id + " (" + title + ")"
+        + "를 재검증하고 검토해 주세요. 증거 영수증과 writeScope 변경 사항을 확인한 뒤 결과를 알려 주세요.";
+    }
+    return "Please re-verify and review Pota task " + task.id + " (" + title + ")"
+      + (goalTitle ? ' in goal "' + goalTitle + '"' : "")
+      + ". Check its evidence receipts and writeScope changes, then report the result.";
+  }
+
+  // 후속 요청 듀얼 브리지: ChatGPT sendFollowUpMessage 우선, Antigravity는 SEP-1865 ui/message 요청을 쓴다.
+  async function sendFollowUp(task) {
+    const prompt = followUpPrompt(task);
+    try {
+      if (typeof window.openai?.sendFollowUpMessage === "function") {
+        await window.openai.sendFollowUpMessage({ prompt });
+      } else if (canSendFollowUp()) {
+        const res = await sendRequest("ui/message", { role: "user", content: [{ type: "text", text: prompt }] });
+        if (res?.isError === true) {
+          showToast(t("followUpFailed"));
+          return;
+        }
+      } else {
+        showToast(t("followUpFailed"));
+        return;
+      }
+      showToast(t("followUpSent"));
+    } catch {
+      showToast(t("followUpFailed"));
+    }
+  }
+
+  function selectTab(tabId) {
+    if (!TAB_IDS.includes(tabId)) return;
+    state.tab = tabId;
+    render();
+    scheduleSizeReport();
+  }
+
+  function renderSelection() {
+    updateTabs();
+    syncSelectedCard();
+    renderInspector();
+    renderTabPanel();
+    scheduleSizeReport();
+  }
+
+  function selectTask(taskId, { toggle = false } = {}) {
+    if (!findTask(taskId)) return;
+    state.selectedTaskId = toggle && state.selectedTaskId === taskId ? null : taskId;
+    renderSelection();
+  }
+
+  function closeInspector() {
+    state.selectedTaskId = null;
+    renderSelection();
+  }
+
+  // 카드 하위 노드에서 parentNode를 따라 올라가 <g class="card" data-task-id>를 찾는다(MockElement 호환).
+  function taskIdFromTarget(target) {
+    let node = target;
+    for (let depth = 0; node && node !== svgWrapEl && depth < 64; depth += 1) {
+      if (typeof node.getAttribute === "function") {
+        const id = node.getAttribute("data-task-id");
+        if (typeof id === "string" && id.length > 0) return id;
+      }
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  function syncSelectedCard() {
+    const svgRoot = svgWrapEl.children[0];
+    if (!svgRoot) return;
+    const stack = [svgRoot];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      const id = typeof node.getAttribute === "function" ? node.getAttribute("data-task-id") : null;
+      if (id) {
+        node.classList.toggle("is-selected", id === state.selectedTaskId);
+        continue;
+      }
+      const kids = node.children || [];
+      for (let i = 0; i < kids.length; i += 1) stack.push(kids[i]);
+    }
+  }
+
+  function initTabs() {
+    const tabsBox = el("div", "dag-views");
+    tabsBox.setAttribute("role", "tablist");
+    for (const tabId of TAB_IDS) {
+      const btn = el("button", "dag-btn dag-tab-btn");
+      btn.type = "button";
+      btn.dataset.tab = tabId;
+      btn.setAttribute("role", "tab");
+      btn.addEventListener("click", () => selectTab(tabId));
+      tabButtons.set(tabId, btn);
+      tabsBox.appendChild(btn);
+    }
+    taskSelectEl = el("select", "dag-task-select");
+    taskSelectEl.addEventListener("change", () => {
+      const id = taskSelectEl.value;
+      if (id) selectTask(id);
+      else closeInspector();
+    });
+    tabsEl.replaceChildren(tabsBox, taskSelectEl);
+  }
+
+  function updateTabs() {
+    const hasGoal = Boolean(state.payload?.goal);
+    tabsEl.hidden = !hasGoal;
+    const current = activeTab();
+    const words = dict();
+    for (const tabId of TAB_IDS) {
+      const btn = tabButtons.get(tabId);
+      if (!btn) continue;
+      btn.textContent = msgMap("tabs", tabId, words.tabs[tabId]);
+      const active = current === tabId;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    }
+    if (!taskSelectEl) return;
+    const tasks = payloadTasks();
+    const placeholderText = t("selectTask");
+    const sig = JSON.stringify({ placeholderText, tasks: tasks.map((task) => [task.id, task.title ?? null]) });
+    if (sig !== state.lastTabsSig) {
+      state.lastTabsSig = sig;
+      const placeholder = el("option", null, placeholderText);
+      placeholder.value = "";
+      const options = [placeholder];
+      for (const task of tasks) {
+        const opt = el("option", null, task.title || task.id);
+        opt.value = task.id;
+        opt.title = task.id;
+        options.push(opt);
+      }
+      taskSelectEl.replaceChildren(...options);
+    }
+    taskSelectEl.hidden = tasks.length === 0;
+    taskSelectEl.setAttribute("aria-label", placeholderText);
+    taskSelectEl.value = state.selectedTaskId ?? "";
+  }
+
+  function buildFileChip(file, allowAux) {
+    const path = typeof file?.path === "string" ? file.path : "";
+    const sensitive = file?.sensitive === true;
+    const uri = sensitive ? null : file?.uri;
+    const clickable = allowAux && !sensitive && isVerifiedFileUri(uri);
+    const chip = el(clickable ? "button" : "span", "dag-file-chip" + (sensitive ? " is-sensitive" : ""), path);
+    chip.title = sensitive ? path + " · " + t("sensitiveFile") : path;
+    if (clickable) {
+      chip.type = "button";
+      chip.addEventListener("click", () => void openAuxPaneFile(uri));
+    }
+    return chip;
+  }
+
+  function buildDiffRow(file, allowAux) {
+    const row = el("div", "dag-diff-row");
+    const left = el("div", "dag-diff-left");
+    left.append(el("span", "dag-badge", typeof file.status === "string" && file.status.length > 0 ? file.status : "M"), buildFileChip(file, allowAux));
+    const stat = el("span", "dag-diff-stat");
+    if (file.binary === true) {
+      stat.append(el("span", null, "bin"));
+    } else {
+      stat.append(el("span", "dag-diff-add", "+" + formatCount(file.added)), " ", el("span", "dag-diff-del", "-" + formatCount(file.deleted)));
+    }
+    row.append(left, stat);
+    return row;
+  }
+
+  function diffTotalsText(totals, fileCount, truncated) {
+    const tot = isObj(totals) ? totals : {};
+    const files = typeof tot.files === "number" ? tot.files : fileCount;
+    return files + " " + t("filesLabel") + " · +" + formatCount(tot.added) + " -" + formatCount(tot.deleted)
+      + (truncated ? " · " + t("truncated") : "");
+  }
+
+  function addKv(grid, key, value) {
+    if (value === undefined || value === null) return;
+    const text = String(value);
+    if (text.length === 0) return;
+    const row = el("div", "dag-kv-row");
+    row.append(el("span", "dag-kv-key", key), el("span", "dag-kv-val", text));
+    grid.appendChild(row);
+  }
+
+  function stateTone(stateKey) {
+    return { completed: "is-ok", active: "is-info", ready: "is-warn", blocked: "is-bad" }[stateKey] || "";
+  }
+
+  function buildInspectorCard(task, opts) {
+    const words = dict();
+    const card = el("div", "dag-inspector-card");
+    card.dataset.taskId = task.id;
+
+    const head = el("div", "dag-inspector-head");
+    const titleWrap = el("div", "dag-inspector-title-wrap");
+    titleWrap.append(el("div", "dag-inspector-kicker", t("inspector")), el("div", "dag-inspector-title", task.title || task.id));
+    const closeBtn = el("button", "dag-btn dag-inspector-close", "×");
+    closeBtn.type = "button";
+    closeBtn.title = t("close");
+    closeBtn.setAttribute("aria-label", t("close"));
+    closeBtn.addEventListener("click", () => closeInspector());
+    head.append(titleWrap, closeBtn);
+    card.appendChild(head);
+
+    const badges = el("div", "dag-badges-row");
+    const stateKey = typeof task.state === "string" ? task.state : task.status;
+    if (typeof stateKey === "string") {
+      badges.appendChild(el("span", "dag-badge " + stateTone(stateKey), msgMap("state", stateKey, words.state[stateKey] || stateKey)));
+    }
+    if (typeof task.wave === "number") badges.appendChild(el("span", "dag-badge", t("wave") + " " + (task.wave + 1)));
+    if (task.approvalGate === true) badges.appendChild(el("span", "dag-badge is-warn dag-gate-badge", "⏸ " + t("gateBadge")));
+    card.appendChild(badges);
+
+    const grid = el("div", "dag-kv-grid");
+    addKv(grid, "ID", task.id);
+    addKv(grid, t("status"), task.status);
+    addKv(grid, t("agent"), task.assignedAgentId);
+    addKv(grid, t("route"), [task.route, task.kind].filter((x) => typeof x === "string" && x.length > 0).join(" · "));
+    addKv(grid, t("model"), task.model);
+    addKv(grid, t("effectiveModel"), task.effectiveModel);
+    addKv(grid, t("resolvedModel"), [task.resolvedModel, task.resolvedTier].filter((x) => typeof x === "string" && x.length > 0).join(" · "));
+    const effortParts = [];
+    if (typeof task.effort === "string" && task.effort.length > 0) effortParts.push(task.effort);
+    if (typeof task.resolvedEffort === "string" && task.resolvedEffort.length > 0 && task.resolvedEffort !== task.effort) {
+      effortParts.push("→ " + task.resolvedEffort);
+    }
+    if (typeof task.effortSource === "string" && task.effortSource.length > 0) effortParts.push("(" + task.effortSource + ")");
+    addKv(grid, t("effort"), effortParts.join(" "));
+    addKv(grid, t("elapsedCol"), task.elapsed);
+    const transcript = isObj(task.transcript) ? task.transcript : null;
+    if (transcript && isObj(transcript.tokens)) {
+      const turns = typeof transcript.turns === "number" ? " · " + transcript.turns + " " + t("turnsUnit") : "";
+      addKv(grid, t("tokens"), formatTokens(transcript.tokens) + turns + (transcript.tokens.truncated ? " · " + t("truncated") : ""));
+      if (typeof transcript.tokens.cacheHitRate === "number") {
+        addKv(grid, t("cacheHit"), Math.round(transcript.tokens.cacheHitRate * 1000) / 10 + "%");
+      }
+    }
+    addKv(grid, t("blocker"), task.blocker);
+    card.appendChild(grid);
+
+    const actions = el("div", "dag-inspector-actions");
+    const gated = task.approvalGate === true;
+    // 완료 task와 실행 중 task의 게이트 설정은 서버가 거부하므로 토글을 노출하지 않는다.
+    if (opts.canAct && task.status !== "completed" && (gated || task.status !== "active")) {
+      const gateBtn = el("button", "dag-btn dag-gate-btn" + (gated ? " is-active" : ""), gated ? t("gateOff") : t("gateOn"));
+      gateBtn.type = "button";
+      gateBtn.dataset.action = "toggle_gate";
+      gateBtn.setAttribute("aria-pressed", gated ? "true" : "false");
+      gateBtn.disabled = state.busyAction !== null;
+      gateBtn.addEventListener("click", () => void runDagAction("toggle_gate", task.id, !gated));
+      actions.appendChild(gateBtn);
+    }
+    if (opts.canFollow) {
+      const followBtn = el("button", "dag-btn dag-followup-btn", t("followUp"));
+      followBtn.type = "button";
+      followBtn.addEventListener("click", () => void sendFollowUp(task));
+      actions.appendChild(followBtn);
+    }
+    if (actions.childNodes.length > 0) card.appendChild(actions);
+
+    const receiptsBox = el("div", "dag-inspector-sub dag-receipts");
+    receiptsBox.appendChild(el("div", "dag-inspector-sub-title", t("receipts")));
+    const receipts = Array.isArray(task.receipts) ? task.receipts.filter(isObj) : [];
+    if (receipts.length === 0) receiptsBox.appendChild(el("div", "dag-detail-line", t("noReceipts")));
+    for (const receipt of receipts) {
+      const row = el("div", "dag-receipt-row");
+      const top = el("div", "dag-receipt-top");
+      const exitOk = receipt.exitCode === 0;
+      const exitTone = typeof receipt.exitCode === "number" ? (exitOk ? " is-ok" : " is-bad") : "";
+      top.appendChild(el("span", "dag-badge" + exitTone, typeof receipt.kind === "string" ? receipt.kind : "?"));
+      if (typeof receipt.exitCode === "number") top.appendChild(el("span", "dag-ev", "exit " + receipt.exitCode));
+      // fresh: null인 tool 영수증은 폴링 경로에서 계산하지 않은 상태이므로 fresh/stale 대신 unknown으로 표시한다.
+      const freshness = receipt.fresh === true
+        ? t("fresh")
+        : receipt.fresh === false
+          ? t("stale")
+          : receipt.source === "tool" ? t("freshUnknown") : t("declared");
+      top.appendChild(el("span", "dag-ev" + (receipt.fresh === true ? " is-done" : ""), freshness));
+      if (typeof receipt.verifiedAt === "string" && receipt.verifiedAt.length > 0) top.appendChild(el("span", "dag-ev", receipt.verifiedAt));
+      row.appendChild(top);
+      if (typeof receipt.command === "string" && receipt.command.length > 0) row.appendChild(el("div", "dag-receipt-cmd", receipt.command));
+      receiptsBox.appendChild(row);
+    }
+    card.appendChild(receiptsBox);
+
+    if (Array.isArray(task.writeScope) && task.writeScope.length > 0) {
+      const diffBox = el("div", "dag-inspector-sub dag-scoped-diff");
+      diffBox.appendChild(el("div", "dag-inspector-sub-title", t("writeScopeDiff")));
+      const scoped = isObj(task.writeScopeDiff) ? task.writeScopeDiff : null;
+      const files = scoped && Array.isArray(scoped.files) ? scoped.files.filter(isObj) : [];
+      if (files.length === 0) {
+        diffBox.appendChild(el("div", "dag-detail-line", t("noScopedChanges")));
+      } else {
+        diffBox.appendChild(el("div", "dag-detail-line", diffTotalsText(scoped.totals, files.length, false)));
+        for (const file of files) diffBox.appendChild(buildDiffRow(file, opts.allowAux));
+      }
+      const scopeFiles = Array.isArray(task.files) ? task.files.filter(isObj) : [];
+      if (scopeFiles.length > 0) {
+        const filesRow = el("div", "dag-files-row");
+        for (const file of scopeFiles) filesRow.appendChild(buildFileChip(file, opts.allowAux));
+        diffBox.appendChild(filesRow);
+      }
+      card.appendChild(diffBox);
+    }
+    return card;
+  }
+
+  function renderInspector() {
+    const p = state.payload;
+    const task = p?.goal && state.selectedTaskId !== null ? findTask(state.selectedTaskId) : null;
+    const opts = {
+      allowAux: canOpenAuxPane(),
+      canAct: canCallTools() && !p?.ended,
+      canFollow: canSendFollowUp(),
+    };
+    const sig = JSON.stringify({
+      task,
+      opts,
+      busy: state.busyAction,
+      goalTitle: p?.goal?.title ?? null,
+      locale: effectiveLocale(),
+      messages: task ? (p?.messages ?? null) : null,
+    });
+    if (sig === state.lastInspectorSig) return;
+    state.lastInspectorSig = sig;
+    if (!task) {
+      inspectorEl.hidden = true;
+      inspectorEl.replaceChildren();
+      return;
+    }
+    inspectorEl.hidden = false;
+    inspectorEl.replaceChildren(buildInspectorCard(task, opts));
+  }
+
+  function buildDiffPanel(p, allowAux) {
+    const diff = isObj(p.gitDiff) ? p.gitDiff : null;
+    if (!diff || diff.available !== true) return [el("div", "dag-empty-box", t("diffUnavailable"))];
+    const files = Array.isArray(diff.files) ? diff.files.filter(isObj) : [];
+    if (files.length === 0) return [el("div", "dag-empty-box", t("noDiff"))];
+    const box = el("section", "dag-group dag-diff-list");
+    box.appendChild(el("div", "dag-group-title", diffTotalsText(diff.totals, files.length, diff.truncated === true)));
+    for (const file of files) box.appendChild(buildDiffRow(file, allowAux));
+    return [box];
+  }
+
+  function buildPlanPanel(p) {
+    const plan = isObj(p.planOverview) ? p.planOverview : null;
+    if (!plan) return [el("div", "dag-empty-box", t("noPlan"))];
+    const box = el("section", "dag-group dag-plan-overview");
+    box.appendChild(el("div", "dag-inspector-title", plan.title || p.goal?.planId || p.goal?.title || ""));
+    const planId = typeof plan.planId === "string" && plan.planId.length > 0 ? plan.planId : p.goal?.planId;
+    if (typeof planId === "string" && planId.length > 0) box.appendChild(el("div", "dag-root-label", planId));
+    const grid = el("div", "dag-kv-grid");
+    addKv(grid, t("goalSummaryLabel"), plan.goalSummary);
+    addKv(grid, t("currentRequestLabel"), plan.currentRequest);
+    if (grid.childNodes.length > 0) box.appendChild(grid);
+    const checklist = isObj(plan.checklist) ? plan.checklist : null;
+    if (checklist) {
+      const done = typeof checklist.done === "number" ? checklist.done : 0;
+      const total = typeof checklist.total === "number" ? checklist.total : done + (typeof checklist.pending === "number" ? checklist.pending : 0);
+      box.appendChild(el("div", "dag-inspector-sub-title", t("checklistLabel") + " " + done + "/" + total));
+      const items = Array.isArray(checklist.items) ? checklist.items.filter(isObj) : [];
+      if (items.length > 0) {
+        const list = el("div", "dag-plan-list");
+        for (const item of items) {
+          const row = el("div", "dag-plan-item");
+          row.append(el("span", "dag-plan-check" + (item.done ? " is-done" : ""), item.done ? "✓" : "○"), el("span", null, item.text ?? ""));
+          list.appendChild(row);
+        }
+        box.appendChild(list);
+      }
+    }
+    if (plan.truncated === true) box.appendChild(el("div", "dag-more", t("truncated")));
+    return [box];
+  }
+
+  function buildStatsPanel(p) {
+    const stats = isObj(p.agentStats) ? p.agentStats : {};
+    const tasks = payloadTasks();
+    const nodes = [];
+
+    const rollup = el("section", "dag-group dag-stats-rollup");
+    rollup.appendChild(el("div", "dag-group-title", t("statsSummary")));
+    const grid = el("div", "dag-kv-grid");
+    const doneTasks = typeof stats.doneTasks === "number" ? stats.doneTasks : tasks.filter((task) => task.status === "completed").length;
+    const totalTasks = typeof stats.totalTasks === "number" ? stats.totalTasks : tasks.length;
+    addKv(grid, t("tasksCol"), doneTasks + "/" + totalTasks);
+    const bottleneck = isObj(stats.waveBottleneck) ? stats.waveBottleneck : null;
+    addKv(grid, t("bottleneck"), bottleneck
+      ? t("wave") + " " + bottleneck.waveNumber + " (" + bottleneck.completed + "/" + bottleneck.total + ")"
+      : t("none"));
+    const modelCounts = isObj(stats.modelCounts) ? Object.entries(stats.modelCounts) : [];
+    addKv(grid, t("modelCol"), modelCounts.length > 0 ? modelCounts.map(([name, count]) => name + " ×" + count).join(", ") : t("none"));
+    // 트랜스크립트가 없는 호스트(ChatGPT/Codex·Claude Code)에서는 토큰 롤업을 생략한다.
+    if (typeof stats.enrichedAgents === "number" && stats.enrichedAgents > 0) {
+      addKv(grid, t("agent"), stats.enrichedAgents);
+      addKv(grid, t("tokens"), formatTokens({
+        input: stats.totalInputTokens,
+        cacheRead: stats.totalCacheReadTokens,
+        output: stats.totalOutputTokens,
+      }) + " · " + formatCount(stats.totalTurns) + " " + t("turnsUnit"));
+    }
+    rollup.appendChild(grid);
+    nodes.push(rollup);
+
+    if (tasks.length > 0) {
+      const wrap = el("div", "dag-stats-table-wrap");
+      const table = el("table", "dag-stats-table");
+      const thead = el("thead");
+      const headRow = el("tr");
+      for (const key of ["tasksCol", "agent", "modelCol", "effortCol", "tokens", "elapsedCol", "gateCol", "receiptsCol"]) {
+        headRow.appendChild(el("th", null, t(key)));
+      }
+      thead.appendChild(headRow);
+      const tbody = el("tbody");
+      for (const task of tasks) {
+        const row = el("tr", "dag-stats-row" + (state.selectedTaskId === task.id ? " is-selected" : ""));
+        row.dataset.taskId = task.id;
+        const nameCell = el("td");
+        const nameBtn = el("button", "dag-stats-task-btn", task.title || task.id);
+        nameBtn.type = "button";
+        nameBtn.title = task.id;
+        nameBtn.addEventListener("click", () => selectTask(task.id));
+        nameCell.appendChild(nameBtn);
+        const agentId = typeof task.assignedAgentId === "string" ? task.assignedAgentId : "";
+        const agentCell = el("td", null, agentId.length > 12 ? agentId.slice(0, 8) + "…" : (agentId || "-"));
+        if (agentId) agentCell.title = agentId;
+        const modelName = task.resolvedModel || task.effectiveModel || task.model || "-";
+        const effortName = task.resolvedEffort || task.effort || "-";
+        const tokensText = isObj(task.transcript) && isObj(task.transcript.tokens) ? formatTokens(task.transcript.tokens) : "-";
+        row.append(
+          nameCell,
+          agentCell,
+          el("td", null, modelName),
+          el("td", null, effortName),
+          el("td", null, tokensText),
+          el("td", null, task.elapsed || "-"),
+          el("td", null, task.approvalGate === true ? "⏸" : ""),
+          el("td", null, Array.isArray(task.receipts) ? task.receipts.length : 0),
+        );
+        row.addEventListener("click", () => selectTask(task.id));
+        tbody.appendChild(row);
+      }
+      table.append(thead, tbody);
+      wrap.appendChild(table);
+      nodes.push(wrap);
+    }
+    return nodes;
+  }
+
+  function renderTabPanel() {
+    const p = state.payload;
+    const tab = activeTab();
+    if (tab === "dag" || !p?.goal) {
+      tabPanelEl.hidden = true;
+      if (state.lastTabPanelSig !== "") {
+        state.lastTabPanelSig = "";
+        tabPanelEl.replaceChildren();
+      }
+      return;
+    }
+    const allowAux = canOpenAuxPane();
+    const sig = JSON.stringify({
+      tab,
+      data: tab === "diff" ? p.gitDiff ?? null : tab === "plan" ? [p.planOverview ?? null, p.goal.planId ?? null] : [p.agentStats ?? null, p.tasks ?? null],
+      selected: tab === "stats" ? state.selectedTaskId : null,
+      allowAux,
+      locale: effectiveLocale(),
+      messages: p.messages ?? null,
+    });
+    tabPanelEl.hidden = false;
+    if (sig === state.lastTabPanelSig) return;
+    state.lastTabPanelSig = sig;
+    tabPanelEl.dataset.tab = tab;
+    const nodes = tab === "diff" ? buildDiffPanel(p, allowAux) : tab === "plan" ? buildPlanPanel(p) : buildStatsPanel(p);
+    tabPanelEl.replaceChildren(...nodes);
+  }
+
   function render() {
     renderHeader();
+    updateTabs();
     updateToolbar();
     renderSvg();
+    const tab = activeTab();
+    // DAG 탭 외에는 SVG·섹션·보기 버튼을 숨기고 읽기 전용 탭 패널을 노출한다.
+    if (tab !== "dag") svgWrapEl.hidden = true;
+    sectionsEl.hidden = tab !== "dag";
+    if (viewsBoxEl) viewsBoxEl.hidden = tab !== "dag";
+    syncSelectedCard();
+    renderInspector();
     renderSections();
+    renderTabPanel();
     renderFooter();
   }
 
@@ -1063,11 +2096,12 @@ const APP_SCRIPT = `(() => {
     if (hasMethod && !hasId) {
       const params = isObj(data.params) ? data.params : {};
       if (data.method === "ui/notifications/tool-input") {
-        const args = isObj(params.arguments) ? params.arguments : {};
-        if (typeof args.root === "string" && args.root.length > 0) state.root = args.root;
-        if (isValidView(args.view)) state.view = args.view;
-        const loc = normalizeLocale(args.locale);
-        if (loc) state.locale = loc;
+        const ti = extractToolInput(params);
+        if (ti) {
+          if (ti.root) state.root = ti.root;
+          if (ti.view) state.view = ti.view;
+          if (ti.locale) state.locale = ti.locale;
+        }
         if (!state.payload) {
           state.loading = true;
           render();
@@ -1075,8 +2109,9 @@ const APP_SCRIPT = `(() => {
       } else if (data.method === "ui/notifications/tool-result") {
         state.loading = false;
         state.hasUserNavigated = false;
-        const sc = params.structuredContent;
-        if (isObj(sc) && Object.keys(sc).length > 0) applyPayload(sc, "tool-result");
+        const sc = extractStructuredContent(params) ?? params.structuredContent;
+        if (isOpenSummary(sc)) hydrateFromOpenSummary(sc);
+        else if (isObj(sc) && Object.keys(sc).length > 0) applyPayload(sc, "tool-result");
         else void refreshState("recover");
       } else if (data.method === "ui/notifications/tool-cancelled") {
         state.loading = false;
@@ -1088,6 +2123,20 @@ const APP_SCRIPT = `(() => {
         scheduleSizeReport();
       }
     }
+  }
+
+  function onOpenAiSetGlobals(event) {
+    const globals = isObj(event?.detail?.globals)
+      ? event.detail.globals
+      : (isObj(window.openai) ? window.openai : null);
+    state.bridgeMode = "openai";
+    state.initialized = true;
+    state.rpcError = null;
+    syncOpenAiGlobals(globals);
+    flushPendingOpenHydration();
+    scheduleInitialHydration();
+    render();
+    scheduleSizeReport();
   }
 
   document.addEventListener("keydown", (event) => {
@@ -1107,7 +2156,7 @@ const APP_SCRIPT = `(() => {
       clearPollTimer();
       return;
     }
-    if (state.initialized && state.payload?.ended == null) void refreshState("visibility");
+    if (state.initialized && canCallTools() && state.payload?.ended == null) void refreshState("visibility");
   });
 
   if (typeof ResizeObserver === "function") {
@@ -1119,7 +2168,7 @@ const APP_SCRIPT = `(() => {
       if (state.resizeTimer !== null) window.clearTimeout(state.resizeTimer);
       state.resizeTimer = window.setTimeout(() => {
         state.resizeTimer = null;
-        if (!state.initialized || !state.payload || !state.payload.goal) return;
+        if (!state.initialized || !canCallTools() || !state.payload || !state.payload.goal) return;
         const renderedW = state.lastServerWidth ?? state.payload.width ?? qW;
         if (Math.abs(qW - renderedW) >= 20) void refreshState("resize");
       }, RESIZE_DEBOUNCE_MS);
@@ -1134,33 +2183,77 @@ const APP_SCRIPT = `(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
   }
 
+  initTabs();
   initToolbar();
-  render();
 
-  // 핸드셰이크 메시지를 놓치지 않도록 ui/initialize 송신 전에 message 리스너를 등록한다.
+  // 모든 카드(<g class="card" data-task-id>) 클릭을 SVG 래퍼에서 위임 처리해 인스펙터를 연다.
+  svgWrapEl.addEventListener("click", (event) => {
+    const taskId = taskIdFromTarget(event?.target);
+    if (taskId) selectTask(taskId, { toggle: true });
+  });
+
+  // 핸드셰이크 메시지를 놓치지 않도록 초기화 송신 전에 두 호스트 리스너를 모두 등록한다.
   window.addEventListener("message", onHostMessage);
+  window.addEventListener("openai:set_globals", onOpenAiSetGlobals);
 
-  sendRequest("ui/initialize", {
-    protocolVersion: "2026-01-26",
-    appInfo: { name: APP_TITLE, version: APP_VERSION },
-    appCapabilities: {},
-  }).then((res) => {
+  if (hasOpenAiBridge()) {
+    state.bridgeMode = "openai";
     state.initialized = true;
-    state.hostCapabilities = isObj(res?.hostCapabilities) ? res.hostCapabilities : {};
-    state.hostContext = isObj(res?.hostContext) ? res.hostContext : {};
-    applyHostContext(state.hostContext);
-    sendNotification("ui/notifications/initialized", {});
+    syncOpenAiGlobals(window.openai);
     render();
     scheduleSizeReport();
-  }).catch((err) => {
-    state.loading = false;
-    state.rpcError = err instanceof Error ? err.message : String(err);
+    scheduleInitialHydration();
+
+    if (window.parent && window.parent !== window) {
+      sendRequest("ui/initialize", {
+        protocolVersion: "2026-01-26",
+        appInfo: { name: APP_TITLE, version: APP_VERSION },
+        appCapabilities: {},
+      }, OPENAI_PROBE_TIMEOUT_MS).then((res) => {
+        state.sep1865Ready = true;
+        state.lastReportedHeight = null;
+        if (isObj(res?.hostCapabilities)) {
+          state.hostCapabilities = { ...state.hostCapabilities, ...res.hostCapabilities };
+        }
+        state.hostContext = mergeHostContext(state.hostContext, isObj(res?.hostContext) ? res.hostContext : {});
+        applyHostContext(state.hostContext);
+        sendNotification("ui/notifications/initialized", {});
+        render();
+        schedulePoll();
+        scheduleSizeReport();
+      }).catch(() => {
+        // 순수 window.openai 호스트에서는 SEP-1865 프로브 실패를 오류로 노출하지 않는다.
+        if (state.bridgeMode === "openai") return;
+      });
+    }
+  } else {
+    state.bridgeMode = "sep1865";
     render();
-  });
+    sendRequest("ui/initialize", {
+      protocolVersion: "2026-01-26",
+      appInfo: { name: APP_TITLE, version: APP_VERSION },
+      appCapabilities: {},
+    }).then((res) => {
+      state.initialized = true;
+      state.sep1865Ready = true;
+      state.hostCapabilities = isObj(res?.hostCapabilities) ? res.hostCapabilities : {};
+      state.hostContext = mergeHostContext(state.hostContext, isObj(res?.hostContext) ? res.hostContext : {});
+      applyHostContext(state.hostContext);
+      sendNotification("ui/notifications/initialized", {});
+      flushPendingOpenHydration();
+      render();
+      scheduleSizeReport();
+    }).catch((err) => {
+      if (state.bridgeMode === "openai") return;
+      state.loading = false;
+      state.rpcError = err instanceof Error ? err.message : String(err);
+      render();
+    });
+  }
 })();`;
 
 /**
- * Antigravity MCP App용 단일 자체 완결 HTML 문서를 생성한다.
+ * Antigravity(SEP-1865) 및 ChatGPT Desktop/Codex(window.openai)용 단일 자체 완결 HTML 문서를 생성한다.
  * @param {{ title?: string, version?: string }} [options]
  * @returns {string}
  */
@@ -1182,9 +2275,12 @@ export function renderDagAppHtml({ title = "Pota DAG", version = "2.2.1" } = {})
     "<body>",
     '<main id="app" class="dag-app">',
     '  <header id="dag-header" class="dag-header"></header>',
+    '  <nav id="dag-tabs" class="dag-tabs" aria-label="DAG tabs" hidden></nav>',
     '  <nav id="dag-toolbar" class="dag-toolbar" aria-label="DAG controls"></nav>',
     '  <section id="dag-svg-wrap" class="dag-svg-wrap" hidden></section>',
+    '  <section id="dag-inspector" class="dag-inspector" aria-live="polite" hidden></section>',
     '  <section id="dag-sections" class="dag-sections"></section>',
+    '  <section id="dag-tab-panel" class="dag-tab-panel" hidden></section>',
     '  <footer id="dag-footer"></footer>',
     "</main>",
     '<div id="dag-toast" class="dag-toast" role="status" aria-live="polite" hidden></div>',
