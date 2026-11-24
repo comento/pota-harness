@@ -2,7 +2,10 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runGoalCli } from "./pota-goal-cli.mjs";
-import { assignTask, claimGoal, replanGoal, setTaskStatus, startGoal, steerGoal, transitionGoal } from "./pota-goal-operations.mjs";
+import {
+  assignTask, claimGoal, pauseGoal, replanGoal, resumeGoal, setTaskApprovalGate, setTaskStatus, startGoal, steerGoal,
+  toggleTaskApprovalGate, transitionGoal,
+} from "./pota-goal-operations.mjs";
 import { finishGoal, goalStats, recordReceipt, verifyAndRecord } from "./pota-goal-operations-evidence.mjs";
 import { readGoalState } from "./pota-goal-state.mjs";
 import { goalHistoryStats } from "./pota-goal-history.mjs";
@@ -22,7 +25,10 @@ export {
 } from "./pota-goal-state-validation.mjs";
 export { goalStatePath, readGoalState, writeGoalState } from "./pota-goal-state.mjs";
 export { GOAL_HISTORY_MAX_RECORDS, goalHistoryPath, goalHistoryStats, memoryPromotionStatus } from "./pota-goal-history.mjs";
-export { assignTask, claimGoal, reconcileWorktreeState, replanGoal, setTaskStatus, startGoal, steerGoal, transitionGoal } from "./pota-goal-operations.mjs";
+export {
+  assignTask, claimGoal, pauseGoal, reconcileWorktreeState, replanGoal, resumeGoal, setTaskApprovalGate, setTaskStatus,
+  startGoal, steerGoal, toggleTaskApprovalGate, transitionGoal,
+} from "./pota-goal-operations.mjs";
 export { finishGoal, goalStats, recordReceipt, verifyAndRecord } from "./pota-goal-operations-evidence.mjs";
 export { currentTask, evaluateStop, isGoalOwnedBySession } from "./pota-goal-policy.mjs";
 export { readyTasks } from "./pota-goal-operations-mutations.mjs";
@@ -39,13 +45,17 @@ export async function handleGoalCli(args = process.argv.slice(2), { stdout = con
       finishGoal,
       goalHistoryStats,
       goalStats,
+      pauseGoal,
       readGoalState,
       readyTasks,
       recordReceipt,
       replanGoal,
+      resumeGoal,
+      setTaskApprovalGate,
       setTaskStatus,
       startGoal,
       steerGoal,
+      toggleTaskApprovalGate,
       transitionGoal,
       verifyAndRecord,
     },

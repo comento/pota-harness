@@ -63,7 +63,7 @@ Relancez la même commande pour mettre à jour ; la documentation d'Antigravity 
 
 | | Claude Code | Codex | Antigravity CLI |
 | --- | --- | --- | --- |
-| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` |
+| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory`, `/dag` (commande mod) | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | les mêmes cinq, après approbation dans `/hooks` | SessionStart, PreInvocation (contexte du prompt), PostToolUse, Stop ; pas de SubagentStop |
 | Agents `explorer`, `worker` | oui | non | non |
 | Panneau DAG (mod) | oui | non | non |
@@ -208,7 +208,7 @@ Pota garde ses données sous `POTA_HOME` (par défaut `~/.pota`), partagé par l
 
 ## Claude Code DAG Panel
 
-Claude Code Desktop affiche le goal Pota courant sous forme de panneau DAG, une colonne par wave. Il est propre à Claude Code ; Codex et Antigravity ne l'ont pas. Il faut un Claude Code avec prise en charge des mods (écrit pour l'API de mods de Claude Code 2.1.325) ; sur une surface sans graphique, comme le terminal, une liste texte est affichée à la place.
+Claude Code Desktop affiche le goal Pota courant sous forme de panneau DAG, une colonne par wave. Claude Code utilise son propre panneau mod (`/dag`). Depuis 2.3.0, Antigravity et Codex/ChatGPT Desktop affichent le même DAG sous forme de MCP App ouverte par l'outil `open_pota_dag`, lancé automatiquement après `goal start` ou via la skill `dag` (Antigravity `/dag`, Codex `$dag`). Il faut un Claude Code avec prise en charge des mods (écrit pour l'API de mods de Claude Code 2.1.325) ; sur une surface sans graphique, comme le terminal, une liste texte est affichée à la place.
 
 - `/dag [previous|current|next|all|refresh|close]` ouvre le panneau. Les vues sont précédent, courant, suivant et tout. La vue par défaut est tout (all) ; les autres sont facultatives. Un lien terminé est un trait plein ; un lien en cours est en pointillés avec un point qui se déplace.
 - Il s'ouvre une fois automatiquement après `pota goal start` et `pota goal replan`. Si vous le fermez, il ne se rouvre pas pour le même goal.
@@ -223,7 +223,7 @@ Pota prend en charge la CLI Antigravity (`agy`) ; l'IDE Antigravity n'est pas pr
 - `PostToolUse` sur `write_to_file`, `replace_file_content` et `multi_replace_file_content` lance le comment checker et le rappel du goal ; le résultat est ajouté au `PreInvocation` suivant.
 - `Stop` fait continuer l'agent tant que le goal actif a une task inachevée. Il n'y a pas de `SubagentStop`.
 
-Les skills s'appellent avec `/pota-plan`, `/pota-work`, `/pota-review` et `/pota-memory` ; les workflows ne font pas partie des plugins Antigravity. L'adaptateur suit la documentation des hooks d'Antigravity ; son comportement dans une vraie session `agy` n'a pas encore été vérifié.
+Les skills s'appellent avec `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` et `/dag` ; les workflows ne font pas partie des plugins Antigravity. L'adaptateur suit la documentation des hooks d'Antigravity ; son comportement dans une vraie session `agy` n'a pas encore été vérifié.
 
 ## Locale Policy
 

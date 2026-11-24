@@ -23,7 +23,7 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·agent·t
 | CLI 안내문 | `scripts/pota.mjs`의 `messages` | en, ko, ja, zh, es, fr, de, pt |
 | README | `README.md`와 `README.{ko,ja,zh,es,fr,de,pt}.md` | 8개. 구조를 나란히 유지하고 제목은 영문 고정 |
 
-출처: `test/docs-package-hardening.test.mjs` "plugin inventory covers two Claude agents and four skills and no command or workflow surfaces", `test/contract-parity.test.mjs`, `test/plugin-manifests.test.mjs` "Claude and Codex hooks run pota-state.mjs with the event and host tokens, and Codex reads only its own file".
+출처: `test/docs-package-hardening.test.mjs` "plugin inventory covers two Claude agents and five skills and no command or workflow surfaces", `test/contract-parity.test.mjs`, `test/plugin-manifests.test.mjs` "Claude and Codex hooks run pota-state.mjs with the event and host tokens, and Codex reads only its own file".
 
 ### 예산(테스트가 강제)
 
@@ -45,6 +45,8 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·agent·t
 - 요청 계약과 스티어링(1.4.0): 정본은 `skills/pota-plan/request-brief.md`(계약 작성, `## Prior records`, 빈틈 3분류, 암묵 요구사항, 스티어링 분류, CLI 강제 항목)다. 파생 표면은 `templates/work-plan.md`의 `## Request Brief` 섹션(`## Goal` 다음), `skills/pota-plan/SKILL.md` Reference Files 포인터, `skills/pota-plan/planning-rules.md` bullet 2개, `skills/pota-work/SKILL.md`의 replan 예시(`--steer`·`--reason`)와 Procedure 2번 포인터, `skills/pota-work/recovery.md`, README 8개의 "Model ceiling" 다음 bullet이다. 계획 라벨과 명령·플래그는 모든 locale에서 영문 고정이다. 템플릿의 Request Brief에는 `S1 (`로 시작하는 목록 줄을 두지 않는다(CLI 순번 검사가 실제 기록으로 볼 수 있다). 게이트 동작은 `goal-state.md`. 출처: `test/contract-parity.test.mjs` "request brief and steering surfaces name the template section, the commands, and the bypass flag".
 - `pluginRoot` 문장(`skills/pota-plan/SKILL.md` 16행, `skills/pota-work/SKILL.md` 18행)과 `skills/pota-work/recovery.md` 30행(경로가 사라지면 세션 재시작, Codex에서 `Pota CLI:` 줄이 없으면 `/hooks` 승인 요청)은 세 호스트가 같은 문장을 쓴다. 같은 뜻의 문장이 `skills/pota-memory/SKILL.md`, `skills/pota-review/SKILL.md`, `docs/model-guidance/README.md`에도 있다.
 - 메모리 승격 절차 본문은 `skills/pota-work/verification.md` `## Memory Promotion`, 계획 재활용 절차는 `skills/pota-plan/planning-rules.md` `## Reuse Before Planning`에 있다. 옛 `PLAN.md`의 Planning Rules 정본도 이 파일이다.
+- `open_pota_dag` 표면 규칙(2.3.0): Antigravity와 Codex/ChatGPT Desktop에서 `open_pota_dag`가 노출될 때만 `goal start` 직후·활성 goal 재개 시 호출하고, 자체 mod를 쓰는 Claude Code에서는 건너뛴다(`ensure` 복구는 Antigravity 전용). 정본은 `skills/pota-plan/planning-rules.md`와 `docs/model-guidance/README.md`, 요약은 `skills/pota-{plan,work}/SKILL.md`이며 `test/token-efficiency.test.mjs`가 강제한다.
+- 수동 승인 게이트(`approvalGate`) 복구 규칙: `pota goal task --status active`가 수동 승인 게이트로 실패하면 사용자 확인 없이 우회하지 말고 대기한 뒤 `pota goal gate --task <id> --off` 또는 `pota goal task --task <id> --status active --approve-gate`로 해제·승인하도록 `skills/pota-work/recovery.md`에 둔다. 게이트 task만 남았을 때(`goal ready`가 `gated`에만 id를 내고 `active`·`ready`가 빔)는 사용자에게 보고하고 기다린다는 규칙도 같은 파일에 있고, `goal ready`의 `gated` 키 설명은 `skills/pota-work/delegation.md` "Parallel Tasks"에 있다. 사용자가 대화에서 말하거나 DAG 패널에서 승인하기 전에는 `--approve-gate`·`goal gate --off`를 실행하지 않는다. `test/token-efficiency.test.mjs` "work guidance keeps gated ready tasks for the user to approve"가 강제한다.
 
 ## Policy
 

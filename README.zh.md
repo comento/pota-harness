@@ -63,7 +63,7 @@ agy plugin install https://github.com/comento/pota-harness
 
 | | Claude Code | Codex | Antigravity CLI |
 | --- | --- | --- | --- |
-| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` |
+| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory`, `/dag` (mod 命令) | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | 同样 5 个(在 `/hooks` 中批准后) | SessionStart, PreInvocation(prompt context), PostToolUse, Stop；没有 SubagentStop |
 | Agents `explorer`, `worker` | 有 | 无 | 无 |
 | DAG 面板(mod) | 有 | 无 | 无 |
@@ -208,7 +208,7 @@ Pota 把数据放在 `POTA_HOME`(默认 `~/.pota`)下，由所有 host 的 plugi
 
 ## Claude Code DAG Panel
 
-Claude Code 桌面版会把当前 Pota goal 显示为按 wave 分列的 DAG 面板。它仅适用于 Claude Code,Codex 和 Antigravity 没有此功能。需要支持 mod 功能的 Claude Code(基于 Claude Code 2.1.325 的 mod API 编写);在终端等无法绘制图形的 surface 上改为文字列表。
+Claude Code 桌面版会把当前 Pota goal 显示为按 wave 分列的 DAG 面板。Claude Code 使用自己的 mod 面板(`/dag`)。自 2.3.0 起,Antigravity 和 Codex/ChatGPT Desktop 也通过 `open_pota_dag` 工具打开的 MCP App 显示同一个 DAG,该工具会在 `goal start` 之后自动运行,也可以通过 `dag` skill(Antigravity `/dag`、Codex `$dag`)打开。需要支持 mod 功能的 Claude Code(基于 Claude Code 2.1.325 的 mod API 编写);在终端等无法绘制图形的 surface 上改为文字列表。
 
 - 用 `/dag [previous|current|next|all|refresh|close]` 打开面板。视图有上一个、当前、下一个、全部。默认是全部(all)视图,其余为可选项。已完成的连线为实线,进行中的连线为虚线并带移动的点。
 - 在 `pota goal start` 和 `pota goal replan` 之后自动打开一次。关闭后,同一个 goal 不会再自动打开。
@@ -223,7 +223,7 @@ Pota 支持 Antigravity CLI(`agy`)，不支持 Antigravity IDE。plugin 的 mani
 - `write_to_file`、`replace_file_content`、`multi_replace_file_content` 的 `PostToolUse` 运行 comment checker 和 goal 提醒，结果在下一个 `PreInvocation` 加入。
 - 活动 goal 还有未完成的 task 时，`Stop` 让 agent 继续工作。没有 `SubagentStop`。
 
-skills 以 `/pota-plan`、`/pota-work`、`/pota-review`、`/pota-memory` 调用；workflows 不是 Antigravity plugin 的组成部分。adapter 依据 Antigravity 的 hook 文档实现，在真实 `agy` session 中的行为尚未验证。
+skills 以 `/pota-plan`、`/pota-work`、`/pota-review`、`/pota-memory`、`/dag` 调用；workflows 不是 Antigravity plugin 的组成部分。adapter 依据 Antigravity 的 hook 文档实现，在真实 `agy` session 中的行为尚未验证。
 
 ## Locale Policy
 

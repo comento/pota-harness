@@ -75,6 +75,9 @@ export function validateState(value) {
     if (task.designWaiver !== null && task.designWaiver !== undefined) requiredText(task.designWaiver, `task ${task.id} designWaiver`);
     if (task.modelHost !== null && task.modelHost !== undefined) validModelHost(task.modelHost, `task ${task.id} modelHost`);
     if (task.effectiveModel !== null && task.effectiveModel !== undefined) requiredText(task.effectiveModel, `task ${task.id} effectiveModel`);
+    if (task.approvalGate !== undefined && task.approvalGate !== null && typeof task.approvalGate !== "boolean") {
+      throw new Error(`task ${task.id} approvalGate must be a boolean`);
+    }
     validTimestamp(task.createdAt);
     validTimestamp(task.updatedAt);
   }
@@ -135,10 +138,18 @@ export function normalizeTask(task, index, defaultStatus, previousTaskId = null)
     designWaiver: null,
     modelHost: null,
     effectiveModel: null,
+    approvalGate: validApprovalGate(source.approvalGate, `tasks[${index}].approvalGate`),
     blocker: null,
     createdAt: timestamp(),
     updatedAt: timestamp(),
   };
+}
+
+// v3 하위 호환을 위해 누락되거나 null인 approvalGate는 false로 정규화한다.
+export function validApprovalGate(value, label = "approvalGate") {
+  if (value === undefined || value === null) return false;
+  if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
+  return value;
 }
 
 export function validTaskRoute(value, label = "route") {

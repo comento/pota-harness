@@ -22,6 +22,8 @@ node "<pluginRoot>/scripts/pota.mjs" goal cancel --quiet --root "<repoRoot>"
 - `active` is not a completion state. Successful completion or cancellation removes the user-home active state because completed evidence already lives in the plan document; paused and blocked state remains resumable.
 - User steering: classify it as `correction`, `addition`, or `redirect` (`pota://skills/pota-plan/request-brief.md`). Run `goal steer --kind correction --reason <text>` for a correction, or `goal replan --steer <addition|redirect> --reason <text>` for new or invalidated tasks; a redirect that touches completed work adds a re-verification task. First record `S<n>` in the plan's `## Request Brief` `Steering log`; from the second steering, or on a redirect, rewrite `Current request (as of S<n>)`. If the CLI refuses, fix the brief; never bypass it.
 - Resume a paused or blocked goal before folding new work into it with `goal replan`. Start a separate goal only when the user explicitly switches work.
+- Manual approval gates: when `pota goal task --status active` fails because a task has a manual approval gate (`approvalGate`), wait for explicit user approval before activating it, then clear or approve with `pota goal gate --task <id> --off` or `pota goal task --task <id> --status active --approve-gate`. Never bypass a manual approval gate without user confirmation.
+- When only gated tasks remain (`goal ready` lists ids under `gated` but none under `active` or `ready`), report the gated task ids to the user and wait; the user approves in the DAG panel or tells you to. Never run `--approve-gate` or `goal gate --off` unless the user says so in this conversation or approves in the DAG panel.
 
 ## Ownership and State Conflicts
 

@@ -1,12 +1,13 @@
 {
   "name": "pota",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "description": "Token-efficient agent harness with tool readiness for Codex, Claude Code, and Antigravity.",
   "author": {
     "name": "WkNam"
   },
   "skills": "./skills/",
   "hooks": "./hooks/codex.json",
+  "mcpServers": "./.codex-plugin/mcp.json",
   "interface": {
     "displayName": "Pota Harness",
     "shortDescription": "Memory, planning, tool readiness, and two-gate verification harness for agent teams.",

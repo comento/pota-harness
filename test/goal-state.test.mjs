@@ -8,13 +8,18 @@ import { dirname, join, resolve } from "node:path";
 import {
   assignTask,
   claimGoal,
+  currentTask,
   evaluateStop,
   goalStatePath,
+  pauseGoal,
   readGoalState,
   recordReceipt,
   replanGoal,
+  resumeGoal,
+  setTaskApprovalGate,
   setTaskStatus,
   startGoal,
+  toggleTaskApprovalGate,
   transitionGoal,
   verifyAndRecord,
   finishGoal,
@@ -22,6 +27,7 @@ import {
   worktreeId,
 } from "../scripts/pota-goal.mjs";
 import { runStateResult } from "../scripts/pota-state.mjs";
+import { contextResult } from "../scripts/pota-state-context.mjs";
 import { cleanupProjectPota } from "../scripts/pota-cleanup.mjs";
 
 const stateScript = resolve("scripts/pota-state.mjs");
@@ -1096,6 +1102,304 @@ test("post-tool-use reminds once per task and session-start carries a literal CL
     assert.ok(!context.includes(root), "the capsule must not repeat the repository path");
     const prompt = await runStateResult("user-prompt-submit", { root, payload, locale: "en_US" });
     assert.ok(!prompt.message.includes("Pota CLI:"));
+  });
+});
+
+test("approvalGate maintains v3 backward compatibility and rejects non-boolean values", async () => {
+  await withTempRoot(async (root) => {
+    await assert.rejects(
+      startGoal({ root, goal: "Bad gate", planId: "docs/plan/bad-gate.md", tasks: [{ id: "a", title: "A", approvalGate: "true" }] }),
+      /approvalGate must be a boolean/,
+    );
+    const started = await startGoal({
+      root,
+      goal: "Compat",
+      planId: "docs/plan/compat.md",
+      evidencePolicy: "declared",
+      tasks: [{ id: "first", title: "First", approvalGate: null }, { id: "second", title: "Second" }],
+    });
+    assert.equal(started.tasks[0].approvalGate, false);
+    assert.equal(started.tasks[1].approvalGate, false);
+    await assert.rejects(
+      replanGoal({ root, tasks: [{ id: "x", title: "X", approvalGate: 1 }] }),
+      /approvalGate must be a boolean/,
+    );
+
+    const legacy = JSON.parse(await readFile(goalStatePath(root), "utf8"));
+    for (const item of legacy.tasks) delete item.approvalGate;
+    await writeFile(goalStatePath(root), `${JSON.stringify(legacy, null, 2)}\n`);
+
+    const loaded = await readGoalState({ root });
+    assert.equal(loaded.schemaVersion, 3);
+    assert.equal("approvalGate" in loaded.tasks[0], false);
+    assert.equal("approvalGate" in goalStats(loaded, root).tasks[0], false);
+    assert.equal(evaluateStop(loaded).block, true);
+
+    await recordReceipt({ root, taskId: "first", kind: "moduleAcceptance", command: "check", exitCode: 0 });
+    await recordReceipt({ root, taskId: "first", kind: "surfaceIntegration", command: "check", exitCode: 0 });
+    const afterFirst = await setTaskStatus({ root, taskId: "first", status: "completed" });
+    assert.equal(afterFirst.tasks[1].status, "active");
+
+    const invalid = JSON.parse(await readFile(goalStatePath(root), "utf8"));
+    invalid.tasks[1].approvalGate = "yes";
+    await writeFile(goalStatePath(root), `${JSON.stringify(invalid, null, 2)}\n`);
+    await assert.rejects(readGoalState({ root }), /approvalGate must be a boolean/);
+  });
+});
+
+test("setTaskApprovalGate and toggleTaskApprovalGate enforce status rules, lock atomicity, and active-only advance", async () => {
+  await withTempRoot(async (root) => {
+    await startGoal({
+      root,
+      goal: "Gate mutations",
+      planId: "docs/plan/gate-mutations.md",
+      evidencePolicy: "declared",
+      tasks: [
+        { id: "first", title: "First", dependsOn: [], writeScope: ["src/a"] },
+        { id: "second", title: "Second", dependsOn: ["first"], writeScope: ["src/b"] },
+        { id: "third", title: "Third", dependsOn: ["first"], writeScope: ["src/c"] },
+      ],
+    });
+
+    await assert.rejects(setTaskApprovalGate(root, { taskId: "first", enabled: true }), /Cannot enable approval gate on active task first/);
+    await assert.rejects(toggleTaskApprovalGate(root, { taskId: "first" }), /Cannot enable approval gate on active task first/);
+
+    let state = await setTaskApprovalGate(root, { taskId: "second", enabled: true });
+    assert.equal(state.tasks.find((item) => item.id === "second").approvalGate, true);
+
+    // first 완료 시 게이트가 걸린 second를 건너뛰고 third를 자동 활성화한다.
+    await recordReceipt({ root, taskId: "first", kind: "moduleAcceptance", command: "check", exitCode: 0 });
+    await recordReceipt({ root, taskId: "first", kind: "surfaceIntegration", command: "check", exitCode: 0 });
+    state = await setTaskStatus(root, { taskId: "first", status: "completed" });
+    assert.equal(state.goal.status, "active");
+    assert.equal(state.tasks.find((item) => item.id === "second").status, "pending");
+    assert.equal(state.tasks.find((item) => item.id === "third").status, "active");
+
+    await assert.rejects(setTaskApprovalGate(root, { taskId: "first", enabled: false }), /Cannot change approval gate on completed task first/);
+    await assert.rejects(toggleTaskApprovalGate(root, { taskId: "first" }), /Cannot change approval gate on completed task first/);
+
+    // 동일 task에 대한 동시 toggle 호출이 락을 통해 유실 없이 직렬화된다.
+    await Promise.all([
+      toggleTaskApprovalGate(root, { taskId: "second" }),
+      toggleTaskApprovalGate(root, { taskId: "second" }),
+      toggleTaskApprovalGate(root, { taskId: "second" }),
+    ]);
+    state = await readGoalState({ root });
+    assert.equal(state.tasks.find((item) => item.id === "second").approvalGate, false);
+    assert.equal(state.tasks.find((item) => item.id === "second").status, "pending");
+
+    await toggleTaskApprovalGate(root, { taskId: "second" });
+    await recordReceipt({ root, taskId: "third", kind: "moduleAcceptance", command: "check", exitCode: 0 });
+    await recordReceipt({ root, taskId: "third", kind: "surfaceIntegration", command: "check", exitCode: 0 });
+    state = await setTaskStatus(root, { taskId: "third", status: "completed" });
+    assert.equal(state.goal.status, "active");
+    assert.equal(state.tasks.find((item) => item.id === "second").status, "pending");
+
+    // active 목표에서 마지막 게이트가 해제되면 ready task가 즉시 active로 전이한다.
+    state = await setTaskApprovalGate(root, { taskId: "second", enabled: false });
+    assert.equal(state.tasks.find((item) => item.id === "second").status, "active");
+    assert.equal(state.tasks.find((item) => item.id === "second").approvalGate, false);
+  });
+});
+
+test("setTaskStatus fails closed on gated tasks and clears approvalGate only after active guards pass", async () => {
+  await withTempRoot(async (root) => {
+    await startGoal({
+      root,
+      goal: "Fail-closed approval",
+      planId: "docs/plan/approve-gate.md",
+      evidencePolicy: "declared",
+      tasks: [
+        { id: "head", title: "Head", dependsOn: [] },
+        { id: "gated", title: "Gated", dependsOn: [], approvalGate: true, writeScope: ["src/gated"] },
+        { id: "after", title: "After", dependsOn: ["gated"], approvalGate: true, writeScope: ["src/after"] },
+      ],
+    });
+
+    await assert.rejects(
+      setTaskStatus(root, { taskId: "gated", status: "active" }),
+      /Task gated has a manual approval gate\. Run 'pota goal gate --task gated --off' or pass --approve-gate\./,
+    );
+    await assert.rejects(
+      setTaskStatus(root, { taskId: "gated", status: "blocked", reason: "w", approveGate: true }),
+      /--approve-gate can only be used when transitioning a task to active/,
+    );
+    // head가 writeScope 없이 active인 상태에서 --approve-gate는 동시성 가드에 의해 거부되고 approvalGate도 유지된다.
+    await assert.rejects(setTaskStatus(root, { taskId: "gated", status: "active", approveGate: true }), /without writeScope/);
+    // 의존성 미충족 상태에서도 approvalGate는 지워지지 않는다.
+    await assert.rejects(setTaskStatus(root, { taskId: "after", status: "active", approveGate: true }), /waiting for: gated/);
+    let state = await readGoalState({ root });
+    assert.equal(state.tasks.find((item) => item.id === "gated").approvalGate, true);
+    assert.equal(state.tasks.find((item) => item.id === "after").approvalGate, true);
+
+    await recordReceipt({ root, taskId: "head", kind: "moduleAcceptance", command: "check", exitCode: 0 });
+    await recordReceipt({ root, taskId: "head", kind: "surfaceIntegration", command: "check", exitCode: 0 });
+    state = await setTaskStatus(root, { taskId: "head", status: "completed" });
+    assert.equal(state.goal.status, "active");
+    assert.equal(state.tasks.find((item) => item.id === "gated").status, "pending");
+
+    state = await setTaskStatus(root, { taskId: "gated", status: "active", approveGate: true });
+    assert.equal(state.tasks.find((item) => item.id === "gated").status, "active");
+    assert.equal(state.tasks.find((item) => item.id === "gated").approvalGate, false);
+  });
+});
+
+test("evaluateStop allows stop and hooks stay bounded while waiting on manual approval gates", async () => {
+  await withTempRoot(async (root) => {
+    const started = await startGoal({
+      root,
+      goal: "Awaiting gate",
+      planId: "docs/plan/awaiting-gate.md",
+      ownerSessionId: "gate-session",
+      evidencePolicy: "declared",
+      tasks: [
+        { id: "gate-one", title: "Gate One", dependsOn: [], approvalGate: true, writeScope: ["src/one"] },
+        { id: "gate-two", title: "Gate Two", dependsOn: [], approvalGate: true, writeScope: ["src/two"] },
+      ],
+    });
+    assert.equal(started.goal.status, "active");
+    assert.deepEqual(evaluateStop(started), { block: false, reason: "Awaiting manual approval gate on ready tasks" });
+
+    const stop = await runStateResult("stop", { root, locale: "en-US", payload: { cwd: root, session_id: "gate-session" } });
+    assert.deepEqual(stop.hookOutput, { continue: true });
+
+    const upsEn = (await runStateResult("user-prompt-submit", {
+      root, locale: "en-US", payload: { cwd: root, session_id: "gate-session", prompt: "status" },
+    })).hookOutput.hookSpecificOutput.additionalContext;
+    assert.match(upsEn, /gate-one/);
+    assert.match(upsEn, /gate-two/);
+    assert.ok(upsEn.length <= 700, `upsEn length ${upsEn.length}`);
+
+    const upsKo = (await runStateResult("user-prompt-submit", {
+      root, locale: "ko-KR", payload: { cwd: root, session_id: "gate-session", prompt: "상태" },
+    })).hookOutput.hookSpecificOutput.additionalContext;
+    assert.match(upsKo, /gate-one/);
+    assert.match(upsKo, /gate-two/);
+    assert.ok(upsKo.length <= 700, `upsKo length ${upsKo.length}`);
+
+    // 모든 task가 완료됐거나 ready가 없는 경우에는 계속 Stop 훅이 block해야 한다.
+    await setTaskStatus(root, { taskId: "gate-one", status: "active", approveGate: true });
+    await setTaskStatus(root, { taskId: "gate-two", status: "blocked", reason: "blocked" });
+    await recordReceipt({ root, taskId: "gate-one", kind: "moduleAcceptance", command: "check", exitCode: 0 });
+    await recordReceipt({ root, taskId: "gate-one", kind: "surfaceIntegration", command: "check", exitCode: 0 });
+    await setTaskStatus(root, { taskId: "gate-one", status: "completed" });
+    const blockedState = await readGoalState({ root });
+    assert.equal(blockedState.goal.status, "blocked");
+    await transitionGoal({ root, status: "active" });
+    assert.equal(evaluateStop(await readGoalState({ root })).block, true);
+  });
+
+  // 최대 길이 planId/taskId + 다수 게이트 대기 상태에서도 700자 예산을 넘지 않아야 한다.
+  await withTempRoot(async (root) => {
+    const exactPlanId = "p".repeat(96);
+    const exactTaskId = "t".repeat(64);
+    await startGoal({
+      root,
+      goal: "G".repeat(400),
+      planId: exactPlanId,
+      ownerSessionId: "budget-gate",
+      tasks: Array.from({ length: 20 }, (_, index) => ({
+        id: index === 0 ? exactTaskId : `long-task-identifier-${String(index + 1).padStart(2, "0")}`,
+        title: `Title ${index + 1} ${"x".repeat(120)}`,
+        dependsOn: [],
+        approvalGate: true,
+        writeScope: [`src/part-${index + 1}`],
+      })),
+    });
+    for (const locale of ["en-US", "ko-KR"]) {
+      const ctx = (await runStateResult("user-prompt-submit", {
+        root, locale, payload: { cwd: root, session_id: "budget-gate", prompt: "continue" },
+      })).hookOutput.hookSpecificOutput.additionalContext;
+      assert.ok(ctx.length <= 700, `${locale} worst-case gated capsule was ${ctx.length} chars`);
+      assert.ok(ctx.includes(exactTaskId), `${locale} capsule lost exact gated task id`);
+      assert.match(ctx, locale === "en-US" ? /Do not release the gate yourself/ : /게이트를 직접 해제하지 말고/, `${locale} capsule lost the user-approval rule`);
+    }
+  });
+});
+
+test("gated ready tasks are never presented as work to continue and the capsule leaves the gate to the user", async () => {
+  const gatedState = (tasks) => ({
+    goal: { status: "active", title: "Gate preference", planId: "docs/plan/gate-preference.md" },
+    tasks: tasks.map((task) => ({ dependsOn: [], status: "pending", approvalGate: false, ...task })),
+  });
+
+  // 게이트 ready task가 먼저 나와도 활성화할 수 있는 비게이트 ready task가 current다.
+  const mixed = gatedState([
+    { id: "deploy", title: "Deploy", approvalGate: true },
+    { id: "other", title: "Other" },
+  ]);
+  assert.equal(currentTask(mixed).id, "other");
+  const mixedStop = evaluateStop(mixed);
+  assert.equal(mixedStop.block, true);
+  assert.match(mixedStop.reason, /Continue current task other \(Other\)/);
+  assert.doesNotMatch(mixedStop.reason, /deploy/);
+  for (const ko of [false, true]) {
+    const capsule = contextResult({ ko, state: mixed, event: "user-prompt-submit" }).message;
+    assert.match(capsule, ko ? /현재: other \(Other\)/ : /Current: other \(Other\)/);
+    assert.doesNotMatch(capsule, ko ? /현재: deploy/ : /Current: deploy/);
+  }
+
+  // active task가 있으면 게이트 ready task와 무관하게 Stop은 active 작업을 계속하게 한다.
+  const withActive = gatedState([
+    { id: "deploy", title: "Deploy", approvalGate: true },
+    { id: "build", title: "Build", status: "active" },
+  ]);
+  assert.equal(currentTask(withActive).id, "build");
+  const activeStop = evaluateStop(withActive);
+  assert.equal(activeStop.block, true);
+  assert.match(activeStop.reason, /Continue current task build/);
+
+  // 모든 ready task가 게이트면 표시용 current만 남고 Stop은 통과하며, 캡슐은 사용자 승인을 기다리라고 말한다.
+  const allGated = gatedState([
+    { id: "deploy", title: "Deploy", approvalGate: true },
+    { id: "after", title: "After", dependsOn: ["deploy"] },
+  ]);
+  assert.equal(currentTask(allGated).id, "deploy");
+  assert.deepEqual(evaluateStop(allGated), { block: false, reason: "Awaiting manual approval gate on ready tasks" });
+  for (const event of ["user-prompt-submit", "session-start"]) {
+    const en = contextResult({ ko: false, state: allGated, event }).message;
+    assert.doesNotMatch(en, /Current:|Exact task:|current task below/, `${event} en presents the gated task as current`);
+    assert.match(en, /Awaiting user approval: deploy\. Do not release the gate yourself; wait until the user approves in the DAG panel or asks you to\./);
+    assert.doesNotMatch(en, /gate --off|approve-gate/, `${event} en hands the release command to the model`);
+    assert.doesNotMatch(en, /resume deploy/);
+    const ko = contextResult({ ko: true, state: allGated, event }).message;
+    assert.doesNotMatch(ko, /현재:|정확한 current task|아래 current task/, `${event} ko presents the gated task as current`);
+    assert.match(ko, /사용자 승인 대기: deploy\. 게이트를 직접 해제하지 말고 사용자가 DAG 패널에서 승인하거나 요청할 때까지 기다리세요\./);
+    assert.doesNotMatch(ko, /gate --off|approve-gate/);
+  }
+});
+
+test("pauseGoal and resumeGoal stay orthogonal with gated tasks", async () => {
+  await withTempRoot(async (root) => {
+    await startGoal({
+      root,
+      goal: "Pause resume orthogonality",
+      planId: "docs/plan/pause-resume-gate.md",
+      tasks: [{ id: "gated", title: "Gated", approvalGate: true }],
+    });
+
+    let state = await pauseGoal(root, { reason: "Waiting on review" });
+    assert.equal(state.goal.status, "paused");
+    assert.equal(state.tasks[0].status, "pending");
+    assert.equal(state.tasks[0].approvalGate, true);
+
+    // 게이트가 켜진 상태로 resume해도 task가 자동 활성화되지 않아야 한다.
+    state = await resumeGoal(root);
+    assert.equal(state.goal.status, "active");
+    assert.equal(state.tasks[0].status, "pending");
+    assert.equal(state.tasks[0].approvalGate, true);
+
+    // paused 상태에서 게이트를 끄면 paused 상태가 유지되고, 이후 resume 시 task가 활성화된다.
+    state = await pauseGoal({ root });
+    assert.equal(state.goal.status, "paused");
+    state = await setTaskApprovalGate(root, { taskId: "gated", enabled: false });
+    assert.equal(state.goal.status, "paused");
+    assert.equal(state.tasks[0].status, "pending");
+    assert.equal(state.tasks[0].approvalGate, false);
+
+    state = await resumeGoal({ root });
+    assert.equal(state.goal.status, "active");
+    assert.equal(state.tasks[0].status, "active");
   });
 });
 

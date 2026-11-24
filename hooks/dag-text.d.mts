@@ -1,5 +1,5 @@
 import type { DagAgent, DagSnapshot, DagTask } from "../types";
-import type { DagModel, DagNode, DagSummary, DagWave, TaskState, ViewId } from "./dag-model.mjs";
+import type { DagModel, DagNode, DagSummary, DagTaskEnrichment, DagWave, TaskState, ViewId } from "./dag-model.mjs";
 
 export type Locale = "ko" | "en";
 export type Tone = "plain" | "dim" | "ok" | "run" | "ready" | "bad";
@@ -57,6 +57,27 @@ export type Messages = {
   recorded: string;
   blocker: string;
   none: string;
+  tabs: Record<"dag" | "diff" | "plan" | "stats", string>;
+  pause: string;
+  resume: string;
+  gateOn: string;
+  gateOff: string;
+  gateBadge: string;
+  inspector: string;
+  receipts: string;
+  writeScopeDiff: string;
+  followUp: string;
+  resolvedModel: string;
+  tokens: string;
+  cacheHit: string;
+  noDiff: string;
+  noPlan: string;
+  noReceipts: string;
+  sensitiveFile: string;
+  agent: string;
+  elapsedCol: string;
+  passes: string;
+  bottleneck: string;
 };
 
 export declare function messages(locale: Locale): Messages;
@@ -73,10 +94,11 @@ export type DetailSections = {
   more: number;
   strays: { id: string; name: string; activity: string }[];
 };
+export type DagTaskDetailInput = DagTask & DagTaskEnrichment;
 export declare function detailSections(snapshot: DagSnapshot, agentTask: Record<string, string>, agents: readonly DagAgent[], ctx: TextContext): DetailSections;
 export declare function runningTaskRows(task: DetailSections["running"][number], locale: Locale): Row[];
 export declare function restRows(sections: DetailSections, locale: Locale): Row[];
-export declare function taskDetail(task: DagTask, locale: Locale): string[];
+export declare function taskDetail(task: DagTaskDetailInput, locale: Locale): string[];
 export declare function runningRows(snapshot: DagSnapshot, agentTask: Record<string, string>, agents: readonly DagAgent[], ctx: TextContext): Row[];
 export declare function cellWidth(text: string): number;
 export declare function truncateCells(text: string, columns: number): string;
