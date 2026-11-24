@@ -60,6 +60,7 @@ test("both marketplaces are pota-harness and list the repository root as the plu
   const claude = readJson(".claude-plugin/marketplace.json");
   assert.equal(claude.name, "pota-harness");
   assert.deepEqual(claude.plugins.map((plugin) => [plugin.name, plugin.source]), [["pota", "./"]]);
+  assert.equal(claude.plugins[0].author?.name, "WkNam");
   const codex = readJson(".agents/plugins/marketplace.json");
   assert.equal(codex.name, "pota-harness");
   assert.deepEqual(codex.plugins.map((plugin) => [plugin.name, plugin.source]), [["pota", { source: "url", url: "./" }]]);
@@ -68,6 +69,8 @@ test("both marketplaces are pota-harness and list the repository root as the plu
 
 test("the Claude manifest names the agents and the mod type contract, and hooks.json loads the mod", () => {
   const manifest = readJson(".claude-plugin/plugin.json");
+  assert.equal(manifest.icon, "./assets/logo.svg");
+  assert.ok(isTracked(manifest.icon), `${manifest.icon} is tracked`);
   assert.deepEqual(manifest.agents, ["./claude/agents/explorer.md", "./claude/agents/worker.md"]);
   for (const path of [...manifest.agents, manifest.types]) assert.ok(isTracked(path), `${path} is tracked`);
   const hooks = readJson("hooks/hooks.json");
