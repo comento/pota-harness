@@ -581,6 +581,23 @@ test("Antigravity routing surfaces document default invoke_subagent and optional
   }
 });
 
+test("Antigravity DAG auto-open rule is documented across plan, work, rules, and common guidance while skipping Claude Code and Codex", async () => {
+  const plan = await readFile("skills/pota-plan/SKILL.md", "utf8");
+  assert.match(plan, /Antigravity[^\n]*open_pota_dag[^\n]*skip on Claude Code and Codex/i);
+  assert.match(plan, /open_pota_dag[^\n]*goal start/i);
+
+  const work = await readFile("skills/pota-work/SKILL.md", "utf8");
+  assert.match(work, /Antigravity[^\n]*open_pota_dag[^\n]*skip on Claude Code and Codex/i);
+  assert.match(work, /open_pota_dag[^\n]*resuming or opening an active goal/i);
+
+  for (const path of ["skills/pota-plan/planning-rules.md", "docs/model-guidance/README.md"]) {
+    const content = await readFile(path, "utf8");
+    assert.match(content, /On Antigravity[^\n]*open_pota_dag[^\n]*skip on Claude Code[^\n]*and Codex/i, `${path} host scope`);
+    assert.match(content, /main agent calls `open_pota_dag`[^\n]*goal start[^\n]*resuming an active goal/i, `${path} trigger`);
+    assert.match(content, /never fail(?:ing)? or block(?:ing)? if the MCP server is unavailable/i, `${path} non-blocking`);
+  }
+});
+
 async function withTempRoot(run) {
   const root = await mkdtemp(join(tmpdir(), "pota-token-efficiency-"));
   const stateHome = `${root}-home`;

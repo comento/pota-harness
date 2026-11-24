@@ -5,6 +5,11 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createDagMcpServer } from "./pota-dag-mcp-core.mjs";
+import {
+  clearDagMcpServerPid,
+  ensureAntigravityDagMcp,
+  recordDagMcpServerPid,
+} from "./pota-state-antigravity.mjs";
 
 export function runStdioServer({
   stdin = process.stdin,
@@ -145,5 +150,20 @@ function isCliEntry() {
 }
 
 if (isCliEntry()) {
-  await runStdioServer();
+  if (process.argv[2] === "ensure") {
+    const result = await ensureAntigravityDagMcp({ force: process.argv.includes("--force") }).catch(() => ({
+      status: "failed",
+      reason: "unexpected-error",
+    }));
+    console.log(JSON.stringify(result));
+  } else {
+    process.on("uncaughtException", () => {});
+    process.on("unhandledRejection", () => {});
+    await recordDagMcpServerPid().catch(() => {});
+    try {
+      await runStdioServer();
+    } finally {
+      await clearDagMcpServerPid().catch(() => {});
+    }
+  }
 }
