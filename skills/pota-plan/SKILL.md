@@ -5,17 +5,17 @@ description: Use before non-trivial implementation, refactoring, migrations, deb
 
 # Pota Plan
 
-Use before non-trivial implementation, refactoring, migrations, debugging, or repository automation, or when the user asks for planning, design, "설계부터", "신중하게", "꼼꼼히", or coordinated agents. Plans cut execution tokens: topic in `PLAN.md`, details in `docs/plan/<topic>.md`, never only in chat.
+Use before non-trivial changes, debugging, or automation, or when asked for planning, design, "설계부터", "신중하게", "꼼꼼히", or coordinated agents. Topic in `PLAN.md`, details in `docs/plan/<topic>.md`, never only in chat.
 
 ## Re-entry and Required References
 
-At the start and after compaction, restart, or handoff, restore context in this order: optional root `MEMORY.md` → `pota-plan` → the active plan → current-task references → model guidance recorded by the plan. Missing `MEMORY.md` is not an inconsistency: continue without repository memory; never invoke another memory service. If persisted state names a plan or task and that required reference is missing, unreadable, or inconsistent, do not explore, edit, delegate, or complete work; report or record a blocker first. No read receipts: state and bound tool evidence are the authority.
+On start, compaction, restart, or handoff, restore: optional root `MEMORY.md` → `pota-plan` → active plan → current-task references → plan model guidance. Missing `MEMORY.md` is fine; never invoke another memory service. If a required reference is missing, unreadable, or inconsistent, do not explore, edit, delegate, or complete; report or record a blocker first. State and bound tool evidence are authoritative.
 
 ## Runtime Location
 
 `pluginRoot` is this session's Pota plugin copy: the parent of the `scripts` directory in the session-start `Pota CLI:` line; without that line, this file's `../..` (then tell the user Pota hooks are inactive). Never search the target repository for Pota files or derive `pluginRoot` from the cwd. If `pluginRoot` is missing or unreadable, stop and have the user reinstall or update Pota with the host's plugin command; never repair from another copy.
 
-Plans use logical IDs such as `pota://templates/work-plan.md`, resolved through `pluginRoot`. The session-start hook prints a ready prefix `Pota CLI: node "<abs>/scripts/pota.mjs" goal <command>`: copy it literally into every command and never store it in a shell variable (shell variables do not persist between tool calls). `--root` may be omitted when the cwd is inside the repository (it resolves via `HARNESS_REPO_ROOT`, else the nearest `.git` ancestor).
+Resolve `pota://...` IDs via `pluginRoot`. Copy the session-start `Pota CLI:` prefix literally (never use shell variables; they do not persist). Omit `--root` inside the repo (`HARNESS_REPO_ROOT`, else `.git` ancestor).
 
 ## Reference Files
 
@@ -49,7 +49,7 @@ Record three triage checkpoints: request (provisional), planning (after explorat
 node "<pluginRoot>/scripts/pota.mjs" goal start --root "<repoRoot>" --goal "<objective>" --plan "docs/plan/<topic>.md" --tasks '[{"id":"triage-plan","title":"Run planned triage and finalize the plan","requiredEvidence":["planArtifact","triageDecision"]},{"id":"implement","title":"Implement the finalized plan"},{"id":"verify","title":"Verify and review the result"}]' --criteria "<completion criterion>" --session "<current session_id>"
 ```
 
-   Pass `--session` only with an ID the surface exposes; never invent one. Fold new work into an unfinished goal with `goal replan` (resume a paused/blocked goal first), never cancel it; start a separate goal only when the user explicitly switches work. When a hook reports another session owns the goal you continue, run `goal claim --session <id>` with the ID shown.
+   On Antigravity (only when `open_pota_dag` is available; skip on Claude Code and Codex), call `open_pota_dag` right after `goal start` to open the Pota DAG panel. Pass `--session` only with an ID the surface exposes; never invent one. Fold new work into an unfinished goal with `goal replan` (resume a paused/blocked goal first), never cancel it; start a separate goal only when the user explicitly switches work. When a hook reports another session owns the goal you continue, run `goal claim --session <id>` with the ID shown.
 5. Run `triage-plan`: read the picked notes and plans and installed model guidance, run `toolcheck --root "<repoRoot>"`, and explore with focused search and LSP/symbol tools. If tools are missing, ask the user once whether to install them.
 6. Split the whole work into tasks each verifiable with two checks, each with `dependsOn` and `writeScope` in the `--tasks` JSON and named handoff files for cross-task data (`delegation.md`); design the test contract (requirements, invariants, boundaries, failure modes) and dry-run/check modes.
 7. Update the plan with route, checked Heavy signals, tool readiness, delegation, verification commands, stable IDs, and fail-closed required evidence (`planning-rules.md`). Mark it `decision-complete for implementation` and call `update_plan` again.

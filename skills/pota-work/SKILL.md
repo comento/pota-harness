@@ -5,13 +5,13 @@ description: Use after pota-plan to execute the next incomplete docs/plan module
 
 # Pota Work
 
-Implement a `pota-plan` plan, never as a planning shortcut: one module task at a time, advancing the goal until every task and the goal-level final review complete. Quick Path work (criteria in `pota-plan`) has no plan or goal: implement, run one focused check plus the project's normal check, and report; if any Quick Path criterion fails, escalate to Light Path (create plan + goal) before further edits.
+Implement a `pota-plan` plan one task at a time until all tasks and final review complete. Quick Path (criteria in `pota-plan`) has no plan or goal: implement, run one focused check and the normal check, and report; if any criterion fails, escalate to Light Path (plan + goal) before further edits.
 
-The user-called/main agent orchestrates (selects, assigns, verifies, records). Implementation edits go to `worker` whenever subagent tools are available; otherwise the main agent takes over and records it. Answer side questions briefly and resume the current task unless the user asks to pause, stop, or switch.
+Main agent orchestrates; `worker` does implementation edits when subagent tools exist, else main agent takes over and records it. Answer side questions briefly and resume the current task unless told to pause, stop, or switch.
 
 ## Re-entry and Required References
 
-At the start and after compaction, restart, delegation, or handoff, restore context in this order: optional root `MEMORY.md` → `pota-work` → the active plan → current-task references → model guidance recorded by the plan. Confirm plan task, persisted current task, and assignment agree. Missing `MEMORY.md` is not an inconsistency. If state, plan, assignment, or another required reference is missing, unreadable, or inconsistent, do not edit, delegate, record completion evidence, or complete work; report a blocker. No read receipts: state and fresh tool-bound evidence are the authority. A delegated agent restores on its own entry; the orchestrator rereads changed references only.
+On start, compaction, restart, delegation, or handoff, restore: optional root `MEMORY.md` → `pota-work` → active plan → current-task references → plan model guidance. Confirm plan, state, and assignment agree. Missing `MEMORY.md` is fine. If a required reference is missing, unreadable, or inconsistent, do not edit, delegate, or complete; report a blocker. State and fresh bound evidence are authoritative. Delegated agents restore on entry; the orchestrator rereads changed references only.
 
 ## Runtime Location
 
@@ -47,7 +47,7 @@ Read a reference only when the selected path or situation requires it (Quick and
 ## Procedure
 
 1. Read `MEMORY.md` when present, `PLAN.md`, the plan, relevant memory notes, and the `pota://docs/model-guidance/*.md` inputs it records.
-2. Read the current task with `goal task status`, then run `goal ready`: activate (`goal task --task <id> --status active`) and delegate independent ready tasks to parallel workers in the same worktree with disjoint `writeScope` and `--watch` inside it (`delegation.md`); rerun `goal ready` after each completion. Fold new requests in with `goal replan`, never cancel; classify user steering per `pota://skills/pota-plan/request-brief.md`; with no goal, create one from the plan.
+2. Read the current task with `goal task status`, then run `goal ready`: activate (`goal task --task <id> --status active`) and delegate independent ready tasks to parallel workers in the same worktree with disjoint `writeScope` and `--watch` inside it (`delegation.md`); rerun `goal ready` after each completion. Fold new requests in with `goal replan`, never cancel; classify user steering per `pota://skills/pota-plan/request-brief.md`; with no goal, create one from the plan. On Antigravity (only when `open_pota_dag` is available; skip on Claude Code and Codex), call `open_pota_dag` when resuming or opening an active goal.
 3. Confirm tool readiness (ask once before installing missing tools), route, and the request and planning checkpoints; inspect exact files, callers, and tests and record the code checkpoint just before the first edit (pending blocks mutation).
 4. Use the test contract first: spend reasoning on requirements, invariants, boundaries, and failure modes, write focused tests, confirm the intended failure, then give the `worker` only the contract, failing evidence, file scope, and constraints; require the minimum implementation.
 5. Before mutating external state, run the recorded dry-run or check (or record its absence).

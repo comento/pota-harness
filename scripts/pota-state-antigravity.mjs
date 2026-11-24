@@ -15,8 +15,14 @@ export const SESSION_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 export const WORKSPACE_REGISTRY_SCHEMA_VERSION = 1;
 export const WORKSPACE_MAX_ENTRIES = 16;
 export const WORKSPACE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+export const DAG_MCP_SERVER_STATE_SCHEMA_VERSION = 1;
+export const DAG_MCP_REFRESH_THROTTLE_MS = 30_000;
+export const DAG_MCP_REFRESH_TIMEOUT_MS = 1_500;
+export const DAG_MCP_SERVER_NAME = "pota_pota-dag";
 const WORKSPACE_REGISTRY_MAX_BYTES = 64 * 1024;
+const DAG_MCP_SERVER_STATE_MAX_BYTES = 64 * 1024;
 const WORKSPACE_DEDUPE_MS = 30_000;
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 const SESSION_FILE_NAME = /^[0-9a-f]{16}\.json$/;
 const ADAPTER_EVENTS = new Set(["session-start", "pre-invocation", "post-tool-use", "stop"]);
 
@@ -39,6 +45,7 @@ export async function runAntigravityHook(event, input, { env = process.env, now 
     if (!payload.cwd) return {};
     if (event === "session-start" || (event === "pre-invocation" && input.invocationNum === 0)) {
       await recordActiveWorkspace({ workspacePath: payload.cwd, conversationId: input.conversationId, env, now }).catch(() => {});
+      await ensureAntigravityDagMcp({ env, now }).catch(() => {});
     }
     const session = sessionStore(input.conversationId, { env, now });
     if (event === "session-start") {
@@ -243,17 +250,6 @@ export async function recordActiveWorkspace({ workspacePath, conversationId = nu
 
   const home = potaHome(env);
   const path = workspaceRegistryPath(env);
-  const directory = dirname(path);
-  await ensureDirectory(home, directory);
-  await assertNoSymlinkComponents(home, path);
-  const existing = await lstat(path).catch((error) => {
-    if (error?.code === "ENOENT") return null;
-    throw error;
-  });
-  if (existing && !existing.isFile()) {
-    throw new Error(`Workspace registry path is not a regular file: ${path}`);
-  }
-
   const nextEntry = {
     root: resolvedRoot,
     conversationId: normConversationId,
@@ -265,15 +261,218 @@ export async function recordActiveWorkspace({ workspacePath, conversationId = nu
   ].slice(0, WORKSPACE_MAX_ENTRIES);
   const nextPayload = { schemaVersion: WORKSPACE_REGISTRY_SCHEMA_VERSION, workspaces };
 
+  await writeDagJsonFile(home, path, nextPayload, "Workspace registry path");
+  return { recorded: true, root: resolvedRoot, path };
+}
+
+export function dagMcpServerStatePath(env = process.env) {
+  return join(potaHome(env), "hosts", "antigravity-dag", "server.json");
+}
+
+export async function readDagMcpServerState({ env = process.env } = {}) {
+  const empty = {
+    schemaVersion: DAG_MCP_SERVER_STATE_SCHEMA_VERSION,
+    pid: null,
+    startedAt: null,
+    lastRefreshAt: null,
+  };
+  try {
+    const home = potaHome(env);
+    const path = dagMcpServerStatePath(env);
+    await assertNoSymlinkComponents(home, path);
+    const stat = await lstat(path);
+    if (!stat.isFile() || stat.size > DAG_MCP_SERVER_STATE_MAX_BYTES) return empty;
+    const parsed = JSON.parse(await readFile(path, "utf8"));
+    if (!isRecord(parsed) || parsed.schemaVersion !== DAG_MCP_SERVER_STATE_SCHEMA_VERSION) {
+      return empty;
+    }
+    return {
+      schemaVersion: DAG_MCP_SERVER_STATE_SCHEMA_VERSION,
+      pid: Number.isInteger(parsed.pid) && parsed.pid > 0 ? parsed.pid : null,
+      startedAt: typeof parsed.startedAt === "string" && Number.isFinite(Date.parse(parsed.startedAt)) ? parsed.startedAt : null,
+      lastRefreshAt: typeof parsed.lastRefreshAt === "string" && Number.isFinite(Date.parse(parsed.lastRefreshAt)) ? parsed.lastRefreshAt : null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+export async function recordDagMcpServerPid({ pid = process.pid, env = process.env, now = new Date() } = {}) {
+  if (!Number.isInteger(pid) || pid <= 0) return { recorded: false, reason: "invalid-pid" };
+  const nowDate = now instanceof Date ? now : new Date(now);
+  if (!Number.isFinite(nowDate.getTime())) return { recorded: false, reason: "invalid-time" };
+
+  const current = await readDagMcpServerState({ env });
+  const path = dagMcpServerStatePath(env);
+  await writeDagJsonFile(
+    potaHome(env),
+    path,
+    {
+      schemaVersion: DAG_MCP_SERVER_STATE_SCHEMA_VERSION,
+      pid,
+      startedAt: nowDate.toISOString(),
+      lastRefreshAt: current.lastRefreshAt,
+    },
+    "DAG MCP server state path",
+  );
+  return { recorded: true, pid, path };
+}
+
+export async function clearDagMcpServerPid({ pid = process.pid, env = process.env } = {}) {
+  if (!Number.isInteger(pid) || pid <= 0) return { cleared: false, reason: "invalid-pid" };
+  const current = await readDagMcpServerState({ env });
+  if (current.pid !== pid) {
+    return { cleared: false, reason: current.pid === null ? "not-owned" : "pid-mismatch" };
+  }
+  const path = dagMcpServerStatePath(env);
+  await writeDagJsonFile(
+    potaHome(env),
+    path,
+    {
+      schemaVersion: DAG_MCP_SERVER_STATE_SCHEMA_VERSION,
+      pid: null,
+      startedAt: current.startedAt,
+      lastRefreshAt: current.lastRefreshAt,
+    },
+    "DAG MCP server state path",
+  );
+  return { cleared: true, pid, path };
+}
+
+// Antigravity의 pota_pota-dag MCP 서버 생존 여부를 확인하고, 죽었을 때만 loopback RefreshMcpServers로 복구한다.
+export async function ensureAntigravityDagMcp({
+  env = process.env,
+  now = new Date(),
+  force = false,
+  fetchImpl = globalThis.fetch,
+  isPidAlive = defaultIsPidAlive,
+  timeoutMs = DAG_MCP_REFRESH_TIMEOUT_MS,
+} = {}) {
+  try {
+    if (typeof env?.POTA_ANTIGRAVITY_DAG_REFRESH === "string" && /^(0|false|off|no)$/i.test(env.POTA_ANTIGRAVITY_DAG_REFRESH.trim())) {
+      return { status: "skipped", reason: "disabled" };
+    }
+    const token = typeof env?.ANTIGRAVITY_CSRF_TOKEN === "string" ? env.ANTIGRAVITY_CSRF_TOKEN.trim() : "";
+    if (!token) {
+      return { status: "skipped", reason: "no-csrf-token" };
+    }
+
+    const state = await readDagMcpServerState({ env });
+    if (Number.isInteger(state.pid) && state.pid > 0) {
+      let alive = false;
+      try {
+        alive = Boolean(isPidAlive(state.pid));
+      } catch {
+        alive = false;
+      }
+      if (alive) return { status: "alive", pid: state.pid };
+    }
+
+    const nowDate = now instanceof Date ? now : new Date(now);
+    const nowMs = nowDate.getTime();
+    if (!Number.isFinite(nowMs)) return { status: "failed", reason: "invalid-time" };
+    if (!force && state.lastRefreshAt) {
+      const lastMs = Date.parse(state.lastRefreshAt);
+      if (Number.isFinite(lastMs)) {
+        const ageMs = nowMs - lastMs;
+        if (ageMs >= 0 && ageMs < DAG_MCP_REFRESH_THROTTLE_MS) {
+          return { status: "throttled" };
+        }
+      }
+    }
+
+    const rawAddr = typeof env?.ANTIGRAVITY_LS_ADDRESS === "string" && env.ANTIGRAVITY_LS_ADDRESS.trim().length > 0
+      ? env.ANTIGRAVITY_LS_ADDRESS.trim()
+      : "localhost:5387";
+    const url = parseLoopbackAddress(rawAddr);
+    if (!url) {
+      return { status: "skipped", reason: "non-loopback-address" };
+    }
+
+    await writeDagJsonFile(
+      potaHome(env),
+      dagMcpServerStatePath(env),
+      {
+        schemaVersion: DAG_MCP_SERVER_STATE_SCHEMA_VERSION,
+        pid: null,
+        startedAt: state.startedAt,
+        lastRefreshAt: nowDate.toISOString(),
+      },
+      "DAG MCP server state path",
+    ).catch(() => {});
+
+    if (typeof fetchImpl !== "function") {
+      return { status: "failed", reason: "no-fetch" };
+    }
+
+    const effectiveTimeoutMs = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DAG_MCP_REFRESH_TIMEOUT_MS;
+    const response = await fetchImpl(
+      `${url.origin}/exa.language_server_pb.LanguageServerService/RefreshMcpServers`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-codeium-csrf-token": token,
+        },
+        body: JSON.stringify({ serverName: DAG_MCP_SERVER_NAME }),
+        signal: AbortSignal.timeout(effectiveTimeoutMs),
+      },
+    );
+    return response?.ok
+      ? { status: "refreshed" }
+      : { status: "failed", statusCode: response?.status ?? null };
+  } catch {
+    return { status: "failed", reason: "request-error" };
+  }
+}
+
+async function writeDagJsonFile(home, path, payload, label) {
+  const directory = dirname(path);
+  await ensureDirectory(home, directory);
+  await assertNoSymlinkComponents(home, path);
+  const existing = await lstat(path).catch((error) => {
+    if (error?.code === "ENOENT") return null;
+    throw error;
+  });
+  if (existing && !existing.isFile()) {
+    throw new Error(`${label} is not a regular file: ${path}`);
+  }
   const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    await safeWriteFile(home, temporary, `${JSON.stringify(nextPayload, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
+    await safeWriteFile(home, temporary, `${JSON.stringify(payload, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
     await rename(temporary, path);
   } catch (error) {
     await rm(temporary, { force: true }).catch(() => {});
     throw error;
   }
-  return { recorded: true, root: resolvedRoot, path };
+}
+
+function defaultIsPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
+}
+
+function parseLoopbackAddress(addr) {
+  if (typeof addr !== "string" || addr.length === 0 || addr.endsWith(":")) return null;
+  if (/[\s/?#@\\]|[\x00-\x1f\x7f]|^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(addr)) return null;
+  let url;
+  try {
+    url = new URL(`http://${addr}`);
+  } catch {
+    return null;
+  }
+  if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) return null;
+  if (!LOOPBACK_HOSTS.has(url.hostname)) return null;
+  if (url.port !== "") {
+    const port = Number(url.port);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+  }
+  return url;
 }
 
 // Without a conversation id there is nothing to key on: reads are empty and writes are dropped.
