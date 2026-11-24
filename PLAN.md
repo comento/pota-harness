@@ -12,6 +12,7 @@
 
 최신 항목이 위에 오며 계획당 한 줄입니다. `pota plan index --archive`는 오래된 항목을 `docs/plan/ARCHIVE.md`로 옮깁니다.
 
+- [Pota 2.2.2 릴리스](docs/plan/release-2.2.2.md): Claude 매니페스트 `icon`·`author` 반영, 4개 버전 표면 `2.2.2` 범프, `dev`·`main` PR 병합 및 `v2.2.2` 태그 배포.
 - [Antigravity 모델 분류·라우팅 확장 및 `goal finish` effort 우회](docs/plan/antigravity-model-routing.md): Antigravity 실모델 4-tier 분류·설계 게이트, 선택적 `swarm` 지침, `goal finish --allow-inherited-effort`를 추가했습니다.
 
 - [Antigravity Pota DAG 사이드바/보조 패널 (MCP App)](docs/plan/antigravity-dag-panel.md): `mcp_config.json`, zero-dep MCP App 서버·HTML UI(`aux_pane`/`global`), 워크스페이스 레지스트리, 완료 서브에이전트 유휴 정책 추가.
@@ -33,4 +34,3 @@
 - [편집 후 comment-checker 검사](docs/plan/comment-checker-hook.md): PostToolUse에서 고정 v0.8.2 바이너리(SHA256 검증, SessionStart 분리 다운로드)로 주석을 검사해 block; npm 의존성 없음, 실제 바이너리 smoke 통과.
 - [Pota 0.7.0 릴리스](docs/plan/release-0.7.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 0.7.0으로 게시해 digest와 격리 설치를 확인했습니다.
 - [자동 업그레이드와 `~/.pota` 설치 루트](docs/plan/auto-upgrade-pota-home.md): `~/.pota/install` 이전, Claude 캐시 갱신, runtime 3일 유예, `--hosts` 호스트 선택, SessionStart 자동 업그레이드.
-- [Pota 0.6.0 릴리스](docs/plan/release-0.6.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 0.6.0으로 게시해 digest와 격리 설치를 확인했습니다.

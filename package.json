@@ -1,6 +1,6 @@
 {
   "name": "@comento/pota-harness",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "private": true,
   "description": "Token-efficient agent harness with tool readiness for Codex, Claude Code, and Antigravity",
   "license": "MIT",
