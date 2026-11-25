@@ -1,6 +1,6 @@
 # Pota Harness
 
-Pota Harness는 Codex, Claude Code, Antigravity를 위한 토큰 효율적인 멀티에이전트 하네스 플러그인입니다.
+Pota Harness는 Claude Code, Codex / ChatGPT Desktop, Antigravity CLI를 위한 토큰 효율적인 멀티에이전트 하네스 플러그인입니다.
 
 [English](README.md)
 
@@ -15,7 +15,7 @@ Pota는 도구 준비 상태도 작업의 일부로 다룹니다. LSP, typecheck
 
 ## Install
 
-Pota는 Claude Code, Codex, Antigravity CLI의 플러그인입니다. 이 저장소의 루트가 플러그인이고, `main` 브랜치가 배포 버전입니다. 각 호스트는 자기 플러그인 명령으로 자기 사본을 설치·업데이트·제거하며, 그 사본이 그 호스트의 runtime입니다. hook, skill, CLI가 모두 그 사본에서 실행됩니다. 호스트마다 버전이 달라도 되고 Pota는 버전을 서로 비교하지 않습니다. `~/.pota/projects/`의 goal 상태는 모든 호스트가 함께 씁니다.
+Pota는 Claude Code, Codex(ChatGPT Desktop 포함), Antigravity CLI의 플러그인입니다. 이 저장소의 루트가 플러그인이고, `main` 브랜치가 배포 버전입니다. 각 호스트는 자기 플러그인 명령으로 자기 사본을 설치·업데이트·제거하며, 그 사본이 그 호스트의 runtime입니다. hook, skill, CLI가 모두 그 사본에서 실행됩니다. 호스트마다 버전이 달라도 되고 Pota는 버전을 서로 비교하지 않습니다. `~/.pota/projects/`의 goal 상태는 모든 호스트가 함께 씁니다.
 
 ### Claude Code
 
@@ -49,6 +49,8 @@ codex plugin marketplace add comento/pota-harness
 1. `/plugins`를 열어 `pota-harness` marketplace에서 `pota`를 설치하고 새 세션을 시작합니다.
 2. `/hooks`를 열어 Pota hook 5개를 승인합니다. Codex는 승인하기 전에는 플러그인 hook을 실행하지 않고, 승인은 hook 내용에 묶이므로 업데이트할 때마다 `/hooks`에서 다시 승인해야 합니다. 승인하지 않으면 세션에 `Pota CLI:` 줄이 나오지 않고, Pota skill이 Pota hook이 꺼져 있다고 알립니다.
 
+플러그인은 로컬 `pota-dag` MCP 서버(`.codex-plugin/mcp.json`)도 등록하며, 이 서버가 Codex와 ChatGPT Desktop에서 [DAG 패널](#dag-panel)을 보여 줍니다.
+
 업데이트는 `codex plugin marketplace upgrade pota-harness` 뒤 `/hooks`에서 다시 승인합니다. 제거는 `/plugins`에서 플러그인을 열고 "Uninstall plugin"을 고릅니다. 이 Codex 절차는 Codex 문서와 소스를 따른 것이며, 실제 Codex 설치본에서는 아직 실행해 보지 않았습니다.
 
 ### Antigravity CLI
@@ -57,16 +59,16 @@ codex plugin marketplace add comento/pota-harness
 agy plugin install https://github.com/comento/pota-harness
 ```
 
-업데이트는 같은 명령을 다시 실행합니다. Antigravity 문서는 다시 설치하면 설치된 사본을 교체한다고 설명합니다. 제거는 `agy plugin uninstall pota`입니다. `agy` 1.5.6 이상을 권장합니다. Antigravity는 CLI만 지원하고 Antigravity IDE는 지원하지 않습니다.
+업데이트는 같은 명령을 다시 실행합니다. Antigravity 문서는 다시 설치하면 설치된 사본을 교체한다고 설명합니다. 제거는 `agy plugin uninstall pota`입니다. `agy` 1.5.6 이상을 권장합니다. Antigravity는 CLI만 지원하고 Antigravity IDE는 지원하지 않습니다. 플러그인은 로컬 `pota-dag` MCP 서버(루트 `mcp_config.json`)도 등록하며, 이 서버가 [DAG 패널](#dag-panel)을 보여 줍니다.
 
 ### What each host gets
 
-| | Claude Code | Codex | Antigravity CLI |
+| | Claude Code | Codex / ChatGPT Desktop | Antigravity CLI |
 | --- | --- | --- | --- |
-| Skill | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory`, `/dag` (mod 명령) | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
+| Skill | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hook | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | 같은 5개(`/hooks`에서 승인한 뒤) | SessionStart, PreInvocation(프롬프트 컨텍스트), PostToolUse, Stop. SubagentStop 없음 |
 | Agent `explorer`, `worker` | 있음 | 없음 | 없음 |
-| DAG 패널(mod) | 있음 | 없음 | 없음 |
+| DAG 패널 | mod pane, mod 명령 `/dag`로 엶 | MCP App(`pota-dag` 서버), `$dag`로 엶 | MCP App(`pota-dag` 서버), `/dag`로 엶 |
 
 ### Coming from the npm install (1.x)
 
@@ -115,11 +117,20 @@ node "<pluginRoot>/scripts/pota.mjs" migrate run --host claude
 
 선택된 path와 근거는 계획 산출물이 있을 때 `docs/plan/<topic>.md`에 기록합니다. Light Path에서도 두 검증 게이트는 유지됩니다. subagent 도구가 없으면 main agent가 implementation을 직접 인계하고, 그 takeover를 evidence에 기록합니다.
 
-Pota는 task 성격에 따라 task별 model(fast `haiku`, balanced `sonnet`, stronger `opus`, strongest `fable`)을 정하고 reasoning effort도 라우팅합니다. `MEMORY.md`나 계획에 `Model routing: inherited`를 적으면 작업별 model 선택이 꺼집니다. Light 계획·구현·검증은 `medium`, Heavy 계획·검토·구현은 `high`, 최종 검증·검토는 `xhigh`를 요청합니다. Requested는 Pota가 원하는 profile이고 Effective는 dispatch 결과가 확인한 적용값입니다. 새 task/worker dispatch마다 정한 model과 요청 effort를 host option으로 반드시 넘깁니다(Claude Code: Agent `model`/`effort`, `fork` 금지). Effective는 넘긴 값이고, 넘기지 않았으면 `not-applied: <사유>`, host에 option이 없을 때만 `inherited`입니다. Host capability는 노출된 interface 또는 dispatch 응답으로만 판단하고, Pota가 option을 통합/사용하지 않기로 한 선택과 host 미지원은 구분합니다. path가 바뀌면 plan artifact, 저장소 goal task roadmap, native UI plan, effort profile을 함께 동기화하고 완료 profile은 보존하며 미완료 profile은 재계산합니다.
+Pota는 task 성격에 따라 task별 model을 네 tier(호스트마다 값 하나)로 정하고 reasoning effort도 라우팅합니다. `MEMORY.md`나 계획에 `Model routing: inherited`를 적으면 작업별 model 선택이 꺼집니다.
+
+| Tier | 용도 | Claude Code | Codex | Antigravity |
+| --- | --- | --- | --- | --- |
+| fast | 읽기 전용 탐색·요약 | `haiku` | `gpt-6-luna` | `flash_lite` |
+| balanced | Light 구현·일상 검증 | `sonnet` | `gpt-6.1-terra` | `flash` |
+| stronger | 계획·트리아지·Heavy 구현·리뷰·최종 검증 | `opus` | `gpt-6-sol` | `pro` |
+| strongest | Heavy 설계만 | `fable` | `gpt-6-astra` | `pro` |
+
+Antigravity의 기본 위임 도구 `invoke_subagent`는 tier 값만 받고 effort option이 없어서 effort를 `inherited`로 기록합니다. `swarm` 도구가 있으면 선택적으로 구체 model을 effort 접미사와 함께 dispatch할 수 있습니다. Pota는 실제 Antigravity 세션과 `swarm`의 model ID(Gemini, GPT-OSS, Claude 계열)도 같은 네 tier로 분류해 게이트에 씁니다. effort가 적용되지 않은 채(`inherited`, `not-applied`, 없음) 배정된 Heavy task는 `--allow-inherited-effort <reason>`을 주지 않으면 `goal task --status completed`와 `goal finish`로 완료할 수 없습니다. Light 계획·구현·검증은 `medium`, Heavy 계획·검토·구현은 `high`, 최종 검증·검토는 `xhigh`를 요청합니다. Requested는 Pota가 원하는 profile이고 Effective는 dispatch 결과가 확인한 적용값입니다. 새 task/worker dispatch마다 정한 model과 요청 effort를 host option으로 반드시 넘깁니다(Claude Code: Agent `model`/`effort`, `fork` 금지). Effective는 넘긴 값이고, 넘기지 않았으면 `not-applied: <사유>`, host에 option이 없을 때만 `inherited`입니다. Host capability는 노출된 interface 또는 dispatch 응답으로만 판단하고, Pota가 option을 통합/사용하지 않기로 한 선택과 host 미지원은 구분합니다. path가 바뀌면 plan artifact, 저장소 goal task roadmap, native UI plan, effort profile을 함께 동기화하고 완료 profile은 보존하며 미완료 profile은 재계산합니다.
 
 subagent 도구가 progress-reporting channel을 제공하면 subagent는 작업 시작, 방향 결정/확인, 주기적 진행, 완료 시점에 orchestrator에게 상태를 보고합니다. orchestrator는 받은 status event를 즉시 사용자에게 전달합니다. mid-run reporting channel이 없으면 orchestrator는 할당, 대기, 최종 완료처럼 관측 가능한 event를 사용자에게 전달합니다.
 
-위임받은 subagent는 작업을 마치면 퇴근 전에 final report를 남깁니다. orchestrator가 final report와 evidence를 회수한 뒤 완료된 subagent를 close/release합니다. 그 다음 orchestrator가 final report와 evidence를 검토한 뒤 작업 완료 여부를 판단합니다.
+위임받은 subagent는 작업을 마치면 퇴근 전에 final report를 남깁니다. orchestrator가 final report와 evidence를 회수한 뒤, host에 비파괴적인 close/release 동작이 있으면 완료된 subagent를 close/release하고, 없으면 kill하지 않고 유휴 상태로 둡니다(Antigravity의 `manage_subagents(kill)`은 `Cancelled`로 표시합니다). 그 다음 orchestrator가 final report와 evidence를 검토한 뒤 작업 완료 여부를 판단합니다.
 
 ## Tool Readiness
 
@@ -189,13 +200,14 @@ script, template, agent, model guidance는 호스트의 플러그인 사본에 �
 - `pota migrate status|run [--host claude|codex|antigravity] [--all] [--dry-run] [--json]`: 1.x 설치본 제거를 직접 실행합니다. `status`는 실행하면 할 일과 마지막 보고서를 보여 줍니다. `run`은 `--host <host>` 또는 `--all`(플러그인을 아직 설치하지 않은 호스트까지 모든 호스트)이 필요하고, `--dry-run`은 아무것도 바꾸지 않고 계획만 보여 줍니다. 제거가 거부되면 exit 1, 사용법 오류는 exit 2입니다.
 - `pota toolcheck`: 저장소 스택과 필요한 LSP·검증 도구를 확인하며, 승인된 지원 installer만 실행합니다.
 - `pota cleanup --root <repo>`: 기본값은 legacy 프로젝트 로컬 `.pota` 잔여물을 읽기 전용으로 보고합니다. `--yes`는 유효한 활성 상태를 사용자 홈 저장소로 조정·이관하고 알려진 상태/lock/tool 잔여물만 제거하며, 알 수 없는 파일은 보존하고 비었을 때만 디렉터리를 정리합니다. `state.lock`은 이 host에서 owner 프로세스가 종료된 유효한 lock 레코드일 때만 삭제하고, 격리된 `state.lock.stale.*` 파일은 유효한 레코드의 nonce가 파일 이름과 일치할 때만 삭제합니다. owner가 살아 있거나 다른 host의 lock, 파싱할 수 없는 lock은 보존하고 `preservedReasons`에 사유를 남깁니다. `--help`와 `--version`은 exit 0, 사용법 오류는 exit 2, 실행 오류는 `Pota cleanup error:` 한 줄과 exit 1입니다.
-- `pota goal ...`: 저장소의 영속 goal을 시작·조회·일시정지·재개·차단·취소·완료합니다. `goal claim --session <id>`는 같은 작업을 이어받는 session(재개·압축·handoff·fork)에 미완료 goal의 소유권을 넘기며, 미완료 goal 중에 들어온 새 작업은 goal을 취소하지 않고 `goal replan`으로 합칩니다. 기본 tool-bound 정책은 `goal verify -- <argv>`가 명령을 직접 실행해 성공 증거를 기록합니다. `goal receipt`는 기존 선언 증거를 가져오는 호환 명령입니다. 모든 `goal` 하위 명령에서 `--root`는 선택이며, 생략하면 `HARNESS_REPO_ROOT`, 없으면 cwd에서 가장 가까운 `.git` 상위 디렉터리로 결정됩니다. `goal verify --kind "moduleAcceptance|surfaceIntegration" -- <argv>`는 한 번 실행으로 kind마다 receipt를 기록하며, evidence scope는 `task`와 `goal`뿐입니다. `goal finish [--watch "<path|path>"] [--timeout-ms N] -- <argv>`는 active task를 완료하고(필수 증거가 fresh여야 함) argv를 한 번 실행해 goal requiredEvidence의 모든 kind(기본 `finalReview`)를 goal scope로 기록한 뒤 goal을 완료합니다. 이 goal scope 증거가 모든 task receipt 이후에 기록되면 이전 task 검사를 다시 실행하지 않습니다. `goal stats`는 현재 goal의 receipt 수, 재실행, stale receipt를 JSON으로 출력합니다. `goal stats --history [--limit N]`은 저장소의 모든 worktree에서 끝난 goal을 집계합니다: 완료·취소 수, 소요 시간 중앙값과 p90, task·receipt 중앙값, 재실행 비율, 메모리 승격 결정 수, 완료 goal이 4개 이상일 때의 이전/최근 `trend`, 최근 goal 목록입니다. 이력이 없으면 `{"schemaVersion":1,"scope":"repository","goals":0}`을 출력합니다. `completionCriteria`(`goal start --criteria`)는 `advisory`입니다. Pota는 이를 기록만 하고 강제하지 않으며, 완료는 필수 증거로만 판정합니다. task는 `dependsOn`(생략 시 이전 task)과 `writeScope`를 선언하고, `goal ready`는 active/ready/blocked task id를 출력하며, write scope가 겹치지 않는 ready task는 같은 worktree에서 최대 4개까지 병렬로 active가 될 수 있습니다.
+- `pota goal ...`: 저장소의 영속 goal을 시작·조회·일시정지·재개·차단·취소·완료합니다. `goal claim --session <id>`는 같은 작업을 이어받는 session(재개·압축·handoff·fork)에 미완료 goal의 소유권을 넘기며, 미완료 goal 중에 들어온 새 작업은 goal을 취소하지 않고 `goal replan`으로 합칩니다. 기본 tool-bound 정책은 `goal verify -- <argv>`가 명령을 직접 실행해 성공 증거를 기록합니다. `goal receipt`는 기존 선언 증거를 가져오는 호환 명령입니다. 모든 `goal` 하위 명령에서 `--root`는 선택이며, 생략하면 `HARNESS_REPO_ROOT`, 없으면 cwd에서 가장 가까운 `.git` 상위 디렉터리로 결정됩니다. `goal verify --kind "moduleAcceptance|surfaceIntegration" -- <argv>`는 한 번 실행으로 kind마다 receipt를 기록하며, evidence scope는 `task`와 `goal`뿐입니다. `goal finish [--watch "<path|path>"] [--timeout-ms N] -- <argv>`는 active task를 완료하고(필수 증거가 fresh여야 함) argv를 한 번 실행해 goal requiredEvidence의 모든 kind(기본 `finalReview`)를 goal scope로 기록한 뒤 goal을 완료합니다. 이 goal scope 증거가 모든 task receipt 이후에 기록되면 이전 task 검사를 다시 실행하지 않습니다. `goal stats`는 현재 goal의 receipt 수, 재실행, stale receipt를 JSON으로 출력합니다. `goal stats --history [--limit N]`은 저장소의 모든 worktree에서 끝난 goal을 집계합니다: 완료·취소 수, 소요 시간 중앙값과 p90, task·receipt 중앙값, 재실행 비율, 메모리 승격 결정 수, 완료 goal이 4개 이상일 때의 이전/최근 `trend`, 최근 goal 목록입니다. 이력이 없으면 `{"schemaVersion":1,"scope":"repository","goals":0}`을 출력합니다. `completionCriteria`(`goal start --criteria`)는 `advisory`입니다. Pota는 이를 기록만 하고 강제하지 않으며, 완료는 필수 증거로만 판정합니다. task는 `dependsOn`(생략 시 이전 task)과 `writeScope`를 선언하고, `goal ready`는 active/ready/blocked task id를 출력하며, write scope가 겹치지 않는 ready task는 같은 worktree에서 최대 4개까지 병렬로 active가 될 수 있습니다. `goal gate --task <id> --on|--off [--reason <text>]`는 active나 completed가 아닌 task에 수동 승인 게이트를 걸거나 풉니다. 게이트가 걸린 task는 자동으로 시작되지 않고 이어갈 작업으로 제시되지도 않습니다. `goal ready`는 그 task를 `ready` 대신 `gated`(게이트가 있을 때만 나오는 key)에 내고, 게이트 task만 남으면 hook 컨텍스트가 goal이 사용자 승인을 기다린다고 알립니다. 게이트는 사용자만 풉니다: `goal gate --off`, `goal task --task <id> --status active --approve-gate`, 또는 DAG 패널에서. 게이트는 공유 goal 상태에 저장되므로 저장소에서 작업하는 모든 호스트가 2.3.0 이상일 때만 강제됩니다.
 - `pota memory check|index [--root <repo>]`: `check`는 `MEMORY.md`와 `docs/memory/*.md`를 대조해 JSON 보고서 하나를 출력합니다. 미색인 노트, 죽은 링크, 중복, 오래된 요약, 요약의 제어문자, 안전하지 않은 경로가 있으면 exit 1이고, 경고는 `--strict`에서만 실패합니다. 항목은 `## Domain Knowledge` 아래의 목록 줄입니다(그 절이 없는 예전 파일은 모든 목록 줄). 다른 절의 노트 링크는 언급이며 `index`가 다시 쓰지 않습니다. `index`는 빠진 노트를 추가하고 `Summary:`가 바뀌면 링크 뒤의 요약 부분만 바꾸며(링크가 여럿인 줄은 그대로 둠), 그 절 안에서 Pota placeholder 줄만 정확히 일치할 때 제거하고 항목이나 죽은 링크는 지우지 않으며 나머지 내용은 바이트 단위로 보존합니다. `--dry-run`으로 미리 볼 수 있습니다. 삽입 지점이 닫히지 않은 코드 펜스 안이면 `index`는 아무것도 쓰지 않고 `unclosed-fence`로 exit 1입니다. 사용법 오류는 exit 2이고, 하위 명령 없는 `pota memory`는 기존 안내문을 출력합니다.
 - `pota plan check|index [--archive] [--root <repo>]`: `PLAN.md`와 `docs/plan/*.md`에 같은 검사와 색인을 적용하며, 항목은 제목이 `Plans`로 끝나는 `## ` 절(`## Superseded Plans` 등)의 목록 줄입니다. `index`는 체크박스가 모두 체크된 계획을 `## Completed Plans` 맨 위에, 그 밖의 계획을 `## Active Plans`에 넣습니다. 줄을 옮기는 것은 `--archive`뿐이며, 최신 20개를 넘는 완료 항목(들여쓴 문단 포함)과 예전 `## Planning Rules` 절의 본문을 `docs/plan/ARCHIVE.md`로 옮깁니다. `check`는 `## Completed Plans`가 20개를 넘거나 예전 `## Planning Rules` 절이 남아 있으면 경고합니다.
 - `pota-memory`: 도메인 지식을 탐색하고 `Summary:` 줄이 있는 노트를 쓰며 `MEMORY.md` 색인을 유지합니다.
 - `pota-plan`: 관련 메모리 노트와 관련 완료 계획(최대 3개)을 재활용한 뒤 `docs/plan/` 아래에 decision-complete plan을 만듭니다.
 - `pota-work`: 현재 `PLAN.md`의 다음 모듈 작업을 실행하고 두 검증 게이트를 확보합니다.
 - `pota-review`: 계획, memory, 증거를 기준으로 완료된 작업을 검토합니다.
+- `dag`: [DAG 패널](#dag-panel)만 엽니다. 계획·편집·goal 상태 변경은 하지 않습니다.
 
 모든 `UserPromptSubmit`에서 Pota는 구현 또는 계속 실행 요청 자체가 goal 생성 권한이며 사용자가 “goal”을 직접 말할 필요가 없다는 모델 가시 지침을 주입합니다. 에이전트는 먼저 트리아지를 active task로 둔 초기 저장소 계획을 작성하고, 탐색·트리아지 전에 가능한 경우 Codex `update_plan`과 `create_goal`로 같은 roadmap을 UI에 표시한 뒤 저장소 Pota goal을 시작합니다. 트리아지 결과로 두 계획을 decision-complete 구현 계획으로 갱신한 뒤에만 구현합니다. 활성 goal은 전체 순서형 roadmap, 각 상태, 현재 task를 hook 컨텍스트에 유지하므로 곁가지 질문 뒤 원래 작업으로 돌아갈 수 있습니다. 상담·설명·계획 전용 요청은 goal 없이 처리합니다.
 
@@ -214,6 +226,7 @@ Pota는 데이터를 `POTA_HOME`(기본 `~/.pota`) 아래에 두고, 모든 호�
   tools/comment-checker/    comment-checker 바이너리(고정 release)
   migration/                1.x 설치본 제거의 보고서와 상태
   hosts/antigravity/        Antigravity 세션 파일(다음 프롬프트를 기다리는 hook 메시지)
+  hosts/antigravity-dag/    workspaces.json: DAG MCP App이 쓰는 최근 활성 워크스페이스(Antigravity, Codex)
   install/, update/         1.x npm 설치본이 남긴 것. 제거가 끝나면 없어짐
 ```
 
@@ -223,14 +236,34 @@ Pota는 데이터를 `POTA_HOME`(기본 `~/.pota`) 아래에 두고, 모든 호�
 - 모델 상한: 계정에서 상위 tier를 쓸 수 없거나 쓰지 않을 때(구독 등급, 조직 정책, usage credits) `POTA_MODEL_CEILING=stronger`(또는 `balanced`, `opus`·`sonnet` 같은 모델 이름도 가능)를 설정하거나 `~/.pota/config.json`에 `"modelCeiling": "stronger"`를 적습니다. 환경변수가 우선이고, `config.json`은 모든 hook과 CLI 호출이 똑같이 읽는 위치입니다. 설정하면 `SessionStart`가 `Pota model ceiling:` 줄을 추가하고, 상한보다 높은 tier는 상한 tier의 모델을 쓰며, Heavy 설계 게이트가 그 모델을 통과시키고, main 모델 확인은 상한이 적용된 stronger tier를 기준으로 합니다. 설정이 없으면 동작은 그대로이고, 잘못된 값은 상한 없이 알림만 냅니다.
 - 요청 계약과 스티어링: Light·Heavy Path 계획은 `## Request Brief`(원문 요청, 해석한 결과, 범위, 과거 기록 참고(`Prior records`, `pota plan steering`), 가정, 암묵 요구사항, 열린 질문, 스티어링 기록)를 담고, 채우기 전에는 `--allow-no-request-brief <reason>`을 주지 않는 한 `triage-plan` 완료가 거부됩니다. 사용자의 정정·추가·방향 전환은 `goal steer --kind <correction|addition|redirect> --reason <text>`로, task가 바뀌면 `goal replan --steer <correction|addition|redirect|none> --reason <text>`로 기록하며, 두 번째 스티어링이나 redirect에는 다시 쓴 `Current request (as of S<n>)`도 필요합니다.
 
-## Claude Code DAG Panel
+## DAG Panel
 
-Claude Code 데스크탑은 현재 Pota goal을 wave별 열로 나눈 DAG 패널로 보여 줍니다. Claude Code는 자체 mod 패널(`/dag`)을 사용합니다. 2.3.0부터 Antigravity와 Codex/ChatGPT Desktop도 `open_pota_dag` 도구로 열리는 MCP App으로 같은 DAG를 보여 주며, `goal start` 뒤에 자동으로 실행되거나 `dag` skill(Antigravity `/dag`, Codex `$dag`)로 열 수 있습니다. mod 기능이 있는 Claude Code가 필요하고(Claude Code 2.1.325의 mod API 기준으로 작성), 터미널에는 그래픽이 없어서 wave를 위에서 아래로 박스 문자 박스로 그리며 움직이는 점은 없습니다. pane 폭이 24칸보다 좁으면 글자 목록으로 표시합니다.
+모든 호스트가 현재 Pota goal을 wave별 열로 나눈 DAG 패널로 보여 줍니다. Claude Code는 자체 mod pane으로 그리고, 2.3.0부터 Antigravity와 Codex / ChatGPT Desktop은 플러그인의 로컬 `pota-dag` MCP 서버가 제공하는 MCP App으로 같은 패널을 보여 줍니다. 패널 구성은 세 호스트가 같습니다.
 
-- `/dag [previous|current|next|all|refresh|close]`로 패널을 엽니다. 보기는 이전, 현재, 다음, 전체입니다. 기본은 전체(all) 보기이고 나머지는 선택 옵션입니다. 완료된 연결은 실선, 진행 중인 연결은 점선과 이동하는 점입니다.
+- 탭 4개: DAG(wave 그래프. 보기는 이전, 현재, 다음, 전체이고 기본은 전체), Diff, Plan, 에이전트·통계.
+- Diff는 작업 트리에서 바뀐 파일과 추가·삭제 줄 수를 보여 줍니다. 읽기 전용 Git 명령만 실행하고 파일 내용은 보여 주지 않습니다. 비밀정보로 보이는 경로(`.env*`, `service-account*.json`, 키·인증서 파일 등)는 민감 표시를 하고 링크를 걸지 않습니다.
+- Plan은 활성 계획의 개요(제목, goal, 현재 요청, 체크리스트 진행률)를 보여 줍니다.
+- 에이전트·통계는 task별로 기록된 agent, model, effort와 저장소의 최근 goal을 보여 줍니다. Antigravity에서는 세션 트랜스크립트로 실제 model, effort, 토큰 수를 보강합니다.
+- 노드를 선택하면 그 task의 증거 receipt와 `writeScope`의 diff 통계를 담은 인스펙터가 열립니다.
+- 컨트롤로 goal을 일시정지·재개하고 task의 수동 승인 게이트를 켜고 끕니다([Commands](#commands)의 `pota goal gate` 참고).
+
+### Claude Code (mod)
+
+mod 기능이 있는 Claude Code가 필요합니다(Claude Code 2.1.325의 mod API 기준으로 작성). 터미널에는 그래픽이 없어서 wave를 위에서 아래로 박스 문자 박스로 그리며 움직이는 점은 없습니다. pane 폭이 24칸보다 좁으면 글자 목록으로 표시합니다.
+
+- `/dag [previous|current|next|all|dag|diff|plan|stats|refresh|close]`로 해당 보기나 탭으로 패널을 엽니다. 완료된 연결은 실선, 진행 중인 연결은 점선과 이동하는 점입니다.
 - `pota goal start`와 `pota goal replan` 뒤에 자동으로 한 번 열립니다. 닫으면 같은 goal에서는 다시 열지 않습니다.
 - goal 명령이 실행될 때와 30초마다 goal 상태를 다시 읽어 갱신합니다.
+- 실행 중인 task를 선택하면 그 task를 맡은 subagent의 대화가 열립니다. main 세션이 직접 하는 task와, 전환할 main view가 없는 화면(데스크톱 앱)의 모든 task는 pane 안의 인스펙터가 대신 열립니다.
 - 세션 root의 goal을 읽습니다. goal 명령이 다른 worktree에서 실행되면 패널이 그 worktree를 따라가고 제목 아래에 그 사실을 표시합니다. 세션이 옮겨지거나, 그 goal이 끝나고 세션 root에 goal이 있으면 돌아옵니다.
+
+### Antigravity and Codex / ChatGPT Desktop (MCP App)
+
+- `pota-dag` 서버는 플러그인이 등록하며(Antigravity: 루트 `mcp_config.json`, Codex / ChatGPT Desktop: `.codex-plugin/mcp.json`), 의존성 없이 `scripts/pota-dag-mcp.mjs`를 stdio로 실행합니다.
+- 에이전트는 `goal start` 직후와 활성 goal을 재개할 때 `open_pota_dag` 도구를 호출합니다. 직접 열려면 `dag` skill을 씁니다: Antigravity는 `/dag`, Codex는 `$dag`(Codex 플러그인은 슬래시 명령을 등록할 수 없습니다). Antigravity는 패널을 사이드바 항목과 보조 패널로도 제공합니다.
+- `open_pota_dag`는 모델에게 작은 요약만 돌려주고, 화면 데이터는 패널이 직접 불러옵니다. 일시정지·재개·게이트 컨트롤은 Pota hook이 최근 활성으로 기록한 워크스페이스(`~/.pota/hosts/antigravity-dag/workspaces.json`)에서만 동작합니다.
+- 인스펙터에서 에이전트에게 task 검토를 요청하는 후속 메시지를 대화로 보낼 수 있습니다.
+- Antigravity에서 서버가 내려가 있으면 에이전트가 `node "<pluginRoot>/scripts/pota-dag-mcp.mjs" ensure`를 실행하고 한 번 다시 시도합니다. 패널을 쓸 수 없어도 작업은 막지 않습니다.
 
 ## Antigravity Compatibility
 
@@ -241,7 +274,7 @@ Pota는 Antigravity CLI(`agy`)를 지원하고 Antigravity IDE는 지원하지 �
 - `write_to_file`, `replace_file_content`, `multi_replace_file_content`의 `PostToolUse`는 comment checker와 goal 알림을 실행하고, 결과는 다음 `PreInvocation`에 들어갑니다.
 - `Stop`은 활성 goal에 끝나지 않은 task가 있으면 에이전트가 작업을 계속하게 합니다. `SubagentStop`은 없습니다.
 
-skill은 `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag`로 호출합니다. workflow는 Antigravity 플러그인의 구성요소가 아닙니다. 어댑터는 Antigravity hook 문서를 따른 것이며, 실제 `agy` 세션 안에서의 동작은 아직 확인하지 않았습니다.
+skill은 `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag`로 호출합니다. workflow는 Antigravity 플러그인의 구성요소가 아닙니다. 루트 `mcp_config.json`은 [DAG 패널](#dag-panel)용 `pota-dag` MCP 서버를 등록합니다. 어댑터는 Antigravity hook 문서를 따른 것이며, 실제 `agy` 세션 안에서의 동작은 아직 확인하지 않았습니다.
 
 ## Locale Policy
 
