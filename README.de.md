@@ -1,6 +1,6 @@
 # Pota Harness
 
-Pota Harness ist ein token-effizientes Multi-Agent-Harness-Plugin für Codex, Claude Code und Antigravity.
+Pota Harness ist ein token-effizientes Multi-Agent-Harness-Plugin für Claude Code, Codex / ChatGPT Desktop und die Antigravity-CLI.
 
 [English](README.md)
 
@@ -15,7 +15,7 @@ Pota behandelt tool readiness ebenfalls als Teil der Arbeit. LSP, typecheck, lin
 
 ## Install
 
-Pota ist ein Plugin für Claude Code, Codex und die Antigravity-CLI. Die Wurzel dieses Repositorys ist das Plugin, und der Branch `main` ist die veröffentlichte Version. Jeder Host installiert, aktualisiert und entfernt seine eigene Kopie mit seinen eigenen Plugin-Befehlen, und diese Kopie ist die Runtime des Hosts: Hooks, Skills und CLI laufen aus ihr. Kopien auf verschiedenen Hosts dürfen unterschiedliche Versionen haben; Pota vergleicht sie nicht. Der goal state in `~/.pota/projects/` wird von allen Hosts geteilt.
+Pota ist ein Plugin für Claude Code, Codex (einschließlich ChatGPT Desktop) und die Antigravity-CLI. Die Wurzel dieses Repositorys ist das Plugin, und der Branch `main` ist die veröffentlichte Version. Jeder Host installiert, aktualisiert und entfernt seine eigene Kopie mit seinen eigenen Plugin-Befehlen, und diese Kopie ist die Runtime des Hosts: Hooks, Skills und CLI laufen aus ihr. Kopien auf verschiedenen Hosts dürfen unterschiedliche Versionen haben; Pota vergleicht sie nicht. Der goal state in `~/.pota/projects/` wird von allen Hosts geteilt.
 
 ### Claude Code
 
@@ -49,6 +49,8 @@ Danach in der Codex-TUI:
 1. `/plugins` öffnen, den Marketplace `pota-harness` wählen, `pota` installieren und eine neue Sitzung starten.
 2. `/hooks` öffnen und die fünf Hooks von Pota freigeben. Codex führt Plugin-Hooks erst nach der Freigabe aus, und die Freigabe ist an den Hook-Inhalt gebunden; nach jedem Update müssen Sie die Hooks daher in `/hooks` erneut freigeben. Ohne Freigabe erhält keine Sitzung die Zeile `Pota CLI:`, und die Pota-Skills melden, dass die Hooks von Pota inaktiv sind.
 
+Das Plugin registriert außerdem den lokalen MCP-Server `pota-dag` (`.codex-plugin/mcp.json`), der das [DAG-Panel](#dag-panel) in Codex und ChatGPT Desktop anzeigt.
+
 Zum Aktualisieren `codex plugin marketplace upgrade pota-harness` ausführen und die Hooks in `/hooks` erneut freigeben. Zum Deinstallieren das Plugin in `/plugins` öffnen und "Uninstall plugin" wählen. Diese Codex-Schritte folgen der Codex-Dokumentation und dem Quellcode; sie wurden noch nicht an einer echten Codex-Installation ausgeführt.
 
 ### Antigravity CLI
@@ -57,16 +59,16 @@ Zum Aktualisieren `codex plugin marketplace upgrade pota-harness` ausführen und
 agy plugin install https://github.com/comento/pota-harness
 ```
 
-Zum Aktualisieren denselben Befehl erneut ausführen; laut Antigravity-Dokumentation ersetzt eine Neuinstallation die installierte Kopie. Deinstallieren mit `agy plugin uninstall pota`. Empfohlen ist `agy` 1.5.6 oder neuer. Unterstützt wird nur die Antigravity-CLI, nicht die Antigravity-IDE.
+Zum Aktualisieren denselben Befehl erneut ausführen; laut Antigravity-Dokumentation ersetzt eine Neuinstallation die installierte Kopie. Deinstallieren mit `agy plugin uninstall pota`. Empfohlen ist `agy` 1.5.6 oder neuer. Unterstützt wird nur die Antigravity-CLI, nicht die Antigravity-IDE. Das Plugin registriert außerdem den lokalen MCP-Server `pota-dag` (`mcp_config.json` im Wurzelverzeichnis), der das [DAG-Panel](#dag-panel) anzeigt.
 
 ### What each host gets
 
-| | Claude Code | Codex | Antigravity CLI |
+| | Claude Code | Codex / ChatGPT Desktop | Antigravity CLI |
 | --- | --- | --- | --- |
-| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory`, `/dag` (mod-Befehl) | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
+| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | dieselben fünf, nach Freigabe in `/hooks` | SessionStart, PreInvocation (Prompt-Kontext), PostToolUse, Stop; kein SubagentStop |
 | Agents `explorer`, `worker` | ja | nein | nein |
-| DAG-Panel (Mod) | ja | nein | nein |
+| DAG-Panel | mod-Pane, geöffnet mit dem mod-Befehl `/dag` | MCP App (`pota-dag`-Server), geöffnet mit `$dag` | MCP App (`pota-dag`-Server), geöffnet mit `/dag` |
 
 ### Coming from the npm install (1.x)
 
@@ -114,6 +116,19 @@ Jede implementation task durchläuft zuerst complexity triage, bevor agent, plug
 - Heavy Path: new directory/module/layer, new domain model/service/abstraction, security/session/auth, external API/message queue/payment, DB schema/migration, concurrency/transaction/cache changes, cross-domain refactor oder explicit extra-care request.
 
 Der gewählte path und die Begründung werden in `docs/plan/<topic>.md` festgehalten, wenn ein plan artifact existiert. Auch auf Light Path bleiben die zwei verification gates bestehen.
+
+Pota wählt das model jedes task nach dessen Art, in vier tiers mit je einem Wert pro Host, und steuert den reasoning effort; `Model routing: inherited` in `MEMORY.md` oder im Plan schaltet die model-Auswahl pro task ab.
+
+| Tier | Verwendet für | Claude Code | Codex | Antigravity |
+| --- | --- | --- | --- | --- |
+| fast | read-only exploration und Zusammenfassungen | `haiku` | `gpt-6-luna` | `flash_lite` |
+| balanced | Light implementation und routinemäßige verification | `sonnet` | `gpt-6.1-terra` | `flash` |
+| stronger | Planung, Triage, Heavy implementation, Review, abschließende verification | `opus` | `gpt-6-sol` | `pro` |
+| strongest | nur Heavy design | `fable` | `gpt-6-astra` | `pro` |
+
+Auf Antigravity nimmt das Standard-Delegationswerkzeug `invoke_subagent` nur den tier-Wert entgegen und hat keine effort-Option, daher wird der effort als `inherited` aufgezeichnet; wo das Tool `swarm` existiert, kann es optional ein konkretes model mit effort-Suffix beauftragen. Pota ordnet außerdem die echten model-IDs der Antigravity-Sitzung und von `swarm` (die Familien Gemini, GPT-OSS und Claude) für seine gates denselben vier tiers zu. Ein Heavy task, der ohne angewendeten effort zugewiesen wurde (`inherited`, `not-applied` oder keiner), kann mit `goal task --status completed` oder `goal finish` nur abgeschlossen werden, wenn `--allow-inherited-effort <reason>` übergeben wird.
+
+Wenn ein delegierter subagent fertig ist, liefert er einen Abschlussbericht, bevor er endet. Nachdem der orchestrator diesen Abschlussbericht und die Evidence erfasst hat, wird der fertige subagent geschlossen oder freigegeben, wenn der Host dafür eine nicht destruktive Aktion hat; andernfalls bleibt er im Leerlauf, statt beendet zu werden (`manage_subagents(kill)` von Antigravity würde ihn als `Cancelled` anzeigen). Der orchestrator prüft danach Abschlussbericht und Evidence, bevor er die Arbeit als abgeschlossen markiert.
 
 ## Tool Readiness
 
@@ -178,11 +193,12 @@ Unten steht `pota <command>` für `node "<pluginRoot>/scripts/pota.mjs" <command
 - `pota cleanup --root <repo>`: meldet standardmäßig read-only legacy projektlokale `.pota`-Reste. `--yes` migriert/gleicht gültigen active state mit dem user-home store ab, entfernt nur bekannte state/lock/tool-Reste, bewahrt unbekannte Dateien und entfernt das Verzeichnis nur, wenn es leer ist.
 - `pota memory check|index [--root <repo>]`: `check` gleicht `MEMORY.md` mit `docs/memory/*.md` ab und gibt einen JSON-Bericht aus; bei nicht indexierten Notizen, dead links, Duplikaten, veralteten Zusammenfassungen, Steuerzeichen in Zusammenfassungen oder unsicheren Pfaden endet es mit exit 1, warnings schlagen nur mit `--strict` fehl. Einträge sind Listenzeilen unter `## Domain Knowledge` (in einer älteren Datei ohne diesen Abschnitt alle Listenzeilen); ein Notizlink in einem anderen Abschnitt ist eine Erwähnung, die `index` nie umschreibt. `index` ergänzt fehlende Notizen und ersetzt bei geändertem `Summary:` nur die Zusammenfassung nach dem Link (eine Zeile mit mehreren Links bleibt unverändert); es entfernt nur exakt passende Pota-Platzhalterzeilen in diesem Abschnitt, löscht nie Einträge oder dead links und erhält den Rest Byte für Byte. `--dry-run` zeigt eine Vorschau. Liegt die Einfügestelle in einem nicht geschlossenen Codeblock, schreibt `index` nichts und endet mit exit 1 und `unclosed-fence`. Usage-Fehler enden mit exit 2; `pota memory` ohne Unterbefehl gibt weiterhin den Hinweis aus.
 - `pota plan check|index [--archive] [--root <repo>]`: dasselbe für `PLAN.md` und `docs/plan/*.md`, deren Einträge Listenzeilen unter `## `-Überschriften sind, die auf `Plans` enden (etwa `## Superseded Plans`). `index` setzt einen Plan, dessen Checkboxen alle abgehakt sind, an den Anfang von `## Completed Plans` und jeden anderen unter `## Active Plans`; nur `--archive` verschiebt Zeilen nach `docs/plan/ARCHIVE.md`: abgeschlossene Einträge jenseits der neuesten 20 samt eingerückten Absätzen und den Inhalt eines legacy Abschnitts `## Planning Rules`. `check` warnt, wenn `## Completed Plans` mehr als 20 Einträge hat oder ein legacy Abschnitt `## Planning Rules` übrig ist.
-- `pota goal ...`: verwaltet das Repository-goal (`pota goal --help`). `goal stats --history [--limit N]` fasst die beendeten goals des Repositorys über alle Worktrees zusammen: Anzahl completed/cancelled, Median und p90 der Dauer, Mediane von tasks und receipts, Rerun-Rate, memory promotion Entscheidungen, einen older/newer `trend` ab 4 abgeschlossenen goals und die letzten goals; ohne Historie gibt es `{"schemaVersion":1,"scope":"repository","goals":0}` aus. `completionCriteria` (`goal start --criteria`) ist `advisory`: Pota zeichnet es auf, erzwingt es aber nicht, und der Abschluss hängt nur von der erforderlichen Evidence ab.
+- `pota goal ...`: verwaltet das Repository-goal (`pota goal --help`). `goal stats --history [--limit N]` fasst die beendeten goals des Repositorys über alle Worktrees zusammen: Anzahl completed/cancelled, Median und p90 der Dauer, Mediane von tasks und receipts, Rerun-Rate, memory promotion Entscheidungen, einen older/newer `trend` ab 4 abgeschlossenen goals und die letzten goals; ohne Historie gibt es `{"schemaVersion":1,"scope":"repository","goals":0}` aus. `completionCriteria` (`goal start --criteria`) ist `advisory`: Pota zeichnet es auf, erzwingt es aber nicht, und der Abschluss hängt nur von der erforderlichen Evidence ab. `goal gate --task <id> --on|--off [--reason <text>]` setzt oder löst ein manuelles approval gate auf einem task, der weder active noch completed ist. Ein gated task wird nie automatisch gestartet oder als fortzusetzende Arbeit angezeigt: `goal ready` führt ihn unter `gated` (ein Schlüssel, der nur erscheint, wenn ein gate existiert) statt unter `ready`, und wenn nur noch gated tasks übrig sind, sagt der Hook-Kontext, dass das goal auf die Freigabe des Nutzers wartet. Nur der Nutzer löst ein gate: mit `goal gate --off`, mit `goal task --task <id> --status active --approve-gate` oder über das DAG-Panel. Gates liegen im gemeinsamen goal state und werden daher nur durchgesetzt, wenn jeder Host, der am Repository arbeitet, 2.3.0 oder neuer ausführt.
 - `pota-memory`: erkundet domain knowledge und aktualisiert `MEMORY.md`.
 - `pota-plan`: erstellt einen decision-complete plan unter `docs/plan/`.
 - `pota-work`: führt den nächsten module task im aktuellen `PLAN.md` mit zwei verification gates aus.
 - `pota-review`: prüft completed tasks gegen plan, memory und evidence.
+- `dag`: öffnet nur das [DAG-Panel](#dag-panel); es plant nie, bearbeitet nichts und ändert den goal state nicht.
 
 Pota schreibt nur unter `POTA_HOME` (Standard `~/.pota`) und nie in seine Plugin-Kopie. Codex bindet die Hook-Freigabe an den Plugin-Inhalt; eine Kopie, die sich selbst änderte, verlöre ihre Freigabe. Die Plugin-Dateien eines Hosts werden nur von dessen eigenen Plugin-Befehlen installiert, aktualisiert und entfernt.
 
@@ -197,6 +213,7 @@ Pota legt seine Daten unter `POTA_HOME` (Standard `~/.pota`) ab; die Plugin-Kopi
   tools/comment-checker/    comment-checker-Binary (fixierter Release)
   migration/                Berichte und Zustand des Entfernens der 1.x-Installation
   hosts/antigravity/        Antigravity-Sitzungsdateien (Hook-Meldungen, die auf den nächsten Prompt warten)
+  hosts/antigravity-dag/    workspaces.json: zuletzt aktive Workspaces für die DAG MCP App (Antigravity und Codex)
   install/, update/         Reste der npm-Installation 1.x, bis ihr Entfernen abgeschlossen ist
 ```
 
@@ -206,13 +223,33 @@ Pota legt seine Daten unter `POTA_HOME` (Standard `~/.pota`) ab; die Plugin-Kopi
 - Model ceiling: Wenn das Konto die höheren tiers nicht nutzen kann oder soll (Abonnement, Organisationsrichtlinie, usage credits), setze `POTA_MODEL_CEILING=stronger` (oder `balanced`; ein model-Name wie `opus` oder `sonnet` geht ebenfalls) oder `"modelCeiling": "stronger"` in `~/.pota/config.json`. Die Umgebungsvariable hat Vorrang, und `config.json` ist der eine Ort, den alle hooks und CLI-Aufrufe gleich lesen. `SessionStart` fügt dann eine Zeile `Pota model ceiling:` hinzu, tiers über dem ceiling verwenden das model des ceiling-tier, das Heavy-Design-Gate akzeptiert dieses model, und die Main-model-Prüfung verwendet den gedeckelten stronger tier. Ohne Einstellung ändert sich nichts; ein ungültiger Wert wendet kein ceiling an und wird gemeldet.
 - Request Brief und Steering: Ein Light- oder Heavy-Path-Plan enthält einen `## Request Brief` (ursprüngliche Anfrage, interpretiertes Ergebnis, Umfang, frühere Aufzeichnungen (`Prior records`, über `pota plan steering`), Annahmen, implizite Anforderungen, offene Fragen, Steering-Protokoll); der Abschluss von `triage-plan` wird abgelehnt, bis er ausgefüllt ist, es sei denn, `--allow-no-request-brief <reason>` wird übergeben. Korrekturen, Ergänzungen und Richtungswechsel des Nutzers werden mit `goal steer --kind <correction|addition|redirect> --reason <text>` erfasst, oder mit `goal replan --steer <correction|addition|redirect|none> --reason <text>`, wenn sich tasks ändern; ab dem zweiten Steering oder bei einem redirect muss zudem `Current request (as of S<n>)` neu geschrieben werden.
 
-## Claude Code DAG Panel
+## DAG Panel
 
-Claude Code Desktop zeigt das aktuelle Pota-goal als DAG-Panel mit einer Spalte pro wave. Claude Code nutzt sein eigenes mod-Panel (`/dag`). Seit 2.3.0 zeigen Antigravity und Codex/ChatGPT Desktop dasselbe DAG als MCP App, die über das Tool `open_pota_dag` geöffnet wird; es läuft automatisch nach `goal start` oder über die skill `dag` (Antigravity `/dag`, Codex `$dag`). Nötig ist ein Claude Code mit mod-Unterstützung (geschrieben für die mod-API von Claude Code 2.1.325); auf einer surface ohne Grafik, etwa dem Terminal, erscheint stattdessen eine Textliste.
+Jeder Host zeigt das aktuelle Pota-goal als DAG-Panel mit einer Spalte pro wave. Claude Code zeichnet es mit seinem eigenen mod-Pane; seit 2.3.0 zeigen Antigravity und Codex / ChatGPT Desktop dasselbe Panel als MCP App, die der lokale MCP-Server `pota-dag` des Plugins bereitstellt. Das Panel hat auf allen drei Hosts dieselben Teile:
 
-- `/dag [previous|current|next|all|refresh|close]` öffnet das Panel. Die Ansichten sind vorherige, aktuelle, nächste und alle. Standard ist die Ansicht alle (all); die anderen sind optional. Eine abgeschlossene Verbindung ist eine durchgezogene Linie; eine laufende ist gestrichelt mit einem wandernden Punkt.
+- Vier Tabs: DAG (der wave-Graph mit den Ansichten vorherige, aktuelle, nächste und alle; alle ist der Standard), Diff, Plan und Agents & Stats.
+- Diff listet die geänderten Dateien des Working Tree mit der Anzahl hinzugefügter und gelöschter Zeilen. Es führt nur lesende Git-Befehle aus und zeigt nie Dateiinhalte; Pfade, die nach Geheimnissen aussehen (`.env*`, `service-account*.json`, Schlüssel- und Zertifikatsdateien und Ähnliches), werden als sensibel markiert und nicht verlinkt.
+- Plan zeigt eine Übersicht des aktiven Plans: Titel, goal, aktuelle Anfrage und Checklisten-Fortschritt.
+- Agents & Stats zeigt agent, model und effort, die für jeden task aufgezeichnet sind, und die letzten goals des Repositorys. Auf Antigravity ergänzen die Sitzungstranskripte das tatsächliche model, den effort und die Token-Zahlen.
+- Die Auswahl eines Knotens öffnet einen Inspector mit den evidence receipts des task und dem diff stat seines `writeScope`.
+- Bedienelemente pausieren das goal und setzen es fort und schalten das manuelle approval gate eines task ein oder aus (siehe `pota goal gate` unter [Commands](#commands)).
+
+### Claude Code (mod)
+
+Nötig ist ein Claude Code mit mod-Unterstützung (geschrieben für die mod-API von Claude Code 2.1.325). Auf einer surface ohne Grafik, etwa dem Terminal, erscheint stattdessen eine Textliste.
+
+- `/dag [previous|current|next|all|dag|diff|plan|stats|refresh|close]` öffnet das Panel in dieser Ansicht oder diesem Tab. Eine abgeschlossene Verbindung ist eine durchgezogene Linie; eine laufende ist gestrichelt mit einem wandernden Punkt.
 - Es öffnet sich nach `pota goal start` und `pota goal replan` automatisch einmal. Wenn Sie es schließen, öffnet es sich für dasselbe goal nicht erneut.
 - Es liest den goal-Zustand bei jedem goal-Befehl und alle 30 Sekunden neu.
+- Die Auswahl eines laufenden task öffnet die Konversation des subagent, der daran arbeitet. Ein task, den die Main session selbst erledigt, und jeder task auf einer surface ohne umschaltbare Hauptansicht (die Desktop-App) öffnet stattdessen den Inspector im Pane.
+
+### Antigravity and Codex / ChatGPT Desktop (MCP App)
+
+- Der Server `pota-dag` wird vom Plugin registriert (Antigravity: `mcp_config.json` im Wurzelverzeichnis; Codex / ChatGPT Desktop: `.codex-plugin/mcp.json`) und führt `scripts/pota-dag-mcp.mjs` über stdio ohne Abhängigkeiten aus.
+- Der Agent ruft das Tool `open_pota_dag` direkt nach `goal start` auf und wenn er ein aktives goal wieder aufnimmt. Um das Panel selbst zu öffnen, verwenden Sie die skill `dag`: `/dag` auf Antigravity, `$dag` auf Codex (ein Codex-Plugin kann keinen Slash-Befehl registrieren). Antigravity bietet das Panel außerdem als Seitenleisten-Eintrag und als zusätzliches Pane an.
+- `open_pota_dag` gibt dem model nur eine kleine Zusammenfassung zurück; das Panel lädt seine Daten selbst. Die Bedienelemente für Pausieren, Fortsetzen und gate funktionieren nur in Workspaces, die die Pota-Hooks als zuletzt aktiv verzeichnet haben (`~/.pota/hosts/antigravity-dag/workspaces.json`).
+- Der Inspector kann eine Folgenachricht an die Konversation senden, die den Agenten bittet, einen task zu prüfen.
+- Ist der Server auf Antigravity nicht erreichbar, führt der Agent `node "<pluginRoot>/scripts/pota-dag-mcp.mjs" ensure` aus und versucht es einmal erneut; ein nicht verfügbares Panel blockiert die Arbeit nie.
 
 ## Antigravity Compatibility
 
@@ -223,7 +260,7 @@ Pota unterstützt die Antigravity-CLI (`agy`); die Antigravity-IDE wird nicht un
 - `PostToolUse` auf `write_to_file`, `replace_file_content` und `multi_replace_file_content` führt den comment checker und die Goal-Erinnerung aus; das Ergebnis kommt mit dem nächsten `PreInvocation`.
 - `Stop` lässt den Agenten weiterarbeiten, solange das aktive Goal eine unfertige Task hat. Es gibt kein `SubagentStop`.
 
-Skills werden als `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` und `/dag` aufgerufen; Workflows sind kein Bestandteil von Antigravity-Plugins. Der Adapter folgt der Hook-Dokumentation von Antigravity; sein Verhalten in einer echten `agy`-Sitzung wurde noch nicht geprüft.
+Skills werden als `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory` und `/dag` aufgerufen; Workflows sind kein Bestandteil von Antigravity-Plugins. Die `mcp_config.json` im Wurzelverzeichnis registriert den MCP-Server `pota-dag` für das [DAG-Panel](#dag-panel). Der Adapter folgt der Hook-Dokumentation von Antigravity; sein Verhalten in einer echten `agy`-Sitzung wurde noch nicht geprüft.
 
 ## Locale Policy
 

@@ -1,6 +1,6 @@
 # Pota Harness
 
-Pota Harness 是面向 Codex、Claude Code 和 Antigravity 的高 token 效率 multi-agent harness plugin。
+Pota Harness 是面向 Claude Code、Codex / ChatGPT Desktop 和 Antigravity CLI 的高 token 效率 multi-agent harness plugin。
 
 [English](README.md)
 
@@ -15,7 +15,7 @@ Pota 也把 tool readiness 视为工作的一部分。它会根据 repository st
 
 ## Install
 
-Pota 是 Claude Code、Codex 和 Antigravity CLI 的 plugin。本 repository 的根目录就是 plugin，`main` branch 就是发布版本。每个 host 用自己的 plugin 命令安装、更新和删除自己的副本，这个副本就是该 host 的 runtime：hooks、skills 和 CLI 都从它运行。不同 host 上的版本可以不同，Pota 不会互相比较。`~/.pota/projects/` 中的 goal state 由所有 host 共享。
+Pota 是 Claude Code、Codex(包括 ChatGPT Desktop)和 Antigravity CLI 的 plugin。本 repository 的根目录就是 plugin，`main` branch 就是发布版本。每个 host 用自己的 plugin 命令安装、更新和删除自己的副本，这个副本就是该 host 的 runtime：hooks、skills 和 CLI 都从它运行。不同 host 上的版本可以不同，Pota 不会互相比较。`~/.pota/projects/` 中的 goal state 由所有 host 共享。
 
 ### Claude Code
 
@@ -49,6 +49,8 @@ codex plugin marketplace add comento/pota-harness
 1. 打开 `/plugins`，从 `pota-harness` marketplace 安装 `pota`，然后开始新的 session。
 2. 打开 `/hooks`，批准 Pota 的 5 个 hook。Codex 在批准之前不会运行 plugin hook，而且批准与 hook 内容绑定，所以每次更新后都要在 `/hooks` 中重新批准。未批准时 session 中不会出现 `Pota CLI:` 行，Pota skills 会告诉你 Pota hooks 未生效。
 
+plugin 还会注册本地 `pota-dag` MCP server(`.codex-plugin/mcp.json`)，用于在 Codex 和 ChatGPT Desktop 中显示 [DAG 面板](#dag-panel)。
+
 更新：运行 `codex plugin marketplace upgrade pota-harness`，然后在 `/hooks` 中重新批准。删除：在 `/plugins` 中打开该 plugin，选择 "Uninstall plugin"。这些 Codex 步骤依据 Codex 文档和源码，尚未在真实的 Codex 安装上运行过。
 
 ### Antigravity CLI
@@ -57,16 +59,16 @@ codex plugin marketplace add comento/pota-harness
 agy plugin install https://github.com/comento/pota-harness
 ```
 
-更新时再次运行同一命令；Antigravity 文档说明重新安装会替换已安装的副本。删除用 `agy plugin uninstall pota`。建议使用 `agy` 1.5.6 或更高版本。只支持 Antigravity CLI，不支持 Antigravity IDE。
+更新时再次运行同一命令；Antigravity 文档说明重新安装会替换已安装的副本。删除用 `agy plugin uninstall pota`。建议使用 `agy` 1.5.6 或更高版本。只支持 Antigravity CLI，不支持 Antigravity IDE。plugin 还会注册本地 `pota-dag` MCP server(根目录的 `mcp_config.json`)，用于显示 [DAG 面板](#dag-panel)。
 
 ### What each host gets
 
-| | Claude Code | Codex | Antigravity CLI |
+| | Claude Code | Codex / ChatGPT Desktop | Antigravity CLI |
 | --- | --- | --- | --- |
-| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory`, `/dag` (mod 命令) | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
+| Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | 同样 5 个(在 `/hooks` 中批准后) | SessionStart, PreInvocation(prompt context), PostToolUse, Stop；没有 SubagentStop |
 | Agents `explorer`, `worker` | 有 | 无 | 无 |
-| DAG 面板(mod) | 有 | 无 | 无 |
+| DAG 面板 | mod pane，用 mod 命令 `/dag` 打开 | MCP App(`pota-dag` server)，用 `$dag` 打开 | MCP App(`pota-dag` server)，用 `/dag` 打开 |
 
 ### Coming from the npm install (1.x)
 
@@ -114,6 +116,19 @@ node "<pluginRoot>/scripts/pota.mjs" migrate run --host claude
 - Heavy Path: new directory/module/layer、new domain model/service/abstraction、security/session/auth、external API/message queue/payment、DB schema/migration、concurrency/transaction/cache changes、cross-domain refactor，或明确的 extra-care request。
 
 选中的 path 和理由会在存在 plan artifact 时记录在 `docs/plan/<topic>.md`。即使是 Light Path，也保留两个 verification gates。
+
+Pota 按每个 task 的性质选择 model，分为四个 tier，每个 host 各有一个对应值，并对 reasoning effort 进行 routing；`MEMORY.md` 或 plan 中的 `Model routing: inherited` 会关闭按 task 选择 model。
+
+| Tier | 用途 | Claude Code | Codex | Antigravity |
+| --- | --- | --- | --- | --- |
+| fast | read-only exploration 和摘要 | `haiku` | `gpt-6-luna` | `flash_lite` |
+| balanced | Light implementation 和常规 verification | `sonnet` | `gpt-6.1-terra` | `flash` |
+| stronger | planning、triage、Heavy implementation、review、final verification | `opus` | `gpt-6-sol` | `pro` |
+| strongest | 仅用于 Heavy design | `fable` | `gpt-6-astra` | `pro` |
+
+在 Antigravity 上，默认的 delegation 工具 `invoke_subagent` 只接受 tier 值，没有 effort 选项，因此 effort 记录为 `inherited`；存在 `swarm` 工具时，可以选择用它 dispatch 带 effort 后缀的具体 model。Pota 还会把真实的 Antigravity session 和 `swarm` model ID(Gemini、GPT-OSS 和 Claude 系列)归入同样的四个 tier，供其 gates 使用。如果 Heavy task 在 assign 时没有已应用的 effort(`inherited`、`not-applied` 或没有记录)，除非传入 `--allow-inherited-effort <reason>`，否则无法通过 `goal task --status completed` 或 `goal finish` 完成。
+
+delegated subagent 完成时，会在离开前提交 final report。orchestrator 记录该 final report 和 evidence 之后，如果 host 提供非破坏性的操作，就关闭或释放已完成的 subagent；否则让它保持 idle，而不是 kill(Antigravity 的 `manage_subagents(kill)` 会把它显示为 `Cancelled`)。
 
 ## Tool Readiness
 
@@ -178,11 +193,12 @@ root files 保持简短，细节移到 `docs/` 下，让 agents 只读取当前�
 - `pota cleanup --root <repo>`: 默认只读报告 legacy project-local `.pota` residue。`--yes` 将 valid active state 迁移/协调到 user-home store，只删除 known state/lock/tool residue，保留 unknown files，并且仅在目录为空时清理目录。
 - `pota memory check|index [--root <repo>]`: `check` 对照 `MEMORY.md` 与 `docs/memory/*.md` 并输出一个 JSON 报告；存在 unindexed notes、dead links、duplicates、stale summaries、summary 中的控制字符或 unsafe paths 时 exit 1，warnings 仅在 `--strict` 下失败。条目是 `## Domain Knowledge` 下的列表行(没有该 section 的旧文件则为所有列表行)；其他 section 中的 note 链接只是提及，`index` 不会改写。`index` 添加缺失的 notes，`Summary:` 变化时只替换链接后的 summary 部分(含多个链接的行保持原样)；只删除该 section 内完全匹配的 Pota placeholder 行，不删除条目或 dead links，其余内容逐字节保留。可用 `--dry-run` 预览。插入位置位于未闭合的 code fence 内时，`index` 不写入任何内容，并以 `unclosed-fence` exit 1。用法错误 exit 2；不带子命令的 `pota memory` 仍输出原有指引。
 - `pota plan check|index [--archive] [--root <repo>]`: 对 `PLAN.md` 和 `docs/plan/*.md` 执行相同的检查和索引，条目是标题以 `Plans` 结尾的 `## ` section(如 `## Superseded Plans`)中的列表行。`index` 把 checkbox 全部勾选的 plan 放到 `## Completed Plans` 顶部，其他 plan 放到 `## Active Plans`；只有 `--archive` 会移动行：把超出最新 20 条的 completed 条目(连同缩进段落)和 legacy `## Planning Rules` section 的正文移到 `docs/plan/ARCHIVE.md`。`## Completed Plans` 超过 20 条或仍有 legacy `## Planning Rules` section 时，`check` 会给出 warning。
-- `pota goal ...`: 管理 repository goal(`pota goal --help`)。`goal stats --history [--limit N]` 汇总 repository 所有 worktree 中已结束的 goals：completed/cancelled 数量、耗时的中位数和 p90、task 与 receipt 的中位数、rerun rate、memory promotion 决定数、completed goal 达到 4 个后的 older/newer `trend`，以及最近的 goals；没有历史时输出 `{"schemaVersion":1,"scope":"repository","goals":0}`。`completionCriteria`(`goal start --criteria`)是 `advisory`：Pota 只记录不强制，完成只由 required evidence 判定。
+- `pota goal ...`: 管理 repository goal(`pota goal --help`)。`goal stats --history [--limit N]` 汇总 repository 所有 worktree 中已结束的 goals：completed/cancelled 数量、耗时的中位数和 p90、task 与 receipt 的中位数、rerun rate、memory promotion 决定数、completed goal 达到 4 个后的 older/newer `trend`，以及最近的 goals；没有历史时输出 `{"schemaVersion":1,"scope":"repository","goals":0}`。`completionCriteria`(`goal start --criteria`)是 `advisory`：Pota 只记录不强制，完成只由 required evidence 判定。`goal gate --task <id> --on|--off [--reason <text>]` 为尚未 active 或 completed 的 task 设置或解除手动 approval gate。被 gate 的 task 不会自动开始，也不会被当作要继续的工作：`goal ready` 把它列在 `gated`(仅在存在 gate 时才出现的 key)下，而不是 `ready` 下；只剩下被 gate 的 task 时，hook context 会说明该 goal 正在等待用户批准。只有用户可以解除 gate：用 `goal gate --off`、用 `goal task --task <id> --status active --approve-gate`，或在 DAG 面板中操作。gate 保存在共享的 goal state 中，因此只有在该 repository 上工作的所有 host 都运行 2.3.0 或更高版本时才会被强制执行。
 - `pota-memory`: 探索 domain knowledge 并更新 `MEMORY.md`。
 - `pota-plan`: 在 `docs/plan/` 下创建 decision-complete plan。
 - `pota-work`: 执行当前 `PLAN.md` 中的下一个 module task，并收集两个 verification gates。
 - `pota-review`: 根据 plan、memory 和 evidence review completed tasks。
+- `dag`: 只打开 [DAG 面板](#dag-panel)；从不做 plan、编辑或改变 goal state。
 
 Pota 只在 `POTA_HOME`(默认 `~/.pota`)下写入，从不写入自己的 plugin 副本。Codex 把 hook 批准绑定到 plugin 内容，修改了自身的副本会失去批准。host 的 plugin 文件只由 host 自己的 plugin 命令安装、更新和删除。
 
@@ -197,6 +213,7 @@ Pota 把数据放在 `POTA_HOME`(默认 `~/.pota`)下，由所有 host 的 plugi
   tools/comment-checker/    comment-checker 二进制(固定 release)
   migration/                1.x 安装删除的报告和状态
   hosts/antigravity/        Antigravity session 文件(等待下一个 prompt 的 hook 消息)
+  hosts/antigravity-dag/    workspaces.json: DAG MCP App 最近活动的 workspace(Antigravity 和 Codex)
   install/, update/         1.x npm 安装留下的内容，删除完成后消失
 ```
 
@@ -206,13 +223,33 @@ Pota 把数据放在 `POTA_HOME`(默认 `~/.pota`)下，由所有 host 的 plugi
 - model ceiling: 当账户不能或不打算使用更高的 tier 时(订阅等级、组织策略、usage credits),设置 `POTA_MODEL_CEILING=stronger`(或 `balanced`;也可以写 `opus`、`sonnet` 等 model 名),或在 `~/.pota/config.json` 中写入 `"modelCeiling": "stronger"`。环境变量优先,`config.json` 是所有 hook 和 CLI 调用都会读取的同一位置。设置后 `SessionStart` 会添加一行 `Pota model ceiling:`,高于 ceiling 的 tier 使用 ceiling tier 的 model,Heavy 设计门禁接受该 model,main model 检查以应用 ceiling 后的 stronger tier 为准。未设置时行为不变;无效值不应用 ceiling 并给出提示。
 - 请求契约与 steering: Light 和 Heavy Path 计划包含 `## Request Brief`(原始请求、解读的结果、范围、过往记录参考(`Prior records`,`pota plan steering`)、假设、隐含需求、未决问题、steering 记录),填写完成之前,除非传入 `--allow-no-request-brief <reason>`,否则 `triage-plan` 的完成会被拒绝。用户的更正、补充和方向变更用 `goal steer --kind <correction|addition|redirect> --reason <text>` 记录,task 发生变化时用 `goal replan --steer <correction|addition|redirect|none> --reason <text>` 记录;第二次 steering 或 redirect 还需要重写 `Current request (as of S<n>)`。
 
-## Claude Code DAG Panel
+## DAG Panel
 
-Claude Code 桌面版会把当前 Pota goal 显示为按 wave 分列的 DAG 面板。Claude Code 使用自己的 mod 面板(`/dag`)。自 2.3.0 起,Antigravity 和 Codex/ChatGPT Desktop 也通过 `open_pota_dag` 工具打开的 MCP App 显示同一个 DAG,该工具会在 `goal start` 之后自动运行,也可以通过 `dag` skill(Antigravity `/dag`、Codex `$dag`)打开。需要支持 mod 功能的 Claude Code(基于 Claude Code 2.1.325 的 mod API 编写);在终端等无法绘制图形的 surface 上改为文字列表。
+每个 host 都会把当前 Pota goal 显示为按 wave 分列的 DAG 面板。Claude Code 用自己的 mod pane 绘制;自 2.3.0 起,Antigravity 和 Codex / ChatGPT Desktop 以 MCP App 的形式显示同一个面板,由 plugin 的本地 `pota-dag` MCP server 提供。面板在三个 host 上的组成相同:
 
-- 用 `/dag [previous|current|next|all|refresh|close]` 打开面板。视图有上一个、当前、下一个、全部。默认是全部(all)视图,其余为可选项。已完成的连线为实线,进行中的连线为虚线并带移动的点。
+- 四个标签页:DAG(wave 图,有上一个、当前、下一个、全部视图;默认是全部)、Diff、Plan 和 Agents & Stats。
+- Diff 列出 working tree 中已更改的文件以及新增和删除的行数。它只运行只读的 Git 命令,从不显示文件内容;疑似 secret 的路径(`.env*`、`service-account*.json`、密钥和证书文件等)会标记为 sensitive,并且不带链接。
+- Plan 显示 active plan 的概览:标题、goal、当前请求和 checklist 进度。
+- Agents & Stats 显示每个 task 记录的 agent、model 和 effort,以及 repository 最近的 goals。在 Antigravity 上,session transcript 还会补充实际的 model、effort 和 token 数量。
+- 选中任意节点会打开 inspector,显示该 task 的 evidence receipts 及其 `writeScope` 的 diff stat。
+- 控件可以暂停和恢复 goal,并打开或关闭 task 的手动 approval gate(见 [Commands](#commands) 中的 `pota goal gate`)。
+
+### Claude Code (mod)
+
+需要支持 mod 功能的 Claude Code(基于 Claude Code 2.1.325 的 mod API 编写);在终端等无法绘制图形的 surface 上改为文字列表。
+
+- 用 `/dag [previous|current|next|all|dag|diff|plan|stats|refresh|close]` 以对应的视图或标签页打开面板。已完成的连线为实线,进行中的连线为虚线并带移动的点。
 - 在 `pota goal start` 和 `pota goal replan` 之后自动打开一次。关闭后,同一个 goal 不会再自动打开。
 - 每次执行 goal 命令时以及每 30 秒重新读取 goal 状态并刷新。
+- 选中正在运行的 task 会打开处理它的 subagent 的对话。main session 自己执行的 task,以及没有可切换主视图的 surface(桌面应用)上的所有 task,则打开 pane 内的 inspector。
+
+### Antigravity and Codex / ChatGPT Desktop (MCP App)
+
+- `pota-dag` server 由 plugin 注册(Antigravity:根目录的 `mcp_config.json`;Codex / ChatGPT Desktop:`.codex-plugin/mcp.json`),通过 stdio 运行 `scripts/pota-dag-mcp.mjs`,没有任何依赖。
+- agent 会在 `goal start` 之后以及恢复 active goal 时立即调用 `open_pota_dag` 工具。要自己打开面板,请使用 `dag` skill:Antigravity 上是 `/dag`,Codex 上是 `$dag`(Codex plugin 无法注册 slash command)。Antigravity 还把面板作为侧边栏条目和辅助 pane 提供。
+- `open_pota_dag` 只向 model 返回一份简短的摘要;面板自行加载数据。暂停、恢复和 gate 控件只对 Pota hooks 记录为最近活动的 workspace 生效(`~/.pota/hosts/antigravity-dag/workspaces.json`)。
+- inspector 可以向对话发送一条后续消息,请 agent review 某个 task。
+- 在 Antigravity 上 server 未运行时,agent 会运行 `node "<pluginRoot>/scripts/pota-dag-mcp.mjs" ensure` 并重试一次;面板不可用绝不会阻塞工作。
 
 ## Antigravity Compatibility
 
@@ -223,7 +260,7 @@ Pota 支持 Antigravity CLI(`agy`)，不支持 Antigravity IDE。plugin 的 mani
 - `write_to_file`、`replace_file_content`、`multi_replace_file_content` 的 `PostToolUse` 运行 comment checker 和 goal 提醒，结果在下一个 `PreInvocation` 加入。
 - 活动 goal 还有未完成的 task 时，`Stop` 让 agent 继续工作。没有 `SubagentStop`。
 
-skills 以 `/pota-plan`、`/pota-work`、`/pota-review`、`/pota-memory`、`/dag` 调用；workflows 不是 Antigravity plugin 的组成部分。adapter 依据 Antigravity 的 hook 文档实现，在真实 `agy` session 中的行为尚未验证。
+skills 以 `/pota-plan`、`/pota-work`、`/pota-review`、`/pota-memory`、`/dag` 调用；workflows 不是 Antigravity plugin 的组成部分。根目录的 `mcp_config.json` 为 [DAG 面板](#dag-panel) 注册 `pota-dag` MCP server。adapter 依据 Antigravity 的 hook 文档实现，在真实 `agy` session 中的行为尚未验证。
 
 ## Locale Policy
 
