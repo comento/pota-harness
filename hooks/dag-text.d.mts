@@ -62,6 +62,8 @@ export type Messages = {
   resume: string;
   gateOn: string;
   gateOff: string;
+  retry: string;
+  retryHint: string;
   gateBadge: string;
   inspector: string;
   receipts: string;

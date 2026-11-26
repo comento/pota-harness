@@ -1633,7 +1633,7 @@ test("11. pota_dag_action HITL 도구 계약, pause/resume·toggle_gate 왕복 �
     assert.equal(actionTool._meta["openai/visibility"], "private");
     assert.equal(actionTool._meta["openai/widgetAccessible"], true);
     assert.deepEqual(actionTool.inputSchema.required, ["action"]);
-    assert.deepEqual(actionTool.inputSchema.properties.action.enum, ["pause", "resume", "toggle_gate"]);
+    assert.deepEqual(actionTool.inputSchema.properties.action.enum, ["pause", "resume", "toggle_gate", "retry_task"]);
     assert.equal(actionTool.inputSchema.properties.taskId.type, "string");
     assert.equal(actionTool.inputSchema.properties.enabled.type, "boolean");
     assert.equal(actionTool.inputSchema.additionalProperties, false);
@@ -1725,6 +1725,48 @@ test("11. pota_dag_action HITL 도구 계약, pause/resume·toggle_gate 왕복 �
     assert.equal(finalState.goal.status, "active");
     assert.equal(Boolean(finalState.tasks.find((task) => task.id === "t1").approvalGate), false);
     assert.equal(Boolean(finalState.tasks.find((task) => task.id === "t2").approvalGate), false);
+  });
+});
+
+test("11b. pota_dag_action retry_task는 blocked task를 pending으로 되돌리고 잘못된 호출은 거부한다", async () => {
+  await withWorkspace(async ({ repo, env }) => {
+    await seedS2Workspace(repo);
+    await recordActiveWorkspace({ workspacePath: repo, conversationId: "conv-retry-action", env });
+    const server = createDagMcpServer({ env, now: () => 1_700_000_040_000 });
+    let rpcId = 0;
+    const call = (name, args) => server.handleMessage({
+      jsonrpc: "2.0",
+      id: ++rpcId,
+      method: "tools/call",
+      params: { name, arguments: args },
+    });
+    const listed = await server.handleMessage({ jsonrpc: "2.0", id: 0, method: "tools/list" });
+    const actionTool = listed.result.tools.find((tool) => tool.name === "pota_dag_action");
+    assert.deepEqual(actionTool.inputSchema.properties.action.enum, ["pause", "resume", "toggle_gate", "retry_task"]);
+
+    // active task 재시도와 taskId 누락, enabled 동반은 상태를 바꾸지 않고 거부한다.
+    for (const [args, pattern] of [
+      [{ action: "retry_task", root: repo }, /taskId is required when action is toggle_gate or retry_task/],
+      [{ action: "retry_task", taskId: "t1", enabled: true, root: repo }, /enabled is only accepted when action is toggle_gate/],
+      [{ action: "retry_task", taskId: "t1", root: repo }, /only a blocked task can be retried/],
+      [{ action: "retry_task", taskId: "missing", root: repo }, /Unknown task: missing/],
+      [{ action: "delete", root: repo }, /expected pause, resume, toggle_gate, or retry_task/],
+    ]) {
+      const res = await call("pota_dag_action", args);
+      assert.equal(res.result.isError, true, JSON.stringify(args));
+      assert.match(res.result.content[0].text, pattern, JSON.stringify(args));
+    }
+    assert.equal((await readGoalState({ root: repo })).tasks.find((task) => task.id === "t1").status, "active");
+
+    await setTaskStatus({ root: repo, taskId: "t1", status: "blocked", blocker: "needs input" });
+    assert.equal((await readGoalState({ root: repo })).goal.status, "blocked");
+    const retried = await call("pota_dag_action", { action: "retry_task", taskId: "t1", root: repo, locale: "en" });
+    assert.notEqual(retried.result.isError, true);
+    assert.equal(retried.result.structuredContent.goal.status, "active");
+    const after = await readGoalState({ root: repo });
+    assert.equal(after.goal.status, "active");
+    assert.equal(after.tasks.find((task) => task.id === "t1").status, "active");
+    assert.equal(after.tasks.find((task) => task.id === "t1").blocker, null);
   });
 });
 

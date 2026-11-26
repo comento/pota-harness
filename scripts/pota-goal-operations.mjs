@@ -20,7 +20,7 @@ import {
   terminalGoalStatuses, timestamp, validEvidencePolicy, validGoalStatus, validModelHost, validTaskKind, validTaskRoute, validTaskStatus, validateState,
 } from "./pota-goal-state-validation.mjs";
 import {
-  advanceGoal, assertGoalMutable, ensureGoalCanComplete, ensureTaskCanComplete,
+  NO_READY_TASK_BLOCKER, advanceGoal, assertGoalMutable, ensureGoalCanComplete, ensureTaskCanComplete,
   mutateGoal, taskById,
 } from "./pota-goal-operations-mutations.mjs";
 
@@ -449,6 +449,38 @@ export async function setTaskApprovalGate(rootOrOptions = {}, maybeOptions) {
   optionalText(reason, "reason");
   optionalText(sessionId, "sessionId");
   return updateTaskApprovalGate(root, normalizedTaskId, () => enabled);
+}
+
+// 단일 락 안에서 blocked task를 pending으로 되돌리고 dispatch 기록과 그 task의 영수증을 비운다(완료하려면 검증을 다시 기록한다).
+// goal이 그 task(또는 다른 blocked task)의 blocker나 기본 문구로 막혀 있었을 때만 active로 복귀시키며, `goal block`으로 직접 막은 goal은 유지한다.
+// active goal은 advanceGoal로 준비된 첫 task를 활성화하고, 실행할 task가 없으면 남은 blocked task의 사유로 다시 blocked가 된다.
+export async function retryTask(rootOrOptions = {}, maybeOptions) {
+  const { root = process.cwd(), taskId } = normalizeRootOptions(rootOrOptions, maybeOptions);
+  const normalizedTaskId = requiredText(taskId, "taskId");
+  return mutateGoal(root, (state) => {
+    assertGoalMutable(state);
+    const task = taskById(state, normalizedTaskId);
+    if (task.status !== "blocked") {
+      throw new Error(`Task ${task.id} is ${task.status}; only a blocked task can be retried`);
+    }
+    const blockedByTasks = state.goal.blocker !== null && state.goal.blocker !== undefined
+      && (state.goal.blocker === NO_READY_TASK_BLOCKER
+        || state.tasks.some((item) => item.status === "blocked" && item.blocker === state.goal.blocker));
+    task.status = "pending";
+    task.blocker = null;
+    for (const key of ["assignedAgentId", "effort", "effortSource", "model", "modelSource", "effectiveModel", "modelHost"]) {
+      task[key] = null;
+    }
+    state.receipts = state.receipts.filter((receipt) => !(receipt.scope === "task" && receipt.taskId === task.id));
+    task.updatedAt = timestamp();
+    if (state.goal.status === "blocked" && blockedByTasks) {
+      state.goal.status = "active";
+      state.goal.blocker = null;
+    }
+    if (state.goal.status === "active") advanceGoal(state, null);
+    state.goal.updatedAt = timestamp();
+    return state;
+  });
 }
 
 // 단일 락 안에서 task의 현재 approvalGate 값을 읽고 원자적으로 반전한다.
