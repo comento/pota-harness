@@ -13,13 +13,15 @@ test("the retired shell state runtime stays deleted", async () => {
   await assert.rejects(stat(resolve(root, "scripts/pota-state.sh")), { code: "ENOENT" });
 });
 
-test("plugin inventory covers two Claude agents and five skills and no command or workflow surfaces", async () => {
+test("plugin inventory covers two Claude agents, two Antigravity agents, and five skills and no command or workflow surfaces", async () => {
   const agents = (await readdir(resolve(root, "claude", "agents"))).filter((name) => name.endsWith(".md")).map((name) => name.slice(0, -3));
   assert.deepEqual(agents.sort(), expectedAgentNames);
   const skills = (await readdir(resolve(root, "skills"), { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
   assert.deepEqual(skills.sort(), expectedSkillNames);
   for (const name of skills) await stat(resolve(root, "skills", name, "SKILL.md"));
-  for (const path of ["commands", "agents", ".claude/commands", ".claude/agents", ".agents/workflows"]) {
+  const antigravity = (await readdir(resolve(root, "agents"))).filter((name) => name.endsWith(".md")).map((name) => name.slice(0, -3));
+  assert.deepEqual(antigravity.sort(), expectedAgentNames);
+  for (const path of ["commands", ".claude/commands", ".claude/agents", ".agents/workflows"]) {
     await assert.rejects(stat(resolve(root, path)), { code: "ENOENT" }, `${path} is gone`);
   }
 });

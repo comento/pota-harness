@@ -246,7 +246,7 @@ test("the Codex interface logo fields point at the shared logo", () => {
 });
 
 test("the installer-era command, workflow, mirror, and mod folders are gone", () => {
-  for (const path of ["commands", "agents", ".claude/commands", ".claude/agents", ".agents/workflows", "claude-mod", "scripts/pota"]) {
+  for (const path of ["commands", ".claude/commands", ".claude/agents", ".agents/workflows", "claude-mod", "scripts/pota"]) {
     assert.equal(existsSync(join(root, path)), false, `${path} exists`);
   }
 });

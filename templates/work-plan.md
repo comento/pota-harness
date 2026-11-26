@@ -89,6 +89,7 @@ Describe the observable result.
 - Heavy Path trigger, if selected:
 - Omitted delegation in Light Path, if applicable:
 - Pre-implementation decisions:
+- Plan review (Heavy only): record the verdict under `## Heavy Design` as `Plan review: <approve|reject> (<reviewer model>): <one line>`.
 
 ### Path Criteria
 
@@ -167,6 +168,10 @@ Describe the observable result.
   - `surfaceIntegration`: command or QA artifact, exit code 0, timestamp, goal ID, task ID, and plan ID.
 - Assigned agent ID, if delegated:
 - Blocker: a concrete reason is required when status becomes `blocked`.
+
+## Learnings
+
+Append-only. One line per non-obvious fact a later task or the next goal would have to rediscover: `- L<n> (<task-id>): <fact and its source>`. Leave empty when nothing qualifies.
 
 ## Evidence
 

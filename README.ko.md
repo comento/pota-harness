@@ -67,8 +67,10 @@ agy plugin install https://github.com/comento/pota-harness
 | --- | --- | --- | --- |
 | Skill | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hook | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | 같은 5개(`/hooks`에서 승인한 뒤) | SessionStart, PreInvocation(프롬프트 컨텍스트), PostToolUse, Stop. SubagentStop 없음 |
-| Agent `explorer`, `worker` | 있음 | 없음 | 없음 |
+| Agent `explorer`, `worker` | 있음(플러그인 agent `pota:explorer`, `pota:worker`) | 역할 파일(`skills/pota-work/roles/`)을 orchestrator가 dispatch 프롬프트 맨 앞에 넣음(Codex 플러그인은 agent를 등록할 수 없음) | 있음(플러그인의 `agents/`) |
 | DAG 패널 | mod pane, mod 명령 `/dag`로 엶 | MCP App(`pota-dag` 서버), `$dag`로 엶 | MCP App(`pota-dag` 서버), `/dag`로 엶 |
+
+Antigravity `invoke_subagent`의 agent 이름과 Codex 역할 파일 방식은 아직 실제 세션에서 실행해 보지 않았으며, `agy plugin validate`가 agent 2개를 처리하는 것까지만 확인했습니다.
 
 ### Coming from the npm install (1.x)
 
@@ -177,7 +179,7 @@ Pota는 Claude-family와 Codex-family 모델에만 모델별 조정을 적용합
 하네스는 대상 저장소 루트에 다음 파일을 생성하고 유지합니다.
 
 - `MEMORY.md`: 지속 도메인 지식의 짧은 색인. `## Domain Knowledge` 아래에 노트당 한 줄(`- [<name>](docs/memory/<name>.md): <summary>`)을 두고, 저장소 `## Policy`를 함께 둡니다.
-- `docs/memory/*.md`: 도메인별 상세 지식. 각 노트는 H1 아래에 한 줄 `Summary:`(120자 이하)를 두며, 색인과 hook이 이 줄을 보여 줍니다.
+- `docs/memory/*.md`: 도메인별 상세 지식. 각 노트는 H1 아래에 한 줄 `Summary:`(120자 이하)를 두며, 색인과 hook이 이 줄을 보여 줍니다. 노트는 `Summary:` 뒤에 선택 줄 `Paths:`를 둘 수 있습니다.
 - `PLAN.md`: 작업 계획의 짧은 색인. `## Active Plans`와 `## Completed Plans` 아래에 계획당 200자 이하 한 줄을 둡니다. 계획 규칙은 `PLAN.md`가 아니라 `pota-plan` 스킬에 있습니다.
 - `docs/plan/*.md`: 상세 실행 계획.
 - `docs/plan/ARCHIVE.md`: `pota plan index --archive`가 `PLAN.md`에서 옮긴 오래된 완료 항목을 최신순으로 보관하고, 예전 `## Planning Rules` 절의 본문은 `## Legacy Planning Rules` 아래에 둡니다. 첫 `## ` 제목 앞의 목록 줄은 색인된 것으로 셉니다.
@@ -235,6 +237,10 @@ Pota는 데이터를 `POTA_HOME`(기본 `~/.pota`) 아래에 두고, 모든 호�
 - main 모델 확인: 세션의 main 모델이 stronger tier 미만이면 `SessionStart`가 `Pota main model:` 줄과 1회 알림을 추가합니다. 이때 계획·트리아지와 최종 리뷰는 stronger tier 이상으로 위임하고 기록해야 하며(리뷰는 `goal assign … --kind review`), 기록이 없으면 `triage-plan` 완료와 `goal finish`가 거부됩니다. 우회는 `--allow-main-model <reason>`입니다. 모델 값이 없거나 인식되지 않으면 동작하지 않습니다. `POTA_MAIN_MODEL_GATE=0`으로 끕니다.
 - 모델 상한: 계정에서 상위 tier를 쓸 수 없거나 쓰지 않을 때(구독 등급, 조직 정책, usage credits) `POTA_MODEL_CEILING=stronger`(또는 `balanced`, `opus`·`sonnet` 같은 모델 이름도 가능)를 설정하거나 `~/.pota/config.json`에 `"modelCeiling": "stronger"`를 적습니다. 환경변수가 우선이고, `config.json`은 모든 hook과 CLI 호출이 똑같이 읽는 위치입니다. 설정하면 `SessionStart`가 `Pota model ceiling:` 줄을 추가하고, 상한보다 높은 tier는 상한 tier의 모델을 쓰며, Heavy 설계 게이트가 그 모델을 통과시키고, main 모델 확인은 상한이 적용된 stronger tier를 기준으로 합니다. 설정이 없으면 동작은 그대로이고, 잘못된 값은 상한 없이 알림만 냅니다.
 - 요청 계약과 스티어링: Light·Heavy Path 계획은 `## Request Brief`(원문 요청, 해석한 결과, 범위, 과거 기록 참고(`Prior records`, `pota plan steering`), 가정, 암묵 요구사항, 열린 질문, 스티어링 기록)를 담고, 채우기 전에는 `--allow-no-request-brief <reason>`을 주지 않는 한 `triage-plan` 완료가 거부됩니다. 사용자의 정정·추가·방향 전환은 `goal steer --kind <correction|addition|redirect> --reason <text>`로, task가 바뀌면 `goal replan --steer <correction|addition|redirect|none> --reason <text>`로 기록하며, 두 번째 스티어링이나 redirect에는 다시 쓴 `Current request (as of S<n>)`도 필요합니다.
+- 완료 주장 대조: 목표가 활성인 동안 Stop gate가 종료를 막을 때(또는 loop guard가 종료를 허용할 때) 마지막 답변이 완료나 검사 통과를 주장하면, hook이 그 주장을 짚는 한 문장을 덧붙여 agent가 사용자에게 정정하거나 증거를 기록하게 합니다. 종료 결정은 바꾸지 않고, 코드 블록·인라인 코드·인용 줄은 무시하며, 호스트의 `last_assistant_message` 필드만 읽습니다(Claude Code, Codex는 문서 기준, Antigravity는 넘기지 않음). `POTA_CLAIM_RECEIPT=0`으로 끕니다.
+- 메모리 경로: `docs/memory` 노트는 `Summary:` 줄 아래에 `Paths: <쉼표로 나눈 저장소 상대 경로 접두사 또는 glob>`을 둘 수 있습니다(최대 8개, `*`는 경로 한 구간, `**`는 여러 구간). 편집이 성공한 뒤 PostToolUse hook이 편집한 파일과 경로가 맞는 노트를 한 번에 최대 3개까지, 세션·노트당 한 번 알리고 나머지는 다음 편집에서 알립니다. `pota memory check`는 잘못된 항목을 `paths-invalid`로 보고합니다.
+- Heavy 계획 리뷰: Heavy Path에서는 `heavy-design` task도 `planReview` 증거가 필요합니다. 더 강한 tier의 별도 읽기 전용 리뷰어가 기본적으로 승인하고, 저장소 파일로 확인한 blocker가 있을 때만 반려하며, 재검토는 한 번이고 그 뒤에는 blocker로 기록합니다.
+- 승격과 학습: 자기 tier로 끝낼 수 없는 worker는 final report를 `ESCALATE: <reason>`으로 시작하고, orchestrator가 한 tier 위로 다시 dispatch합니다(모델 상한에서 멈춤). worker는 보고를 `LEARNINGS:`로 마치고, orchestrator가 이를 계획의 `## Learnings`에 덧붙여 뒤 task에 전달하며 메모리 승격 결정에 씁니다.
 
 ## DAG Panel
 

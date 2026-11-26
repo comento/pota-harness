@@ -6,6 +6,7 @@ Reference for `pota-work`. Read only when the recorded route is Heavy Path, a ne
 
 - Follow the full planning and review pipeline recorded in the plan without role-mapping shortcuts: pre-implementation review before mutation, bounded `worker` implementation, then verification worker or read-only review after evidence exists.
 - Heavy implementation cannot complete until a completed `kind: "design"` task exists (record it with `--host <claude-code|codex|antigravity>`). A design model that is not the host's strongest tier (`--host claude-code` `fable`, `codex` `gpt-6-astra`, `antigravity` `pro`; any of the three when `--host` is omitted) fails completion unless `--allow-no-design-model <reason>`. This is the only bypass. Under a `Pota model ceiling:` capsule line the gate accepts the ceiling tier's model or higher (`delegation.md` "Model Ceiling").
+- Before the first edit, the completed design task must also carry `planReview` evidence (an approved `Plan review:` line in the plan); without it, do not edit.
 - Run the recorded automated test command and record explicit `Tests:` evidence in the plan before claiming completion. This is required even when module acceptance uses a broader check command.
 - Planning, review, and implementation request `high` reasoning effort; final verification and review request `xhigh`.
 
