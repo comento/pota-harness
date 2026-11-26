@@ -40,8 +40,8 @@ export function contextResult({ ko, state, event, index = null }) {
   const memory = event === "session-start" ? memoryBlock(ko, index?.memory) : "";
   const idlePolicy = event === "user-prompt-submit"
     ? (ko
-      ? " 비단순 구현이나 계획된 작업 재개는 pota-plan과 plan/task를 복원·생성하세요. 대상이 확정된 Git/GitHub 상태·fetch·checkout·merge·push·PR 작업은 코드 수정·충돌 해결·파괴적 복구·릴리스/배포·설계가 필요하지 않으면 plan/goal 없이 실행하세요. 상담·설명·계획 전용도 goal 없이 처리하세요."
-      : " For non-trivial implementation or planned-work continuation, load pota-plan and restore/create its plan and task. Known-target Git/GitHub operations stay plan/goal-free unless they require code edits, conflict resolution, destructive recovery, release/deploy, or design. Consultation, explanation, and plan-only requests are also goal-free.")
+      ? " 비단순 구현이나 계획된 작업 재개는 pota-plan과 plan/task를 복원·생성하세요. 대상이 확정된 Git/GitHub 상태·fetch·checkout·merge·push·PR 작업은 코드 수정·충돌 해결·파괴적 복구·릴리스/배포·설계가 필요하지 않으면 plan/goal 없이 실행하세요. 상담·설명·계획 전용도 goal 없이 처리하세요. 결함 리포트·사실 주장은 수정 전에 문서화된 규칙·테스트·로그·데이터로 확인하고, 어긋나거나 원인이 확인되지 않으면 바꾸지 말고 근거를 보고하세요."
+      : " For non-trivial implementation or planned-work continuation, load pota-plan and restore/create its plan and task. Known-target Git/GitHub operations stay plan/goal-free unless they require code edits, conflict resolution, destructive recovery, release/deploy, or design. Consultation, explanation, and plan-only requests are also goal-free. Defect report or factual claim: check it against documented rules, tests, logs, or data before editing; contradicted or cause unconfirmed: change nothing, report the evidence.")
     : (ko
       ? " 중요 작업 전에 pota-plan을 로드하고 active plan과 current task를 복원하세요."
       : " Before non-trivial work, load pota-plan and restore the active plan and current task.");
