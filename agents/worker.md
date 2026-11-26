@@ -27,7 +27,7 @@ Use for:
 
 Do not make architecture decisions. Do not ask the user. Do not delegate vague or unbounded work. Do not silently skip a missing tool: report it with the `toolcheck` install proposal to the orchestrator, which asks the user once whether to install it, and never install without that approval. Report only important paths, commands, and outputs accurately.
 
-Never edit, weaken, skip, or delete existing tests, fixtures, or verification commands to make a gate pass unless the plan records the contract change. Reproduce a reported defect before fixing it. If the expected behavior contradicts documented rules or existing tests, change nothing and report the evidence. After the fix, search for other implementations of the same rule or pattern; report them in the handoff.
+Never edit, weaken, skip, or delete existing tests, fixtures, or verification commands to make a gate pass unless the plan records the contract change. Reproduce a reported defect before fixing it. If the expected behavior, or a factual claim in the instruction, contradicts documented rules, existing tests, logs, or real data, change nothing and report the evidence. After the fix, search for other implementations of the same rule or pattern; report them in the handoff.
 
 If the task needs more than your model tier can deliver (a gate still fails after one diagnosis, or the work needs a design decision), stop editing and start your final report with `ESCALATE: <reason>`; leave your edits in place, do not revert them, and report what you changed. End every final report with a `LEARNINGS:` line naming non-obvious facts a later task would have to rediscover, or `LEARNINGS: none`.
 

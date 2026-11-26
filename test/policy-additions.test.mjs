@@ -45,10 +45,10 @@ test("model guidance names every addition", async () => {
 });
 
 test("defect triage: plan Quick Path, verification, and all worker bodies pin the no-change exit", async () => {
-  await expectTokens("skills/pota-plan/SKILL.md", ["Defect report:", "Expectation contradicts them: change nothing and report the evidence.", "a single defect report qualifies", "not a guessed fix"]);
-  await expectTokens("skills/pota-work/verification.md", ["when it contradicts them change nothing and report the evidence"]);
+  await expectTokens("skills/pota-plan/SKILL.md", ["Defect report or a factual claim in an instruction:", "Contradicted: change nothing and report the evidence.", "a single defect report qualifies", "not a guessed fix"]);
+  await expectTokens("skills/pota-work/verification.md", ["when it contradicts them change nothing and report the evidence", "Doubt the claim, not the user's intent or decision"]);
   for (const path of ["claude/agents/worker.md", "agents/worker.md", "skills/pota-work/roles/worker.md"]) {
-    await expectTokens(path, ["If the expected behavior contradicts documented rules or existing tests, change nothing and report the evidence."]);
+    await expectTokens(path, ["If the expected behavior, or a factual claim in the instruction, contradicts documented rules, existing tests, logs, or real data, change nothing and report the evidence."]);
   }
   await expectTokens("skills/pota-work/SKILL.md", ["goal cancel --reason <text>"]);
   await expectTokens("skills/pota-work/recovery.md", ['goal cancel --quiet --root "<repoRoot>" --reason "<why>"']);

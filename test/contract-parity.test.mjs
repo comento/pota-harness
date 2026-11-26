@@ -9,7 +9,7 @@ const readJson = async (path) => JSON.parse(await readFile(resolve(root, path), 
 test("package and the three host manifests expose the same version", async () => {
   const packageJson = await readJson("package.json");
 
-  assert.equal(packageJson.version, "2.6.0");
+  assert.equal(packageJson.version, "2.6.1");
   for (const path of [".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "plugin.json"]) {
     assert.equal((await readJson(path)).version, packageJson.version, `${path} version`);
   }
