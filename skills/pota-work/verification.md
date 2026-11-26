@@ -45,6 +45,7 @@ Decide once per goal, before `goal finish`, whether the goal produced repository
 The decision line is required; the note is optional. When nothing qualifies, do not create a note; record `none: <reason>`.
 
 - Promote: non-obvious constraints or invariants the next task would have to rediscover, decisions with their rejected alternatives, recurring failures and their fixes, and verification recipes.
+- Read the plan's `## Learnings` as input to this decision and promote only entries that also apply to the next goal.
 - Do not promote: what the code or tests already state, details that apply only to this task, or a restatement of the plan.
 - When promoting, write or update `docs/memory/<domain>.md` with its `Summary:` line (`pota-memory`), then run `node "<pluginRoot>/scripts/pota.mjs" memory index --root "<repoRoot>"` and `memory check --root "<repoRoot>"`.
 - The `Memory promotion:` key and the `none` value are fixed English tokens. When a goal completes through `goal finish` or `goal complete` and its plan file has no filled `Memory promotion:` line, Pota prints a one-line reminder on stderr; exit code and stdout are unchanged and completion is never blocked. `goal stats --history` counts the decisions across goals.

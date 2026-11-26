@@ -1,6 +1,7 @@
 # Domain: goal-state
 
 Summary: goal 상태 파일 위치·전이·lock·증거 freshness·요청 계약 게이트·스티어링 기록·이력과 cleanup 규칙. goal CLI나 완료 게이트를 바꿀 때 읽는다.
+Paths: scripts/pota-goal*.mjs
 
 ## Scope
 

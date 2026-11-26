@@ -1,6 +1,7 @@
 # Domain: lifecycle-install
 
 Summary: 호스트별 플러그인 배치·hook 파일, runtime 위치 규칙, 1.x npm 설치본 이전(상태·사유·fail-closed), 한계, CLI exit 규약. 설치·CLI를 바꿀 때 읽는다.
+Paths: .claude-plugin, .codex-plugin, plugin.json, agents, scripts/pota-legacy-migration.mjs, scripts/pota-doctor.mjs, scripts/pota-paths.mjs
 
 ## Scope
 
@@ -22,13 +23,14 @@ Summary: 호스트별 플러그인 배치·hook 파일, runtime 위치 규칙, 1
 | 루트 `plugin.json`, 루트 `hooks.json` | Antigravity CLI | manifest(`$schema` antigravity.google, `logo: "assets/logo.svg"`), hook 4종(상대 경로 `node ./scripts/pota-state-antigravity.mjs <event>`) |
 | 루트 `mcp_config.json`, `.codex-plugin/mcp.json`, `scripts/pota-dag-{mcp,mcp-core,app-html,workspaces,transcript,git}.mjs` | Antigravity·Codex/ChatGPT Desktop MCP App | Antigravity(`mcp_config.json`)와 Codex/ChatGPT Desktop(`.codex-plugin/mcp.json`)가 공유하는 MCP 서버 `pota-dag`, `ui://pota-dag/app.html` 단일 HTML UI(`open_pota_dag`·`pota_dag_state`·app-only HITL `pota_dag_action`, 4개 멀티 뷰 탭·전 노드 인스펙터·트랜스크립트 모델/토큰 보강·읽기 전용 Git diff/Plan 요약, OpenAI `_meta` + `window.openai` / SEP-1865 듀얼 브리지, Antigravity 진입점 `aux_pane`·`global`) |
 | `hooks/register.tsx`, `hooks/dag-*.mjs`, `types/index.d.ts` | Claude Code | DAG 패널 mod (4개 멀티 뷰 탭·전 노드 인스펙터·Pause/Resume·Gate 토글 지원) |
-| `claude/agents/{explorer,worker}.md` | Claude Code | agent. 루트 `agents/`에 두지 않는 이유: Antigravity도 루트 `agents/`를 읽는데 frontmatter `tools:`가 Claude 도구 이름이다 |
+| `claude/agents/{explorer,worker}.md` | Claude Code | agent. manifest `agents`가 이 경로를 가리키며, manifest에 `agents`가 있으면 Claude Code는 루트 `agents/`를 읽지 않는다(2.1.327 실측) |
+| `agents/{explorer,worker}.md` | Antigravity CLI | agent(2.4.0). frontmatter `tools`는 YAML 배열이고 Antigravity 도구 이름(`read_file`·`edit_file`·`write_file`·`run_command`)을 쓰며 `model`은 생략한다. 본문은 `claude/agents/`와 바이트 동일(`test/host-roles.test.mjs`) |
 | `skills/pota-{memory,plan,work,review}/`, `skills/dag/` | 세 호스트 | skill. 호출 이름은 Claude `/pota:pota-plan`, Codex `$pota-plan`, Antigravity `/pota-plan`. `skills/dag/`는 DAG 패널만 여는 얇은 skill로 Codex `$dag`, Antigravity `/dag`(`open_pota_dag` 호출)이며 Claude는 mod 명령 `/dag`가 실제 패널이고 skill은 그쪽으로 안내만 한다. 호스트의 slash 노출은 호스트 문서 기준이며 호스트 TUI를 직접 실행해 확인하지 않았다 |
 
   출처: 각 파일, `test/plugin-manifests.test.mjs` "the eleven plugin JSON files parse and the four version surfaces agree", "Claude and Codex hooks run pota-state.mjs with the event and host tokens, and Codex reads only its own file", "Antigravity reads the root plugin.json and root hooks.json with plugin-root relative commands", "Antigravity mcp_config.json registers pota-dag and all DAG MCP scripts are tracked and syntax-checked".
 - Codex용 hook 파일을 따로 두는 이유: Codex의 `HooksFile`은 `deny_unknown_fields`(키 `description`·`hooks`만)라 `modules`가 든 `hooks/hooks.json`을 파싱하지 못하고, manifest의 `hooks` 문자열 경로는 기본 탐색을 대체한다(openai/codex 소스 기준, 실행 미확인). `hooks/codex.json`의 최상위 키는 테스트가 고정한다.
 - Antigravity manifest는 루트 `plugin.json` 하나다(`.antigravity-plugin/`은 두지 않는다). `agy` 1.0.7은 `.antigravity-plugin/plugin.json`만 있는 디렉터리를 거부했고, 1.5.14의 `agy plugin validate`는 루트 `plugin.json`·`hooks.json`을 통과시키며 `hooks/hooks.json`에는 "never loaded" 경고만 낸다. 그래서 validate는 `--strict` 없이 쓴다. 출처: 계획 §1.4, §13 "`agy` 1.5.14 확인".
-- 지운 표면: `commands/`, `agents/`, `.claude/commands/`, `.claude/agents/`, `.agents/workflows/`, `claude-mod/`, `scripts/pota`(sh wrapper), lifecycle·자동 업그레이드 스크립트 13개와 `pota-update-state.mjs`. 추적 파일에 1.x의 runtime locator placeholder와 locator 파일 이름이 없어야 한다(이 검사는 `docs/plan/`·`test/`만 제외한다). 출처: `test/plugin-manifests.test.mjs` "the installer-era command, workflow, mirror, and mod folders are gone", "no shipped file carries the runtime locator".
+- 지운 표면: `commands/`, `agents/`(2.0.0에서 지웠다가 2.4.0에 Antigravity용 `agents/{explorer,worker}.md`로 다시 만들었다), `.claude/commands/`, `.claude/agents/`, `.agents/workflows/`, `claude-mod/`, `scripts/pota`(sh wrapper), lifecycle·자동 업그레이드 스크립트 13개와 `pota-update-state.mjs`. 추적 파일에 1.x의 runtime locator placeholder와 locator 파일 이름이 없어야 한다(이 검사는 `docs/plan/`·`test/`만 제외한다). 출처: `test/plugin-manifests.test.mjs` "the installer-era command, workflow, mirror, and mod folders are gone", "no shipped file carries the runtime locator".
 - 설치 위치(호스트 소유, Pota는 저장하지 않는다): Claude `~/.claude/plugins/cache/pota-harness/pota/<version>/`(버전마다 새 디렉터리, 문서 기준), Antigravity `~/.gemini/config/plugins/pota`(문서 기준, 재설치가 디렉터리를 통째로 교체), Codex는 자기 plugin cache(`$CODEX_HOME/plugins/cache/pota-harness/pota/<version>/`로 예상, 미확인).
 - 설치·업데이트·제거 명령은 README 8개의 `## Install`이 정본이다. Claude `claude plugin marketplace add|update|remove`, `claude plugin install|update|uninstall pota@pota-harness`(2.1.327 `--help`로 확인, 서드파티 marketplace 자동 업데이트는 기본 꺼짐, 업데이트는 세션 재시작 뒤 적용). Codex `codex plugin marketplace add|upgrade`, 설치·제거는 TUI `/plugins`(문서·소스 기준, 미실행). Antigravity `agy plugin install <URL>`(재실행이 업데이트), `agy plugin uninstall pota`(1.5.14 `--help`로 확인).
 
@@ -107,6 +109,7 @@ Summary: 호스트별 플러그인 배치·hook 파일, runtime 위치 규칙, 1
 
 - Codex 실제 실행 전부: 이 컴퓨터에 `codex`가 없다. marketplace `url: "./"` 해석(U9), `hooks` 경로가 기본 탐색을 대체하는지(U8), hook 환경의 `PLUGIN_ROOT`(U11), 내용 해시 신뢰가 배포 버전에 있는지(U12), `pota@pota`와의 공존(U13), 업데이트 때 옛 cache 삭제(U14), `codex plugin add`·`marketplace upgrade`의 존재. CI `host-validate` job(필수 검사 아님)이 유일한 실제 설치 시험이다.
 - Windows 동작 전체(이전, hook, mod).
+- Antigravity `invoke_subagent`에서의 agent 이름(`worker`인지 접두사가 붙는지)과 도구 별칭, Codex 역할 파일 방식(`skills/pota-work/roles/`)의 실제 세션 동작(2026-11-26 기준). `agy` 1.5.15 `plugin validate`가 `agents 2`를 처리하는 것까지만 확인했다.
 - 실제 `agy` 세션 안의 hook: cwd, matcher, `invocationNum`이 프롬프트마다 0부터인지(U3), detached 프로세스가 살아남는지(U4), 사용자 전용 메시지 통로(U15). validate·install까지만 확인했다.
 - Claude에서 `pota@pota`와 `pota@pota-harness`의 공존(U6)과 옛 버전 디렉터리 유지 기간(U7). README가 `pota@pota`를 먼저 지우게 한다.
 

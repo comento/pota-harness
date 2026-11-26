@@ -4,6 +4,7 @@
 
 ## Active Plans
 
+
 ## Superseded Plans
 
 - [Pota 0.2.0 설치본 런타임 릴리스](docs/plan/release-0.2.0-installed-runtime.md): 후속 0.2.1·0.2.2 릴리스로 대체된 미완료 릴리스 계획입니다. 활성 작업으로 취급하지 않습니다.
@@ -12,6 +13,7 @@
 
 최신 항목이 위에 오며 계획당 한 줄입니다. `pota plan index --archive`는 오래된 항목을 `docs/plan/ARCHIVE.md`로 옮깁니다.
 
+- [OmO 비교에서 고른 게이트·기록 추가, Pota 2.4.0 릴리스](docs/plan/omo-inspired-gates.md): 완료 주장 대조, 메모리 `Paths:` 알림, Heavy `planReview`, `ESCALATE:`·Learnings, Antigravity·Codex 역할 정의.
 - [ChatGPT Desktop·Codex Pota DAG MCP App, Pota 2.3.0 릴리스](docs/plan/chatgpt-codex-dag-panel.md): 3호스트 DAG 4탭·인스펙터·승인 게이트·`dag` 스킬, `2.3.0` 배포.
 - [Pota 2.2.2 릴리스](docs/plan/release-2.2.2.md): Claude `icon`·`author`, Antigravity `open_pota_dag` 자동 호출·MCP 자동 복구, `2.2.2` 배포.
 - [Antigravity 모델 분류·라우팅 확장 및 `goal finish` effort 우회](docs/plan/antigravity-model-routing.md): Antigravity 실모델 4-tier 분류·설계 게이트, 선택적 `swarm` 지침, `goal finish --allow-inherited-effort`를 추가했습니다.
@@ -33,4 +35,3 @@
 - [toolcheck 누락 도구 설치 질문](docs/plan/toolcheck-install-question.md): 누락 도구가 있으면 설치 여부를 한 번 묻도록 정책 표면을 고치고, `toolcheck` 출력에 도구별 제안 명령·자동 설치 불가 사유를 추가했습니다.
 - [Pota 1.1.0 릴리스](docs/plan/release-1.1.0.md): dev→main PR #2를 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.1.0으로 게시해 digest와 격리 설치를 확인했습니다.
 - [편집 후 comment-checker 검사](docs/plan/comment-checker-hook.md): PostToolUse에서 고정 v0.8.2 바이너리(SHA256 검증, SessionStart 분리 다운로드)로 주석을 검사해 block; npm 의존성 없음, 실제 바이너리 smoke 통과.
-- [Pota 0.7.0 릴리스](docs/plan/release-0.7.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 0.7.0으로 게시해 digest와 격리 설치를 확인했습니다.
