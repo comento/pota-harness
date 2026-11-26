@@ -6,13 +6,14 @@ import { invalidModelCeilingWarning, resolveModelCeiling } from "./pota-model-ce
 import { classifyModel, isBelowTier, isStrongerOrAbove } from "./pota-model-tier.mjs";
 import { resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
 
-const GOAL_COMMANDS = ["start", "status", "ready", "stats", "task", "gate", "replan", "steer", "claim", "assign", "receipt", "verify", "finish", "pause", "resume", "block", "cancel", "complete"];
+const GOAL_COMMANDS = ["start", "status", "ready", "stats", "task", "gate", "retry", "replan", "steer", "claim", "assign", "receipt", "verify", "finish", "pause", "resume", "block", "cancel", "complete"];
 const GOAL_USAGE = [
   `Usage: pota goal <${GOAL_COMMANDS.join("|")}> [options] [--root PATH]`,
   "Note: --criteria (completionCriteria) is advisory and is not enforced; completion is gated only by required evidence.",
   "Request Brief: completing a triageDecision task (goal task --status completed, goal finish) needs a filled \"## Request Brief\" in a plan file; bypass with --allow-no-request-brief <reason>.",
   "Steering: goal steer --kind <correction|addition|redirect> --reason <text>; with a plan file, goal replan needs --steer <correction|addition|redirect|none> --reason <text>.",
   "Approval gate: goal gate --task <id> --on|--off [--reason <text>]; activate a gated task with goal task --status active --approve-gate.",
+  "Retry: goal retry --task <id> returns a blocked task to pending, clears its dispatch record and receipts, and reactivates a goal that task blocking had blocked.",
 ].join("\n");
 
 export async function runGoalCli(args, {
@@ -136,6 +137,11 @@ export async function runGoalCli(args, {
       reason: options.reason,
       sessionId,
     });
+    emit(JSON.stringify(state));
+    return state;
+  }
+  if (command === "retry") {
+    const state = await operations.retryTask({ root, taskId: options.task ?? positional[0] });
     emit(JSON.stringify(state));
     return state;
   }
@@ -357,6 +363,7 @@ function allowedOptions(command) {
     status: [],
     task: ["task", "status", "reason", "allow-inherited-effort", "allow-no-design-model", "allow-main-model", "allow-no-request-brief", "approve-gate"],
     gate: ["task", "on", "off", "reason"],
+    retry: ["task"],
     replan: ["tasks", "steer", "reason"],
     steer: ["kind", "reason"],
     claim: ["session"],

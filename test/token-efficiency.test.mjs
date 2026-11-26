@@ -458,6 +458,15 @@ test("work guidance keeps gated ready tasks for the user to approve", async () =
   assert.match(workRecovery, /Never bypass a manual approval gate without user confirmation/);
 });
 
+test("work recovery retries a blocked task with a new dispatch", async () => {
+  const workRecovery = await readFile("skills/pota-work/recovery.md", "utf8");
+  assert.match(workRecovery, /goal retry --quiet --root "<repoRoot>" --task "<task-id>"/);
+  assert.match(workRecovery, /returns the blocked task to `pending`.*clears its dispatch record/is);
+  assert.match(workRecovery, /new worker.*`goal assign` again.*never reuse the previous worker/is);
+  assert.match(workRecovery, /one-tier-up rule/);
+  assert.match(workRecovery, /Completed tasks are never rerun/);
+});
+
 test("every supported locale exposes the token-efficient work contract", () => {
   for (const locale of ["en-US", "ko-KR", "ja-JP", "zh-CN", "es-ES", "fr-FR", "de-DE", "pt-BR"]) {
     const work = message("work", locale);

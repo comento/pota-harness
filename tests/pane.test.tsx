@@ -625,6 +625,9 @@ function s2Engine(on: On, options: S2MockOptions = {}) {
       }
       return { value: { exitCode: 0, stdout: "{}", stderr: "", isStdoutTruncated: false, isStderrTruncated: false } };
     }
+    if (e.argv.includes("goal") && e.argv.includes("retry")) {
+      return { value: { exitCode: 0, stdout: "{}", stderr: "", isStdoutTruncated: false, isStderrTruncated: false } };
+    }
     if (e.argv.includes("stats")) {
       return { value: { exitCode: 0, stdout: '{"recent":[]}', stderr: "", isStdoutTruncated: false, isStderrTruncated: false } };
     }
@@ -918,9 +921,14 @@ for (const surface of ["desktop", "terminal"] as const) {
     expect(await ui.find({ type: "Text", text: /blocked · Wave 2/ })).toBeDefined();
     await ui.press({ key: "gate-blk" });
     expect((await ui.find({ key: "gate-blk" }))?.props.label).toBe("Disable gate");
+    expect((await ui.find({ key: "retry-blk" }))?.props.label).toBe("Retry");
+    await ui.press({ key: "retry-blk" });
+    const retryCall = state.processCalls.find(argv => argv.includes("retry") && argv.includes("blk"));
+    expect(retryCall?.slice(2)).toEqual(["goal", "retry", "--task", "blk", "--root", "/repo", "--quiet"]);
 
     await ui.press({ key: "task-wait" });
     expect(await ui.find({ type: "Text", text: /waiting · Wave 3/ })).toBeDefined();
+    expect(await ui.find({ key: "retry-wait" })).toBeUndefined();
     expect(await ui.find({ type: "Text", text: /⏸ Gate/ })).toBeDefined();
     expect((await ui.find({ key: "gate-wait" }))?.props.label).toBe("Disable gate");
     await ui.press({ key: "gate-wait" });

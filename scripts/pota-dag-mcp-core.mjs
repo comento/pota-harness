@@ -8,7 +8,7 @@ import { VIEWS, buildDagModel, computeWaves, parseGoalStatus, summarize, taskSta
 import { detailSections, formatElapsed, formatSummary, messages, pickLocale, taskDetail } from "../hooks/dag-text.mjs";
 import { renderDagSvg } from "../hooks/dag-svg.mjs";
 import { rebaseDagState, reduceDagState, rootLabel, samePath } from "../hooks/dag-events.mjs";
-import { goalHistoryStats, pauseGoal, readGoalState, resumeGoal, setTaskApprovalGate, workspaceFingerprint } from "./pota-goal.mjs";
+import { goalHistoryStats, pauseGoal, readGoalState, resumeGoal, retryTask, setTaskApprovalGate, workspaceFingerprint } from "./pota-goal.mjs";
 import { potaHome, resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
 import { readWorkspaceRegistry, workspaceRegistryPath } from "./pota-dag-workspaces.mjs";
 import { enrichTasksWithTranscripts } from "./pota-dag-transcript.mjs";
@@ -116,13 +116,13 @@ export const POTA_DAG_STATE_TOOL = Object.freeze({
   },
 });
 
-const ALLOWED_HITL_ACTIONS = new Set(["pause", "resume", "toggle_gate"]);
+const ALLOWED_HITL_ACTIONS = new Set(["pause", "resume", "toggle_gate", "retry_task"]);
 const ALLOWED_ACTION_ARG_KEYS = new Set(["action", "taskId", "enabled", "root", "view", "width", "locale"]);
 
 export const POTA_DAG_ACTION_TOOL = Object.freeze({
   name: "pota_dag_action",
   title: "Pota DAG Action",
-  description: "Execute an allowlisted human-in-the-loop control action (pause, resume, or toggle_gate) on the active Pota goal of a registered workspace. toggle_gate sets the task's approval gate to the explicit enabled value (true keeps or turns the gate on, false releases it); a toggle_gate call without a boolean enabled is rejected without changing state. A root that is not a registered workspace or HARNESS_REPO_ROOT is rejected with \"Invalid workspace root\".",
+  description: "Execute an allowlisted human-in-the-loop control action (pause, resume, toggle_gate, or retry_task) on the active Pota goal of a registered workspace. toggle_gate sets the task's approval gate to the explicit enabled value (true keeps or turns the gate on, false releases it); a toggle_gate call without a boolean enabled is rejected without changing state. retry_task returns the blocked task taskId to pending, clears its dispatch record and receipts, and reactivates a goal that task blocking had blocked (a goal blocked by hand stays blocked); any other task status is rejected. A root that is not a registered workspace or HARNESS_REPO_ROOT is rejected with \"Invalid workspace root\".",
   inputSchema: {
     type: "object",
     additionalProperties: false,
@@ -130,12 +130,12 @@ export const POTA_DAG_ACTION_TOOL = Object.freeze({
     properties: {
       action: {
         type: "string",
-        enum: ["pause", "resume", "toggle_gate"],
-        description: "Allowlisted HITL action (pause, resume, or toggle_gate).",
+        enum: ["pause", "resume", "toggle_gate", "retry_task"],
+        description: "Allowlisted HITL action (pause, resume, toggle_gate, or retry_task).",
       },
       taskId: {
         type: "string",
-        description: "Target task ID (required when action is toggle_gate).",
+        description: "Target task ID (required when action is toggle_gate or retry_task).",
       },
       enabled: {
         type: "boolean",
@@ -1275,14 +1275,14 @@ export function createDagMcpServer({
     if (typeof action !== "string" || !ALLOWED_HITL_ACTIONS.has(action)) {
       return {
         isError: true,
-        content: [{ type: "text", text: "Invalid action: expected pause, resume, or toggle_gate" }],
+        content: [{ type: "text", text: "Invalid action: expected pause, resume, toggle_gate, or retry_task" }],
       };
     }
     const taskId = typeof args.taskId === "string" ? args.taskId.trim() : "";
-    if (action === "toggle_gate" && taskId.length === 0) {
+    if ((action === "toggle_gate" || action === "retry_task") && taskId.length === 0) {
       return {
         isError: true,
-        content: [{ type: "text", text: "Invalid params: taskId is required when action is toggle_gate" }],
+        content: [{ type: "text", text: "Invalid params: taskId is required when action is toggle_gate or retry_task" }],
       };
     }
     // 맹목 반전은 폴링 사이에 바뀐 게이트를 풀어 실행을 승인할 수 있으므로 원하는 값을 명시해야 한다.
@@ -1325,6 +1325,8 @@ export function createDagMcpServer({
           await pauseGoal(activeRoot);
         } else if (action === "resume") {
           await resumeGoal(activeRoot);
+        } else if (action === "retry_task") {
+          await retryTask(activeRoot, { taskId });
         } else {
           await setTaskApprovalGate(activeRoot, { taskId, enabled: args.enabled });
         }
