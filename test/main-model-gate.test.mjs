@@ -148,11 +148,11 @@ test("SessionStart with a below-stronger model adds the main-model line after th
   }
   assert.equal(
     mainModelLine({ ko: false, model: HAIKU, tier: "fast", host: "claude-code" }),
-    `Pota main model: ${HAIKU} (fast tier, below stronger). Dispatch planning/triage and the final review to a subagent on opus or higher and record goal assign --model, or triage-plan completion and goal finish fail (bypass: --allow-main-model <reason>). See delegation.md "Main Model Gate".`,
+    `Pota main model: ${HAIKU} (fast tier, below stronger). Heavy Path only: dispatch planning/triage and final review to a subagent on opus+ and record goal assign --model, or triage-plan/goal finish fail (bypass: --allow-main-model <reason>). Quick/Light run here. See delegation.md "Main Model Gate".`,
   );
   assert.equal(
     mainModelNotice({ ko: true, model: HAIKU, host: "claude-code" }),
-    `Pota: 이 세션의 main 모델(${HAIKU})은 stronger tier 미만입니다. 계획·트리아지·리뷰는 opus 이상 subagent에 위임됩니다. 모델을 바꾸면 늦어도 다음 세션 시작 때 반영됩니다.`,
+    `Pota: 이 세션의 main 모델(${HAIKU})은 stronger tier 미만입니다. Heavy Path의 계획·트리아지·리뷰는 opus 이상 subagent에 위임됩니다. 모델을 바꾸면 늦어도 다음 세션 시작 때 반영됩니다.`,
   );
 });
 
@@ -350,6 +350,19 @@ test("a below-stronger main model blocks completing a triageDecision task until 
   });
 });
 
+test("a Light goal below the stronger tier completes triage-plan and goal finish without a stronger dispatch record", async () => {
+  await withTempRoot(async (root) => {
+    await startPlanningGoal(root, { tasks: [triageTask(), { id: "build", title: "Build", route: "light" }], heavy: false });
+    await recordLowSession(root, "s1");
+    await recordTriageEvidence(root);
+    const planned = await setTaskStatus({ root, taskId: "triage-plan", status: "completed", sessionId: "s1" });
+    assert.equal(task(planned, "triage-plan").status, "completed");
+    await recordTaskEvidence(root, "build");
+    const finished = await finishGoal({ root, argv: passArgv, sessionId: "s1" });
+    assert.equal(finished.goal.status, "completed");
+  });
+});
+
 test("goal finish refuses before running verification, and goal complete refuses, without a stronger review dispatch", async () => {
   await withTempRoot(async (root) => {
     await startPlanningGoal(root, { tasks: [{ id: "build", title: "Build" }, { id: "review", title: "Review" }] });
@@ -429,7 +442,7 @@ test("Antigravity balanced main model triggers SessionStart notice, planning gat
       finishGoal({ root, argv: passArgv, sessionId: "agy-1" }),
       /Goal goal-[0-9a-f-]+ has no review dispatched at the stronger tier: this session's main model is gemini-3\.8-flash-medium \(balanced tier\)/,
     );
-    await assignTask({ root, taskId: "review", kind: "review", agentId: "reviewer", model: "claude-opus-5-5-high", modelHost: "antigravity" });
+    await assignTask({ root, taskId: "review", kind: "review", agentId: "reviewer", effort: "high", designWaiver: "review only", model: "claude-opus-5-5-high", modelHost: "antigravity" });
     const finished = await finishGoal({ root, argv: passArgv, sessionId: "agy-1" });
     assert.equal(finished.goal.status, "completed");
   });
@@ -464,7 +477,7 @@ test("review dispatch tier is judged per host and unknown or non-host-option mod
       await withTempRoot(async (root) => {
         await startPlanningGoal(root, { tasks: [{ id: "review", title: "Review" }] });
         await recordLowSession(root, "s1");
-        await assignTask({ root, taskId: "review", agentId: "reviewer", ...record });
+        await assignTask({ root, taskId: "review", agentId: "reviewer", effort: "high", designWaiver: "review-only goal", ...record });
         await recordTaskEvidence(root, "review");
         const label = JSON.stringify(record);
         if (ok) assert.equal((await finishGoal({ root, argv: passArgv, sessionId: "s1" })).goal.status, "completed", label);
@@ -740,7 +753,17 @@ function triageTask() {
   return { id: "triage-plan", title: "Run planned triage and finalize the plan", requiredEvidence: ["planArtifact", "triageDecision"] };
 }
 
-async function startPlanningGoal(root, { tasks, ownerSessionId = null }) {
+// The gate applies only to goals with a Heavy Path task, so one task is marked heavy unless heavy is false: the first
+// task that is neither triage nor review, else the first review task, else the first task. A goal whose only heavy task
+// is also assigned needs effort and a design waiver in the test (see the review-tier test).
+async function startPlanningGoal(root, { tasks, ownerSessionId = null, heavy = true }) {
+  const isReview = (item) => item.kind === "review" || ["review", "final"].includes(item.id);
+  const target = !heavy ? -1 : [
+    tasks.findIndex((item) => item.id !== "triage-plan" && !isReview(item)),
+    tasks.findIndex(isReview),
+    0,
+  ].find((index) => index !== -1);
+  if (target !== undefined && target !== -1) tasks = tasks.map((item, index) => (index === target ? { ...item, route: "heavy" } : item));
   return startGoal({
     root,
     goal: "Gate the main model",

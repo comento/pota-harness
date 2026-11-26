@@ -169,8 +169,8 @@ export function foreignSessionContextResult({ ko, event, sessionId, index = null
       : ` Only if this session continues that same work (resume, compaction, handoff, fork), take ownership with pota goal claim --session ${JSON.stringify(sessionId)} --root <repoRoot>, then continue.`)
     : "";
   const message = ko
-    ? `Pota kernel: 루트 MEMORY.md는 선택 사항이며, 있으면 읽으세요. 저장소 goal을 다른 session이 소유합니다. pota goal status로 상태를 확인하고 소유권이 해결될 때까지 Pota 작업을 시작·수정·위임·완료하지 마세요.${claim} 이 capsule은 goal, plan, task 상세를 노출하지 않습니다.`
-    : `Pota kernel: root MEMORY.md is optional; read it when present. A repository goal is owned by another session. Inspect pota goal status; until ownership is resolved, do not start, edit, delegate, or complete Pota work.${claim} This capsule does not expose goal, plan, or task details.`;
+    ? `Pota kernel: 루트 MEMORY.md는 선택 사항이며, 있으면 읽으세요. 저장소 goal을 다른 session이 소유합니다. pota goal status로 상태를 확인하고 소유권이 해결될 때까지 Pota 작업을 시작·수정·위임·완료하지 마세요. 그 goal과 무관한 새 요청은 goal을 건드리지 않고 Quick Path로 처리할 수 있습니다.${claim} 이 capsule은 goal, plan, task 상세를 노출하지 않습니다.`
+    : `Pota kernel: root MEMORY.md is optional; read it when present. A repository goal is owned by another session. Inspect pota goal status; until ownership is resolved, do not start, edit, delegate, or complete Pota work. A new request unrelated to that goal may proceed on Quick Path without touching it.${claim} This capsule does not expose goal, plan, or task details.`;
   // Repository notes are shared knowledge; plan names would reveal the owner's work, so they never appear here.
   const memory = event === "session-start" ? memoryBlock(ko, index?.memory) : "";
   return contextHookResult({ event, message: withBlocks(message, memory) });
@@ -182,8 +182,8 @@ export function mainModelLine({ ko, model, tier, host, threshold = "stronger" })
   const name = clipText(plainText(model), contextLimits.mainModel);
   const stronger = strongerModel(host, threshold);
   return ko
-    ? `Pota main model: ${name} (${tier} tier, ${threshold} 미만). 계획·트리아지와 최종 리뷰를 ${stronger} 이상 subagent에 위임하고 goal assign --model로 기록하세요. 기록이 없으면 triage-plan 완료와 goal finish가 거부됩니다(우회: --allow-main-model <reason>). 상세: delegation.md "Main Model Gate".`
-    : `Pota main model: ${name} (${tier} tier, below ${threshold}). Dispatch planning/triage and the final review to a subagent on ${stronger} or higher and record goal assign --model, or triage-plan completion and goal finish fail (bypass: --allow-main-model <reason>). See delegation.md "Main Model Gate".`;
+    ? `Pota main model: ${name} (${tier} tier, ${threshold} 미만). Heavy Path에서만 계획·트리아지와 최종 리뷰를 ${stronger} 이상 subagent에 위임하고 goal assign --model로 기록하세요. 기록이 없으면 triage-plan 완료와 goal finish가 거부됩니다(우회: --allow-main-model <reason>). Quick·Light Path는 이 모델로 진행합니다. 상세: delegation.md "Main Model Gate".`
+    : `Pota main model: ${name} (${tier} tier, below ${threshold}). Heavy Path only: dispatch planning/triage and final review to a subagent on ${stronger}+ and record goal assign --model, or triage-plan/goal finish fail (bypass: --allow-main-model <reason>). Quick/Light run here. See delegation.md "Main Model Gate".`;
 }
 
 // The user-facing systemMessage (240 characters), shown when the record is written or the model changes.
@@ -191,8 +191,8 @@ export function mainModelNotice({ ko, model, host, threshold = "stronger" }) {
   const name = clipText(plainText(model), contextLimits.mainModel);
   const stronger = strongerModel(host, threshold);
   return ko
-    ? `Pota: 이 세션의 main 모델(${name})은 ${threshold} tier 미만입니다. 계획·트리아지·리뷰는 ${stronger} 이상 subagent에 위임됩니다. 모델을 바꾸면 늦어도 다음 세션 시작 때 반영됩니다.`
-    : `Pota: this session runs on ${name}, below the ${threshold} tier. Planning, triage, and review go to subagents on ${stronger} or higher. A model switch is picked up by the next session start at the latest.`;
+    ? `Pota: 이 세션의 main 모델(${name})은 ${threshold} tier 미만입니다. Heavy Path의 계획·트리아지·리뷰는 ${stronger} 이상 subagent에 위임됩니다. 모델을 바꾸면 늦어도 다음 세션 시작 때 반영됩니다.`
+    : `Pota: this session runs on ${name}, below the ${threshold} tier. On Heavy Path, planning, triage, and review go to subagents on ${stronger} or higher. A model switch is picked up by the next session start.`;
 }
 
 function strongerModel(host, threshold = "stronger") {

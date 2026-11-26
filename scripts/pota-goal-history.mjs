@@ -53,7 +53,7 @@ export function memoryPromotionStatus(root, planId) {
 }
 
 // Builds the schemaVersion 1 summary of a terminal goal. It carries ids and counts only, never absolute paths.
-export function buildGoalHistoryRecord(state, { root = process.cwd(), recordedBy, endedAt = state.goal.updatedAt } = {}) {
+export function buildGoalHistoryRecord(state, { root = process.cwd(), recordedBy, endedAt = state.goal.updatedAt, reason = null } = {}) {
   const { goal, tasks, receipts } = state;
   const createdMs = Date.parse(goal.createdAt);
   const endedMs = Date.parse(endedAt);
@@ -109,6 +109,7 @@ export function buildGoalHistoryRecord(state, { root = process.cwd(), recordedBy
     memoryPromotion: memoryPromotionStatus(root, goal.planId),
     steering: steeringCounts(readSteeringEntries(root, goal.id)),
     recordedBy,
+    ...(typeof reason === "string" && reason.trim().length > 0 ? { reason: Array.from(reason.trim()).slice(0, 200).join("") } : {}),
   };
 }
 

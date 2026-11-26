@@ -16,10 +16,11 @@ node "<pluginRoot>/scripts/pota.mjs" goal task --quiet --root "<repoRoot>" --tas
 node "<pluginRoot>/scripts/pota.mjs" goal block --quiet --root "<repoRoot>" --reason "<concrete blocker>"
 node "<pluginRoot>/scripts/pota.mjs" goal pause --quiet --root "<repoRoot>"
 node "<pluginRoot>/scripts/pota.mjs" goal resume --quiet --root "<repoRoot>"
-node "<pluginRoot>/scripts/pota.mjs" goal cancel --quiet --root "<repoRoot>"
+node "<pluginRoot>/scripts/pota.mjs" goal cancel --quiet --root "<repoRoot>" --reason "<why>"
 ```
 
 - Retry a blocked task: after fixing the cause, or when the user presses Retry in the DAG panel, `node "<pluginRoot>/scripts/pota.mjs" goal retry --quiet --root "<repoRoot>" --task "<task-id>"` returns the blocked task to `pending`, clears its dispatch record and receipts, and reactivates a goal that task blocking had blocked; a goal blocked by hand stays blocked (`goal resume`). Dispatch the retried task to a new worker, record `goal assign` again, and record both verifications again; never reuse the previous worker. If it blocks again for the same cause, follow the one-tier-up rule in `delegation.md`. Completed tasks are never rerun.
+- `--reason` on `goal cancel` records why in the goal history; use it when triage shows no change is needed or the request cannot be decided, after reporting the evidence to the user.
 - `active` is not a completion state. Successful completion or cancellation removes the user-home active state because completed evidence already lives in the plan document; paused and blocked state remains resumable.
 - User steering: classify it as `correction`, `addition`, or `redirect` (`pota://skills/pota-plan/request-brief.md`). Run `goal steer --kind correction --reason <text>` for a correction, or `goal replan --steer <addition|redirect> --reason <text>` for new or invalidated tasks; a redirect that touches completed work adds a re-verification task. First record `S<n>` in the plan's `## Request Brief` `Steering log`; from the second steering, or on a redirect, rewrite `Current request (as of S<n>)`. If the CLI refuses, fix the brief; never bypass it.
 - Resume a paused or blocked goal before folding new work into it with `goal replan`. Start a separate goal only when the user explicitly switches work.

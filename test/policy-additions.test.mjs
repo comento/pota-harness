@@ -43,3 +43,13 @@ test("memory notes may carry a Paths line", async () => {
 test("model guidance names every addition", async () => {
   await expectTokens("docs/model-guidance/README.md", ["POTA_CLAIM_RECEIPT", "planReview", "ESCALATE:", "Paths:", "## Learnings"]);
 });
+
+test("defect triage: plan Quick Path, verification, and all worker bodies pin the no-change exit", async () => {
+  await expectTokens("skills/pota-plan/SKILL.md", ["Defect report:", "Expectation contradicts them: change nothing and report the evidence.", "a single defect report qualifies", "not a guessed fix"]);
+  await expectTokens("skills/pota-work/verification.md", ["when it contradicts them change nothing and report the evidence"]);
+  for (const path of ["claude/agents/worker.md", "agents/worker.md", "skills/pota-work/roles/worker.md"]) {
+    await expectTokens(path, ["If the expected behavior contradicts documented rules or existing tests, change nothing and report the evidence."]);
+  }
+  await expectTokens("skills/pota-work/SKILL.md", ["goal cancel --reason <text>"]);
+  await expectTokens("skills/pota-work/recovery.md", ['goal cancel --quiet --root "<repoRoot>" --reason "<why>"']);
+});

@@ -347,12 +347,12 @@ test("ceiling balanced gates only a fast main session and names the balanced mod
     assert.ok(line.includes("sonnet"));
     assert.equal(line, mainModelLine({ ko: false, model: "haiku", tier: "fast", host: "claude-code", threshold: "balanced" }));
     assert.equal(fast.hookOutput.systemMessage, mainModelNotice({ ko: false, model: "haiku", host: "claude-code", threshold: "balanced" }));
-    assert.match(fast.hookOutput.systemMessage, /below the balanced tier\. Planning, triage, and review go to subagents on sonnet or higher/);
+    assert.match(fast.hookOutput.systemMessage, /below the balanced tier\. On Heavy Path, planning, triage, and review go to subagents on sonnet or higher/);
     assert.equal(JSON.parse(await readFile(mainModelRecordPath(root, "s1"), "utf8")).model, "haiku");
   });
   assert.equal(
     mainModelLine({ ko: true, model: "haiku", tier: "fast", host: "claude-code", threshold: "balanced" }),
-    "Pota main model: haiku (fast tier, balanced 미만). 계획·트리아지와 최종 리뷰를 sonnet 이상 subagent에 위임하고 goal assign --model로 기록하세요. 기록이 없으면 triage-plan 완료와 goal finish가 거부됩니다(우회: --allow-main-model <reason>). 상세: delegation.md \"Main Model Gate\".",
+    "Pota main model: haiku (fast tier, balanced 미만). Heavy Path에서만 계획·트리아지와 최종 리뷰를 sonnet 이상 subagent에 위임하고 goal assign --model로 기록하세요. 기록이 없으면 triage-plan 완료와 goal finish가 거부됩니다(우회: --allow-main-model <reason>). Quick·Light Path는 이 모델로 진행합니다. 상세: delegation.md \"Main Model Gate\".",
   );
   for (const ko of [false, true]) {
     for (const host of Object.keys(MODEL_TIER_BY_HOST)) {
@@ -453,7 +453,7 @@ test("the main-model gate uses the capped stronger tier", async () => {
       finishGoal({ root, argv: passArgv, sessionId: "s1", modelCeiling: "balanced" }),
       /no review dispatched at the balanced tier \(model ceiling balanced\).*to sonnet and record/,
     );
-    await assignTask({ root, taskId: "review", kind: "review", agentId: "reviewer", model: "sonnet", modelHost: "claude-code" });
+    await assignTask({ root, taskId: "review", kind: "review", agentId: "reviewer", effort: "high", designWaiver: "review only", model: "sonnet", modelHost: "claude-code" });
     const finished = await finishGoal({ root, argv: passArgv, sessionId: "s1", modelCeiling: "balanced" });
     assert.equal(finished.goal.status, "completed");
   });
@@ -461,7 +461,7 @@ test("the main-model gate uses the capped stronger tier", async () => {
   // Ceiling stronger keeps the floor and names opus.
   for (const model of ["opus", "fable"]) {
     await withTempRoot(async (root) => {
-      await startPlanningGoal(root, { tasks: [triageTask()] });
+      await startPlanningGoal(root, { tasks: [triageTask(), { id: "build", title: "Build" }] });
       await recordSession(root, "s1", HAIKU);
       await recordTriageEvidence(root);
       const complete = () => setTaskStatus({ root, taskId: "triage-plan", status: "completed", sessionId: "s1", modelCeiling: "stronger" });
@@ -646,7 +646,7 @@ test("goal CLI reads the ceiling from POTA_MODEL_CEILING and config.json on task
   const prepareReview = async (root) => {
     await startPlanningGoal(root, { tasks: [{ id: "build", title: "Build" }] });
     await recordSession(root, "s1", HAIKU);
-    await assignTask({ root, taskId: "build", kind: "review", agentId: "reviewer", model: "sonnet", modelHost: "claude-code" });
+    await assignTask({ root, taskId: "build", kind: "review", agentId: "reviewer", effort: "high", designWaiver: "review only", model: "sonnet", modelHost: "claude-code" });
     await recordTaskEvidence(root, "build");
   };
   await withTempRoot(async (root) => {
@@ -788,7 +788,11 @@ function triageTask() {
   return { id: "triage-plan", title: "Run planned triage and finalize the plan", requiredEvidence: ["planArtifact", "triageDecision"] };
 }
 
+// The main-model gate applies only to goals with a Heavy Path task; the first non-triage task (else the first) is heavy.
 async function startPlanningGoal(root, { tasks }) {
+  const found = tasks.findIndex((item) => item.id !== "triage-plan");
+  const target = found === -1 ? 0 : found;
+  tasks = tasks.map((item, index) => (index === target ? { ...item, route: "heavy" } : item));
   return startGoal({ root, goal: "Cap the model tier", planId: "docs/plan/ceiling.md", evidencePolicy: "declared", tasks });
 }
 

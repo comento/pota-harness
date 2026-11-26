@@ -210,6 +210,31 @@ test("main Stop covers every active task and SubagentStop gates each assigned wo
   });
 });
 
+test("main Stop messages for an active or pending task name the cancel exit; subagent and all-completed messages do not", async () => {
+  const exit = / If triage shows no change is needed or the request cannot be decided, report why and close it with goal cancel --reason <text>\./;
+  await withTempRoot(async (root) => {
+    await seedFiles(root);
+    await startGoal({ root, goal: "Stops", planId: "docs/plan/stops.md", tasks: diamond });
+    await setTaskStatus({ root, taskId: "B", status: "active" });
+    await assignTask({ root, taskId: "A", agentId: "worker-a" });
+    const parallel = evaluateStop(await readGoalState({ root }));
+    assert.match(parallel.reason, /parallel tasks/);
+    assert.match(parallel.reason, exit);
+    assert.doesNotMatch(evaluateStop(await readGoalState({ root }), { subagent: true, agentId: "worker-a" }).reason, /goal cancel/);
+  });
+  await withTempRoot(async (root) => {
+    await seedFiles(root);
+    await startGoal({ root, goal: "Single", planId: "docs/plan/single.md", tasks: [{ id: "only", title: "Only" }] });
+    const single = evaluateStop(await readGoalState({ root }));
+    assert.match(single.reason, /Continue current task only/);
+    assert.match(single.reason, exit);
+  });
+  const done = { goal: { title: "Done", status: "active" }, tasks: [{ id: "x", title: "X", status: "completed" }] };
+  const finished = evaluateStop(done);
+  assert.equal(finished.block, true);
+  assert.doesNotMatch(finished.reason, /goal cancel/);
+});
+
 test("pause, resume, and a new session keep active tasks, assignments, and evidence", async () => {
   await withTempRoot(async (root) => {
     await seedFiles(root);

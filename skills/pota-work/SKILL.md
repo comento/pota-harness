@@ -66,6 +66,6 @@ Read a reference only when the selected path or situation requires it (Quick and
 
 ## Completion Criteria
 
-- Both gates passed with fresh evidence (Heavy: `Tests:`); the goal finished through `goal finish` or is explicitly `paused`, `blocked`, or `cancelled` with a reason.
+- Both gates passed with fresh evidence (Heavy: `Tests:`); the goal finished through `goal finish` or is explicitly `paused`, `blocked`, or `cancelled` with a reason. When triage shows no change is needed or the request cannot be decided, report why and close with `goal cancel --reason <text>`.
 - Delegation, tool readiness, dry-run, route, and model guidance followed the plan; no judge weakened; defect fixes record the same-rule sweep.
 - Evidence is in the plan before `PLAN.md` is updated.

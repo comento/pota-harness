@@ -681,6 +681,13 @@ test("session-owned goals are isolated from other hook sessions", async () => {
       assert.match(context, /do not start, edit, delegate, or complete/i);
       assert.doesNotMatch(context, /Session isolated goal|docs\/plan\/session\.md|secret-task-id|Secret task title/);
     }
+    for (const [event, locale, pattern] of [
+      ["session-start", "en-US", /A new request unrelated to that goal may proceed on Quick Path without touching it\./],
+      ["user-prompt-submit", "ko-KR", /그 goal과 무관한 새 요청은 goal을 건드리지 않고 Quick Path로 처리할 수 있습니다\./],
+    ]) {
+      const foreign = await runStateResult(event, { root, locale, payload: { cwd: root, session_id: "session-foreign", turn_id: "t3" } });
+      assert.match(foreign.hookOutput.hookSpecificOutput.additionalContext, pattern);
+    }
     for (const event of ["stop", "subagent-stop"]) {
       const foreign = await runStateResult(event, { root, locale: "en-US", payload: { cwd: root, session_id: "session-foreign", turn_id: "t2" } });
       assert.deepEqual(foreign.hookOutput, {}, `${event} must not block an owner-bound goal`);

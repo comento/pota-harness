@@ -120,7 +120,7 @@ export async function transitionGoal({
       next.revision += 1;
       validateState(next);
       // Recorded before deletion; a retry after a crash replaces the record for the same goalId.
-      const history = await recordGoalHistoryUnlocked(root, next, { recordedBy: "transition" });
+      const history = await recordGoalHistoryUnlocked(root, next, { recordedBy: "transition", reason: nextStatus === "cancelled" ? blocker : null });
       const path = goalStatePath(root);
       await assertNoSymlinkComponents(potaHome(), path, { allowMissing: false });
       await rm(path);
@@ -346,11 +346,14 @@ function strongerExpectation(host, ceiling) {
 
 const floorText = (floor, ceiling) => `at the ${floor} tier${ceilingNote(ceiling)}`;
 
+// The main model gate applies only to goals that have a Heavy Path task; Quick and Light goals run on the session model.
+const hasHeavyTask = (state) => state.tasks.some((task) => task.route === "heavy");
+
 // A task that requires triageDecision evidence is planning work; a below-floor main session must have dispatched it.
 async function ensureMainModelPlanning(root, state, task, { sessionId = null, waiver = null, enabled = true, ceiling = null } = {}) {
   const cap = validCeiling(ceiling);
   const floor = effectiveTier("stronger", cap);
-  if (!enabled || waiver || !task.requiredEvidence.includes("triageDecision") || dispatchedAtOrAbove(task, floor)) return;
+  if (!enabled || waiver || !task.requiredEvidence.includes("triageDecision") || !hasHeavyTask(state) || dispatchedAtOrAbove(task, floor)) return;
   const record = await mainModelRecordFor(root, state, sessionId, floor);
   if (!record) return;
   throw new Error(`Planning task ${task.id} was not dispatched ${floorText(floor, cap)}: this session's main model is ${record.model} (${record.tier} tier). Dispatch planning and triage to ${strongerExpectation(record.host, cap)} and record goal assign ${task.id} --agent <id> --model <value> --model-source host-option, or complete with --allow-main-model <reason> (for example when the session model changed after session start)${ceilingHint("balanced", cap)}`);
@@ -360,7 +363,7 @@ async function ensureMainModelPlanning(root, state, task, { sessionId = null, wa
 export async function ensureMainModelReview(root, state, { sessionId = null, waiver = null, enabled = true, ceiling = null } = {}) {
   const cap = validCeiling(ceiling);
   const floor = effectiveTier("stronger", cap);
-  if (!enabled || waiver || state.tasks.some((task) => task.kind === "review" && dispatchedAtOrAbove(task, floor))) return;
+  if (!enabled || waiver || !hasHeavyTask(state) || state.tasks.some((task) => task.kind === "review" && dispatchedAtOrAbove(task, floor))) return;
   const record = await mainModelRecordFor(root, state, sessionId, floor);
   if (!record) return;
   throw new Error(`Goal ${state.goal.id} has no review dispatched ${floorText(floor, cap)}: this session's main model is ${record.model} (${record.tier} tier). Dispatch the final review to ${strongerExpectation(record.host, cap)} and record goal assign <review-task> --kind review --agent <id> --model <value> --model-source host-option, or pass --allow-main-model <reason> to goal finish or goal complete (for example when the session model changed after session start)${ceilingHint("balanced", cap)}`);
