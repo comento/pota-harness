@@ -567,7 +567,7 @@ async function toggleInspect($: Engine, taskId: string): Promise<void> {
   }
 }
 
-/** HITL 제어(pause/resume/gate) CLI를 실행한 뒤 즉시 상태를 재조회한다. */
+/** HITL 제어(pause/resume/gate/retry) CLI를 실행한 뒤 즉시 상태를 재조회한다. */
 async function runGoalControl($: Engine, buildArgs: (root: string) => string[]): Promise<void> {
   const lang = await localeOf($);
   const words = messages(lang);
@@ -953,6 +953,23 @@ export const register: Register = on => {
                     ))}
                   </Box>
                 )}
+            </Box>
+          )}
+          {state.ended === null && task.status === "blocked" && (
+            <Box flexDirection="row" columnGap={1}>
+              <Button
+                key={`retry-${task.id}`}
+                label={words.retry}
+                onPress={() => void runGoalControl($, root => [
+                  "goal",
+                  "retry",
+                  "--task",
+                  task.id,
+                  "--root",
+                  root,
+                  "--quiet",
+                ]).catch(ignore)}
+              />
             </Box>
           )}
           {canToggleGate && (

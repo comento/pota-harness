@@ -6,7 +6,7 @@ import { planKey } from "./dag-model.mjs";
 
 export const MAIN_AGENT_ID = "main";
 export const MAX_AGENTS = 16;
-export const MUTATING_SUBS = new Set(["start", "replan", "task", "claim", "assign", "receipt", "verify", "finish", "pause", "resume", "block", "cancel", "complete", "gate"]);
+export const MUTATING_SUBS = new Set(["start", "replan", "task", "claim", "assign", "receipt", "verify", "finish", "pause", "resume", "block", "cancel", "complete", "gate", "retry"]);
 const PLANNING_SUBS = new Set(["start", "replan"]);
 const GOAL_COMMAND = /(?:^|[\s"'/\\;&|(])pota(?:\.mjs)?["']?\s+goal\s+([a-z]+)\b/g;
 const ROOT_FLAG = /--root(?:=|\s+)("[^"]+"|'[^']+'|\S+)/;

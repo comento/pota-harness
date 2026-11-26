@@ -271,6 +271,8 @@ const APP_SCRIPT = `(() => {
       resume: "재개",
       gateOn: "승인 게이트 켜기",
       gateOff: "승인 해제",
+      retry: "재시도",
+      retryHint: "막힌 task를 다시 배정 대기로 되돌립니다",
       gateBadge: "게이트",
       inspector: "태스크 상세",
       close: "닫기",
@@ -349,6 +351,8 @@ const APP_SCRIPT = `(() => {
       resume: "Resume",
       gateOn: "Enable gate",
       gateOff: "Disable gate",
+      retry: "Retry",
+      retryHint: "Return this blocked task to the queue for a fresh dispatch",
       gateBadge: "Gate",
       inspector: "Task Inspector",
       close: "Close",
@@ -1518,7 +1522,7 @@ const APP_SCRIPT = `(() => {
     footerEl.replaceChildren(el("div", "dag-footer-error", errText.startsWith(prefix) ? errText : prefix + errText));
   }
 
-  // 승인된 HITL 동작(pause/resume/toggle_gate)만 pota_dag_action으로 보내고 응답 상태로 즉시 다시 그린다.
+  // 승인된 HITL 동작(pause/resume/toggle_gate/retry_task)만 pota_dag_action으로 보내고 응답 상태로 즉시 다시 그린다.
   // toggle_gate는 화면에 보인 버튼 의미대로 원하는 게이트 값(enabled)을 명시해 오래된 상태로 게이트를 풀지 않는다.
   async function runDagAction(action, taskId, enabled) {
     if (state.busyAction !== null || !canCallTools()) return;
@@ -1819,6 +1823,18 @@ const APP_SCRIPT = `(() => {
       gateBtn.disabled = state.busyAction !== null;
       gateBtn.addEventListener("click", () => void runDagAction("toggle_gate", task.id, !gated));
       actions.appendChild(gateBtn);
+    }
+    // 막힌 task만 재시도할 수 있다. retry_task는 enabled 없이 taskId만 보낸다.
+    if (opts.canAct && task.status === "blocked") {
+      const retryBtn = el("button", "dag-btn dag-retry-btn", t("retry"));
+      retryBtn.type = "button";
+      retryBtn.dataset.action = "retry_task";
+      retryBtn.dataset.taskId = task.id;
+      retryBtn.title = t("retryHint");
+      retryBtn.setAttribute("aria-label", t("retry") + ": " + t("retryHint"));
+      retryBtn.disabled = state.busyAction !== null;
+      retryBtn.addEventListener("click", () => void runDagAction("retry_task", task.id));
+      actions.appendChild(retryBtn);
     }
     if (opts.canFollow) {
       const followBtn = el("button", "dag-btn dag-followup-btn", t("followUp"));
