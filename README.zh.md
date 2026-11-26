@@ -67,8 +67,10 @@ agy plugin install https://github.com/comento/pota-harness
 | --- | --- | --- | --- |
 | Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | 同样 5 个(在 `/hooks` 中批准后) | SessionStart, PreInvocation(prompt context), PostToolUse, Stop；没有 SubagentStop |
-| Agents `explorer`, `worker` | 有 | 无 | 无 |
+| Agents `explorer`, `worker` | 有(plugin agents `pota:explorer`, `pota:worker`) | role files(`skills/pota-work/roles/`)，由 orchestrator 放在 dispatch prompt 开头(Codex plugin 无法注册 agents) | 有(plugin 中的 `agents/`) |
 | DAG 面板 | mod pane，用 mod 命令 `/dag` 打开 | MCP App(`pota-dag` server)，用 `$dag` 打开 | MCP App(`pota-dag` server)，用 `/dag` 打开 |
+
+Antigravity `invoke_subagent` 中的 agent 名称和 Codex 的 role file 方式尚未在真实 session 中运行；仅确认了 `agy plugin validate` 能处理这 2 个 agents。
 
 ### Coming from the npm install (1.x)
 
@@ -166,7 +168,7 @@ Pota 只对 Claude-family 和 Codex-family models 应用 model-specific adjustme
 harness 会在目标 repository root 创建并维护这些文件。
 
 - `MEMORY.md`: persistent domain knowledge 的短索引。在 `## Domain Knowledge` 下每个 note 一行(`- [<name>](docs/memory/<name>.md): <summary>`)，并包含 repository 的 `## Policy`。
-- `docs/memory/*.md`: 按 domain 记录的详细 knowledge。每个 note 在 H1 下有一行 `Summary:`(不超过 120 个字符)，索引和 hook 会显示它。
+- `docs/memory/*.md`: 按 domain 记录的详细 knowledge。每个 note 在 H1 下有一行 `Summary:`(不超过 120 个字符)，索引和 hook 会显示它。note 还可以在 `Summary:` 之后加一行可选的 `Paths:`。
 - `~/.pota/projects/<project-id>/worktrees/<worktree-id>/state.json`: user-home 中按 project/worktree 隔离的 active goal/task/evidence 状态，用于中断恢复和 scoped stop gate。project working tree 不拥有 runtime state。
 - `PLAN.md`: work plans 的短索引。在 `## Active Plans` 和 `## Completed Plans` 下每个 plan 一行，不超过 200 个字符。planning rules 位于 `pota-plan` skill，而不在 `PLAN.md` 中。
 - `docs/plan/*.md`: detailed execution plans。
@@ -222,6 +224,10 @@ Pota 把数据放在 `POTA_HOME`(默认 `~/.pota`)下，由所有 host 的 plugi
 - main model 检查: 当会话的 main model 低于 stronger tier 时,`SessionStart` 会添加一行 `Pota main model:` 和一次性通知。此时计划/分诊和最终评审必须委派给 stronger tier 或更高并记录(评审使用 `goal assign … --kind review`),否则 `triage-plan` 的完成和 `goal finish` 会被拒绝;绕过方式是 `--allow-main-model <reason>`。model 值缺失或无法识别时不生效。设置 `POTA_MAIN_MODEL_GATE=0` 可关闭。
 - model ceiling: 当账户不能或不打算使用更高的 tier 时(订阅等级、组织策略、usage credits),设置 `POTA_MODEL_CEILING=stronger`(或 `balanced`;也可以写 `opus`、`sonnet` 等 model 名),或在 `~/.pota/config.json` 中写入 `"modelCeiling": "stronger"`。环境变量优先,`config.json` 是所有 hook 和 CLI 调用都会读取的同一位置。设置后 `SessionStart` 会添加一行 `Pota model ceiling:`,高于 ceiling 的 tier 使用 ceiling tier 的 model,Heavy 设计门禁接受该 model,main model 检查以应用 ceiling 后的 stronger tier 为准。未设置时行为不变;无效值不应用 ceiling 并给出提示。
 - 请求契约与 steering: Light 和 Heavy Path 计划包含 `## Request Brief`(原始请求、解读的结果、范围、过往记录参考(`Prior records`,`pota plan steering`)、假设、隐含需求、未决问题、steering 记录),填写完成之前,除非传入 `--allow-no-request-brief <reason>`,否则 `triage-plan` 的完成会被拒绝。用户的更正、补充和方向变更用 `goal steer --kind <correction|addition|redirect> --reason <text>` 记录,task 发生变化时用 `goal replan --steer <correction|addition|redirect|none> --reason <text>` 记录;第二次 steering 或 redirect 还需要重写 `Current request (as of S<n>)`。
+- Claim receipt: goal 仍为 active 时，若 Stop gate 阻止停止(或 loop guard 放行停止)，且最后一次回答声称已完成或检查通过，hook 会追加一句点明该声称的话，让 agent 向用户更正或记录 evidence。它不会改变停止决定，忽略 code block、inline code 和引用行，只读取 host 的 `last_assistant_message` 字段(Claude Code；Codex 按其文档；Antigravity 不传递)。用 `POTA_CLAIM_RECEIPT=0` 关闭。
+- Memory paths: `docs/memory` 的 note 可以在 `Summary:` 行下加 `Paths: <逗号分隔的仓库相对 path 前缀或 glob>`(最多 8 项；`*` 匹配一段 path，`**` 匹配多段)。编辑成功后，PostToolUse hook 每次最多提示 3 个 path 与被编辑文件匹配的 notes，每个 session 每个 note 一次，其余在之后的编辑中提示。`pota memory check` 将无效项报告为 `paths-invalid`。
+- Heavy plan review: 在 Heavy Path 上，`heavy-design` task 还需要 `planReview` evidence。更强 tier 上独立的只读 reviewer 默认通过，只有在对照仓库文件确认存在 blocker 时才驳回；重新 review 一次，之后记为 blocker。
+- Escalation 与 learnings: 无法在自身 tier 完成的 worker 以 `ESCALATE: <reason>` 开始其 final report，orchestrator 向上一个 tier 重新 dispatch(止于 model ceiling)。worker 以 `LEARNINGS:` 结束报告；orchestrator 将其追加到计划的 `## Learnings`，传给后续 task，并用于 memory promotion 的决定。
 
 ## DAG Panel
 

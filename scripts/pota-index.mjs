@@ -72,6 +72,9 @@ const HEADING2 = /^## +(.+?)\s*$/;
 // PLAN.md index sections: Active, Completed, and any other "... Plans" section such as Superseded Plans.
 const PLAN_SECTION = /(?:^| )Plans$/;
 const SECTION_BREAK = /^#{1,2} /;
+const PATHS_LINE = /^(?:[-*>]\s*)?(?:\*\*)?Paths:(?:\*\*)?\s*(.+?)\s*$/i;
+const NOTE_PATHS_MAX = 8;
+const NOTE_PATH_LENGTH = 120;
 const SUMMARY_LINE = /^(?:[-*>]\s*)?(?:\*\*)?Summary:(?:\*\*)?\s*(.+?)\s*$/i;
 const SUMMARY_SEPARATOR = /^\s*(?::|-(?=\s)|—)\s*/;
 const READ_FLAGS = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
@@ -178,6 +181,56 @@ export function extractNoteSummary(text, name = null) {
     if (cleaned) return fallbackSummary(cleaned, "title");
   }
   return fallbackSummary(name ?? "", name ? "name" : null);
+}
+
+export function extractNotePaths(text) {
+  const result = { paths: [], invalid: [] };
+  for (const line of noteHeadLines(String(text ?? ""))) {
+    const match = PATHS_LINE.exec(line);
+    if (!match) continue;
+    if (isPlaceholderValue(match[1])) return result;
+    for (const part of match[1].split(",")) {
+      let item = part.trim();
+      if (item.length >= 2 && item.startsWith("`") && item.endsWith("`")) item = item.slice(1, -1).trim();
+      item = item.replace(/^\.\//, "").replace(/\/+$/, "");
+      if (!item) continue;
+      const bad = item === "." || /^(?:\/|[A-Za-z]:\\)/.test(item) || item.split("/").includes("..") || item.includes("\\")
+        || CONTROL_CHARACTER.test(item) || length(item) > NOTE_PATH_LENGTH;
+      if (bad || result.paths.length >= NOTE_PATHS_MAX) result.invalid.push(item);
+      else result.paths.push(item);
+    }
+    return result;
+  }
+  return result;
+}
+
+export function matchNotePath(pattern, relPath) {
+  if (!/[*]/.test(pattern)) return relPath === pattern || relPath.startsWith(`${pattern}/`);
+  const source = pattern.split(/(\*\*\/|\*\*|\*)/).map((part) => {
+    if (part === "**/") return "(?:.*/)?";
+    if (part === "**") return ".*";
+    if (part === "*") return "[^/]*";
+    return part.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+  }).join("");
+  return new RegExp(`^${source}(?:/.*)?$`).test(relPath);
+}
+
+// Hook path: reads only note heads and never throws, so a broken docs/memory cannot break an edit.
+export async function notesForPath(root, relPath, { exclude = [] } = {}) {
+  try {
+    const workspaceRoot = resolve(root);
+    if (await inspectPath(workspaceRoot, KINDS.memory.directory, "directory") !== "ok") return [];
+    const { files } = await scanDirectory(workspaceRoot, "memory");
+    const names = [];
+    for (const file of files.slice(0, INDEX_LIMITS.hookEntries)) {
+      if (exclude.includes(file.name)) continue;
+      const { paths } = extractNotePaths(await readCapped(file.absolute, INDEX_LIMITS.noteHeadBytes).catch(() => ""));
+      if (paths.some((pattern) => matchNotePath(pattern, relPath))) names.push(file.name);
+    }
+    return names.sort(compareNames).slice(0, 3);
+  } catch {
+    return [];
+  }
 }
 
 export async function checkIndex(root, kind, { strict = false } = {}) {
@@ -359,6 +412,7 @@ async function gather(root, kind) {
     files: [],
     fileCount: 0,
     notes: new Map(),
+    notePaths: new Map(),
     indexText: null,
     archiveText: null,
   };
@@ -397,7 +451,9 @@ async function gather(root, kind) {
   }
   if (kind === "memory") {
     for (const file of snapshot.files) {
-      snapshot.notes.set(file.name, extractNoteSummary(await readCapped(file.absolute, INDEX_LIMITS.noteHeadBytes), file.name));
+      const head = await readCapped(file.absolute, INDEX_LIMITS.noteHeadBytes);
+      snapshot.notes.set(file.name, extractNoteSummary(head, file.name));
+      snapshot.notePaths.set(file.name, extractNotePaths(head));
     }
   }
   return snapshot;
@@ -491,6 +547,11 @@ function analyze(snapshot, indexText, archiveText) {
       } else if (note.tooLong) {
         warnings.push(issue("summary-too-long", file.path,
           `${file.path} has a Summary: line over ${INDEX_LIMITS.summary} characters; the index keeps a clipped copy`));
+      }
+      const invalid = snapshot.notePaths.get(file.name)?.invalid ?? [];
+      if (invalid.length > 0) {
+        warnings.push(issue("paths-invalid", file.path,
+          `${file.path} has an invalid Paths: entry: ${invalid.join(", ")}; use repo-relative path prefixes or globs without .. (at most ${NOTE_PATHS_MAX})`));
       }
     }
   }

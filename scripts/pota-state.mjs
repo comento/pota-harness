@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { realpathSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
+import { isAbsolute, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   appendNotice, contextResult, foreignSessionContextResult, mainModelLine, mainModelNotice, modelCeilingInvalidNotice,
   modelCeilingLine, prependContext,
 } from "./pota-state-context.mjs";
-import { continuationReason, stopAllowedMessage, stopHookOutput } from "./pota-state-hook.mjs";
+import { continuationReason, detectCompletionClaim, stopAllowedMessage, stopHookOutput } from "./pota-state-hook.mjs";
 import { initializeProject } from "./pota-state-init.mjs";
 import { evaluateStop, isGoalOwnedBySession, reconcileWorktreeState } from "./pota-goal.mjs";
 import {
@@ -13,14 +15,17 @@ import {
 } from "./pota-goal-state.mjs";
 import { NO_MODEL_CEILING, resolveModelCeiling } from "./pota-model-ceiling.mjs";
 import { classifyModel, effectiveTier, isBelowTier } from "./pota-model-tier.mjs";
-import { hookIndexSnapshot } from "./pota-index.mjs";
-import { resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
+import { hookIndexSnapshot, notesForPath } from "./pota-index.mjs";
+import { goalStateDirectory, potaHome, resolvePluginRoot, resolveRepoRoot } from "./pota-paths.mjs";
+import { safeMkdir } from "./pota-safe-fs.mjs";
 import { recordActiveWorkspace } from "./pota-dag-workspaces.mjs";
 import { migrationNoticeLine, sessionStartMigration } from "./pota-legacy-migration.mjs";
-import { checkPostToolUse, startFetchWhenNeeded } from "./pota-comment-checker.mjs";
+import { checkPostToolUse, extractCheckRequests, startFetchWhenNeeded } from "./pota-comment-checker.mjs";
 
 const recoverableGoalStatuses = new Set(["active", "paused", "blocked"]);
 const HOOK_HOSTS = new Set(["claude", "codex"]);
+// Declared above the CLI block: that block awaits during module evaluation, so a later const would still be in its TDZ.
+const MEMORY_PATHS_GUARD_MAX = 64;
 
 // Host hooks call `pota-state.mjs <event> <host>`. A run without a known host (a manual run, an older hook file) still
 // gets its capsule but never starts the legacy migration or the comment-checker download.
@@ -32,6 +37,10 @@ if (isCliEntry()) {
   const readsCeiling = event === "session-start" || (event === "user-prompt-submit" && payload?.model !== undefined);
   const options = { payload, host, commentChecker: { autoFetch: host !== "unknown" } };
   if (readsCeiling) options.modelCeiling = resolveModelCeiling();
+  const receiptOff = process.env.POTA_CLAIM_RECEIPT;
+  if (typeof receiptOff === "string" && ["0", "false", "off", "no"].includes(receiptOff.trim().toLowerCase())) {
+    options.claimReceipt = { enabled: false };
+  }
   const result = isHookEvent(event)
     ? await runStateResult(event, options).catch((error) => hookFailureResult(event, error))
     : await runStateResult(event, options);
@@ -58,6 +67,8 @@ export async function runStateResult(event = "manual", {
   mainModel = {},
   // The library default never reads the environment, so a developer's ceiling cannot leak into in-process callers.
   modelCeiling = NO_MODEL_CEILING,
+  // Same principle: the library default never reads POTA_CLAIM_RECEIPT; the CLI entry passes it in.
+  claimReceipt = {},
 } = {}) {
   const resolvedRoot = resolveRoot(root, payload);
   const ko = locale.toLowerCase().startsWith("ko");
@@ -106,7 +117,8 @@ export async function runStateResult(event = "manual", {
       if (comments?.reason) return { status: 0, message: "", hookOutput: {} };
       throw error;
     });
-    return withCommentFindings(reminder, comments);
+    const notice = await memoryPathsNotice({ ko, resolvedRoot, payload }).catch(() => null);
+    return withCommentFindings(withMemoryNotice(reminder, notice), comments);
   }
 
   if (event === "stop" || event === "subagent-stop") {
@@ -117,10 +129,13 @@ export async function runStateResult(event = "manual", {
       agentId: payload?.agent_id,
     });
     const progressed = gate.block ? await recordStopProgress(resolvedRoot, state, event, payload) : false;
-    const hookOutput = stopHookOutput(gate, payload, { progressed });
+    const claim = gate.block && claimReceipt.enabled !== false && typeof payload?.last_assistant_message === "string"
+      ? detectCompletionClaim(payload.last_assistant_message)
+      : null;
+    const hookOutput = stopHookOutput(gate, payload, { progressed, claim });
     return {
       status: 0,
-      message: gate.block ? continuationReason(gate.reason, payload, { progressed }) : stopAllowedMessage({ ko, state, event }),
+      message: gate.block ? continuationReason(gate.reason, payload, { progressed, claim }) : stopAllowedMessage({ ko, state, event }),
       hookOutput,
     };
   }
@@ -163,6 +178,46 @@ async function postToolUseReminder({ ko, resolvedRoot, payload }) {
         additionalContext: message,
       },
     },
+  };
+}
+
+async function memoryPathsNotice({ ko, resolvedRoot, payload }) {
+  const relPaths = [...new Set(extractCheckRequests(payload).map((request) => request.filePath))]
+    .map((path) => relative(resolvedRoot, path).split(sep).join("/"))
+    .filter((relPath) => relPath && relPath !== ".." && !relPath.startsWith("../") && !relPath.startsWith("docs/memory/") && !isAbsolute(relPath));
+  if (relPaths.length === 0) return null;
+  const sessionId = payload?.session_id ?? null;
+  const previous = await readHookGuard(resolvedRoot, "memory-paths");
+  const seen = previous?.sessionId === sessionId && Array.isArray(previous.notes) ? previous.notes : [];
+  const fresh = [];
+  let relPath = null;
+  for (const candidate of relPaths) {
+    if (fresh.length >= 3) break;
+    const names = await notesForPath(resolvedRoot, candidate, { exclude: [...seen, ...fresh] });
+    if (names.length === 0) continue;
+    relPath ??= candidate;
+    fresh.push(...names.slice(0, 3 - fresh.length));
+  }
+  if (fresh.length === 0) return null;
+  // Without an active goal nothing has created the state directory yet, and a guard that cannot persist would repeat the notice.
+  await mkdir(potaHome(), { recursive: true }).then(() => safeMkdir(potaHome(), relative(potaHome(), goalStateDirectory(resolvedRoot)))).catch(() => {});
+  await writeHookGuard(resolvedRoot, "memory-paths", { sessionId, notes: [...seen, ...fresh].slice(-MEMORY_PATHS_GUARD_MAX) });
+  const shown = Array.from(relPath.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g, "")).slice(0, 200).join("");
+  const files = fresh.map((name) => `docs/memory/${name}.md`);
+  if (ko) return `Pota 메모리: ${files.join(", ")}가 ${shown} 영역을 다룹니다. 아직 읽지 않았다면 이 영역을 바꾸기 전에 읽으세요.`;
+  return files.length === 1
+    ? `Pota memory: ${files[0]} covers ${shown}; read it before changing this area if you have not.`
+    : `Pota memory: ${files.join(", ")} cover ${shown}; read them before changing this area if you have not.`;
+}
+
+function withMemoryNotice(result, notice) {
+  if (!notice) return result;
+  const context = result.hookOutput?.hookSpecificOutput?.additionalContext;
+  const message = context ? `${context}\n${notice}` : notice;
+  return {
+    status: 0,
+    message,
+    hookOutput: { ...result.hookOutput, hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: message } },
   };
 }
 

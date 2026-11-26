@@ -1,6 +1,7 @@
 # Domain: delegation-model-routing
 
 Summary: 작업별 모델 4-tier·호스트별 값, effort 라우팅, dispatch 기록과 완료 게이트(effort·설계 모델). 위임 규칙이나 goal assign을 바꿀 때 읽는다.
+Paths: scripts/pota-model-tier.mjs, scripts/pota-model-ceiling.mjs, skills/pota-plan/delegation.md, skills/pota-work/delegation.md
 
 ## Scope
 
@@ -42,6 +43,8 @@ Summary: 작업별 모델 4-tier·호스트별 값, effort 라우팅, dispatch �
   - `effectiveModel`이 넘긴 model 이름을 포함하지 않으면 불일치 경고를 낸다(`unreported`는 제외).
   - Stop·SubagentStop은 배정됐는데 `effortSource`가 비어 있으면 문장을 덧붙인다.
   - 출처: `pota-goal-cli.mjs:118-125`, `scripts/pota-goal-policy.mjs:53-57`.
+- `ESCALATE:` 반환(2.4.0): worker가 자기 tier로 끝낼 수 없으면 final report 첫 줄을 `ESCALATE: <reason>`으로 시작하고, orchestrator는 실패한 게이트와 같게 한 tier 위로 새 dispatch하며(모델 상한에서 멈춤) Evidence에 `Escalation:` 줄을 남긴다. 출처: `skills/pota-work/delegation.md`, `test/policy-additions.test.mjs`.
+- Heavy `planReview`(2.4.0): `heavy-design` task는 `designRecord`와 함께 `planReview` 증거가 필요하다. stronger tier의 별도 읽기 전용 리뷰어가 기본적으로 승인하고 저장소 근거로 확인한 blocker만 반려하며 재검토는 한 번이다. 출처: `skills/pota-plan/heavy-path.md`, `test/policy-additions.test.mjs`.
 - `goal replan`은 바뀐 task의 effort·model 기록을 초기화한다. `goal stats`는 route·effort를 보이고, model 필드는 설정됐을 때만 보인다. 출처: `test/goal-effort.test.mjs` 203·359·367·538행.
 
 ### main 모델 게이트

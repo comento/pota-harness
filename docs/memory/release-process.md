@@ -1,6 +1,7 @@
 # Domain: release-process
 
 Summary: 버전 표면 4개, dev→main PR 승격(main 병합이 배포), 병합 뒤 호스트별 확인, 1.5.0 안내 릴리스와 npm 인증. 릴리스 전에 읽는다.
+Paths: package.json, .github/workflows
 
 ## Scope
 

@@ -1,6 +1,7 @@
 # Domain: policy-surfaces
 
 Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·agent·template·manifest·defaultPrompt·README)와 바이트 예산. 문구 변경 전에 읽는다.
+Paths: skills, claude/agents, agents, templates, docs/model-guidance, README*.md
 
 ## Scope
 
@@ -15,6 +16,8 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·agent·t
 | 스킬 본문 | `skills/pota-{memory,plan,work,review}/SKILL.md` | 정본. 세 호스트가 같은 파일을 읽는다(Claude `/pota:pota-plan`, Codex `$pota-plan`, Antigravity `/pota-plan`) |
 | 스킬 참조 | `skills/pota-plan/{planning-rules,delegation,heavy-path,request-brief}.md`, `skills/pota-work/{delegation,heavy-path,recovery,verification}.md` | 긴 절차는 여기에 둔다 |
 | agent | `claude/agents/{explorer,worker}.md` | Claude Code만 읽는다(`.claude-plugin/plugin.json` `agents`) |
+| Antigravity agent | `agents/{explorer,worker}.md` | Antigravity만 읽는다. Claude Code는 manifest에 `agents`가 있으면 루트 `agents/`를 읽지 않는다(2.1.327에서 실측) |
+| 역할 파일 | `skills/pota-work/roles/{explorer,worker}.md` | Codex처럼 이름 있는 Pota agent가 없는 호스트에서 orchestrator가 dispatch 프롬프트 맨 앞에 넣는다 |
 | 템플릿 | `templates/{MEMORY,PLAN,domain-memory,work-plan}.md` | `MEMORY.md`·`PLAN.md`는 `INDEX_TEMPLATES`(en)와 바이트 동일 |
 | 모델 가이드 | `docs/model-guidance/{README,claude,codex}.md` | `pota://docs/model-guidance/…`로 참조 |
 | Codex 커널 | `.codex-plugin/plugin.json`의 `interface.defaultPrompt` | 매 대화 반복 주입 |
@@ -22,6 +25,8 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·agent·t
 | hook 상태 문구 | `hooks/hooks.json`, `hooks/codex.json`의 `statusMessage` | 두 파일은 변수·호스트 토큰 외에 같아야 한다. Codex 쪽을 바꾸면 사용자가 hook을 다시 승인해야 하므로 릴리스 노트에 적는다 |
 | CLI 안내문 | `scripts/pota.mjs`의 `messages` | en, ko, ja, zh, es, fr, de, pt |
 | README | `README.md`와 `README.{ko,ja,zh,es,fr,de,pt}.md` | 8개. 구조를 나란히 유지하고 제목은 영문 고정 |
+
+세 표면(`claude/agents/X.md`, `agents/X.md`, `skills/pota-work/roles/X.md`)의 본문(frontmatter 제외)은 바이트 동일해야 한다. 출처: `test/host-roles.test.mjs`.
 
 출처: `test/docs-package-hardening.test.mjs` "plugin inventory covers two Claude agents and five skills and no command or workflow surfaces", `test/contract-parity.test.mjs`, `test/plugin-manifests.test.mjs` "Claude and Codex hooks run pota-state.mjs with the event and host tokens, and Codex reads only its own file".
 
@@ -43,6 +48,7 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·agent·t
 - main 모델 게이트: 정본은 두 `delegation.md`의 `## Main Model Gate`다. 파생 표면은 `skills/pota-review/SKILL.md` Procedure 4 하위 bullet, `templates/work-plan.md` `- Model:` bullet, `docs/model-guidance/{README,claude,codex}.md` bullet 1개씩, README 8개의 "Comment checker" 다음 bullet이다. `skills/pota-{plan,work}/SKILL.md`는 바이트 예산 때문에 고치지 않고 캡슐 줄이 `delegation.md`를 가리킨다. 출처: `test/token-efficiency.test.mjs` "main-model gate surfaces name the capsule line, the review kind, and the bypass flag".
 - 모델 상한: 정본은 두 `delegation.md`의 `## Model Ceiling`(같은 절을 바이트 동일하게 둔다)과 설계 게이트 문장·Main Model Gate 문장·`CONTEXT:` 줄 보강이다. 파생 표면은 `skills/pota-{plan,work}/heavy-path.md` 설계 bullet, `templates/work-plan.md` `- Model:` bullet, `docs/model-guidance/{README,claude,codex}.md` bullet 1개씩, README 8개의 "Main model check" 다음 bullet이다. `skills/pota-{plan,work}/SKILL.md`, `claude/agents/*.md`, `skills/pota-review/SKILL.md`는 고치지 않는다(캡슐 줄 "This overrides tier values in skill text"와 `CONTEXT:`로 전달). 출처: `test/token-efficiency.test.mjs` "model ceiling surfaces name the capsule line, the setting, and the user-only rule".
 - 요청 계약과 스티어링(1.4.0): 정본은 `skills/pota-plan/request-brief.md`(계약 작성, `## Prior records`, 빈틈 3분류, 암묵 요구사항, 스티어링 분류, CLI 강제 항목)다. 파생 표면은 `templates/work-plan.md`의 `## Request Brief` 섹션(`## Goal` 다음), `skills/pota-plan/SKILL.md` Reference Files 포인터, `skills/pota-plan/planning-rules.md` bullet 2개, `skills/pota-work/SKILL.md`의 replan 예시(`--steer`·`--reason`)와 Procedure 2번 포인터, `skills/pota-work/recovery.md`, README 8개의 "Model ceiling" 다음 bullet이다. 계획 라벨과 명령·플래그는 모든 locale에서 영문 고정이다. 템플릿의 Request Brief에는 `S1 (`로 시작하는 목록 줄을 두지 않는다(CLI 순번 검사가 실제 기록으로 볼 수 있다). 게이트 동작은 `goal-state.md`. 출처: `test/contract-parity.test.mjs` "request brief and steering surfaces name the template section, the commands, and the bypass flag".
+- 2.4.0 규칙 4개: `planReview`는 정본이 `skills/pota-plan/heavy-path.md`다. `ESCALATE:`·`Escalation:`은 정본이 두 `delegation.md`와 `claude/agents/worker.md`다. `## Learnings`·`LEARNINGS:`는 `templates/work-plan.md`, 두 `delegation.md`, `skills/pota-work/verification.md`에 있다. `Paths:`는 `skills/pota-memory/SKILL.md`와 `templates/domain-memory.md`에 있다. 출처: `test/policy-additions.test.mjs`.
 - `pluginRoot` 문장(`skills/pota-plan/SKILL.md` 16행, `skills/pota-work/SKILL.md` 18행)과 `skills/pota-work/recovery.md` 30행(경로가 사라지면 세션 재시작, Codex에서 `Pota CLI:` 줄이 없으면 `/hooks` 승인 요청)은 세 호스트가 같은 문장을 쓴다. 같은 뜻의 문장이 `skills/pota-memory/SKILL.md`, `skills/pota-review/SKILL.md`, `docs/model-guidance/README.md`에도 있다.
 - 메모리 승격 절차 본문은 `skills/pota-work/verification.md` `## Memory Promotion`, 계획 재활용 절차는 `skills/pota-plan/planning-rules.md` `## Reuse Before Planning`에 있다. 옛 `PLAN.md`의 Planning Rules 정본도 이 파일이다.
 - `open_pota_dag` 표면 규칙(2.3.0): Antigravity와 Codex/ChatGPT Desktop에서 `open_pota_dag`가 노출될 때만 `goal start` 직후·활성 goal 재개 시 호출하고, 자체 mod를 쓰는 Claude Code에서는 건너뛴다(`ensure` 복구는 Antigravity 전용). 정본은 `skills/pota-plan/planning-rules.md`와 `docs/model-guidance/README.md`, 요약은 `skills/pota-{plan,work}/SKILL.md`이며 `test/token-efficiency.test.mjs`가 강제한다.
@@ -50,6 +56,7 @@ Summary: 정책 문구를 바꿀 때 함께 고칠 표면 지도(skill·agent·t
 
 ## Policy
 
+- `claude/agents/*.md` 본문을 고치면 `agents/`와 `skills/pota-work/roles/`의 같은 파일도 같이 고친다(`test/host-roles.test.mjs`가 바이트 동일을 강제한다).
 - 새 규칙은 정본 스킬이나 참조 파일에 먼저 쓰고, 위 표의 파생 표면에 같은 의미로 옮긴다. 기계로 검사할 수 있는 규칙은 문구를 늘리지 말고 테스트로 고정한다.
 - SKILL.md에 문장을 더해야 하면 같은 바이트만큼 줄이거나 참조 파일로 옮긴다.
 - 고유명사·명령·식별자는 locale과 무관하게 영문 그대로 둔다. `## Domain Knowledge`와 README의 `##`·`###` 제목도 영문 고정이다.

@@ -75,8 +75,10 @@ Run the same command again to update; the Antigravity documentation describes a 
 | --- | --- | --- | --- |
 | Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | the same five, after approval in `/hooks` | SessionStart, PreInvocation (prompt context), PostToolUse, Stop; no SubagentStop |
-| Agents `explorer`, `worker` | yes | no | no |
+| Agents `explorer`, `worker` | yes (plugin agents `pota:explorer`, `pota:worker`) | role files (`skills/pota-work/roles/`) that the orchestrator puts at the top of the dispatch prompt, since a Codex plugin cannot register agents | yes (`agents/` in the plugin) |
 | DAG panel | mod pane, opened with the mod command `/dag` | MCP App (`pota-dag` server), opened with `$dag` | MCP App (`pota-dag` server), opened with `/dag` |
+
+The Antigravity `invoke_subagent` agent names and the Codex role-file approach have not yet been run in a real session; only `agy plugin validate` processing the two agents was checked.
 
 ### Coming from the npm install (1.x)
 
@@ -185,7 +187,7 @@ Detailed guidance lives in the installed plugin and is referenced as `pota://doc
 The harness creates and maintains these files at the target repository root.
 
 - `MEMORY.md`: short index of persistent domain knowledge: one line per note under `## Domain Knowledge` (`- [<name>](docs/memory/<name>.md): <summary>`) plus the repository `## Policy`.
-- `docs/memory/*.md`: detailed knowledge by domain. Each note starts with a one-line `Summary:` (at most 120 characters) that the index and the hook show.
+- `docs/memory/*.md`: detailed knowledge by domain. Each note starts with a one-line `Summary:` (at most 120 characters) that the index and the hook show. A note may add an optional `Paths:` line after `Summary:`.
 - `PLAN.md`: short index of work plans: one line of 200 characters or fewer per plan under `## Active Plans` and `## Completed Plans`. Planning rules live in the `pota-plan` skill, not in `PLAN.md`.
 - `docs/plan/*.md`: detailed execution plans.
 - `docs/plan/ARCHIVE.md`: older completed plan entries moved out of `PLAN.md` by `pota plan index --archive`, newest first, plus the body of a legacy `## Planning Rules` section under `## Legacy Planning Rules`. List lines before its first `## ` heading still count as indexed.
@@ -243,6 +245,10 @@ Pota keeps its data under `POTA_HOME` (default `~/.pota`), shared by the plugin 
 - Main model check: when the session's main model is below the stronger tier, `SessionStart` adds a `Pota main model:` line and a one-time notice. Planning/triage and the final review must then be dispatched to the stronger tier or above and recorded (`goal assign … --kind review` for the review); otherwise completing `triage-plan` and `goal finish` are refused unless `--allow-main-model <reason>` is passed. An absent or unrecognized model value never triggers this. Set `POTA_MAIN_MODEL_GATE=0` to turn it off.
 - Model ceiling: when the account cannot or should not use the higher tiers (subscription, organization policy, usage credits), set `POTA_MODEL_CEILING=stronger` (or `balanced`; a model name such as `opus` or `sonnet` also works), or `"modelCeiling": "stronger"` in `~/.pota/config.json`. The environment variable wins, and `config.json` is the one place every hook and CLI call reads. `SessionStart` then adds a `Pota model ceiling:` line, tiers above the ceiling use the ceiling tier's model, the Heavy design gate accepts that model, and the main model check uses the capped stronger tier. Without a setting nothing changes; an invalid value applies no ceiling and is reported.
 - Request brief and steering: a Light or Heavy Path plan carries a `## Request Brief` (original request, interpreted outcome, scope, prior records (`Prior records`, from `pota plan steering`), assumptions, implicit requirements, open questions, steering log), and completing `triage-plan` is refused until it is filled unless `--allow-no-request-brief <reason>` is passed. User corrections, additions, and redirects are recorded with `goal steer --kind <correction|addition|redirect> --reason <text>`, or with `goal replan --steer <correction|addition|redirect|none> --reason <text>` when tasks change; the second steering or a redirect also needs a rewritten `Current request (as of S<n>)`.
+- Claim receipt: when the Stop gate blocks (or the loop guard lets a stop through) while the goal is still active, and the last answer claims completion or passing checks, the hook appends one sentence naming the claim so the agent corrects it for the user or records the evidence. It never changes the stop decision, ignores code blocks, inline code, and quoted lines, and reads only the host's `last_assistant_message` field (Claude Code; Codex per its documentation; Antigravity does not pass it). Set `POTA_CLAIM_RECEIPT=0` to turn it off.
+- Memory paths: a `docs/memory` note may carry `Paths: <comma-separated repo-relative path prefixes or globs>` under its `Summary:` line (at most 8 entries; `*` matches one path segment, `**` several). After a successful edit, the PostToolUse hook names up to 3 notes whose paths match the edited file, once per note per session; the rest are named on later edits. `pota memory check` reports invalid entries as `paths-invalid`.
+- Heavy plan review: on the Heavy Path the `heavy-design` task also requires `planReview` evidence. A separate read-only reviewer on the stronger tier approves by default and rejects only for blockers confirmed against repository files; one re-review, then a blocker.
+- Escalation and learnings: a worker that cannot finish on its tier starts its final report with `ESCALATE: <reason>` and the orchestrator re-dispatches one tier up (stopping at the model ceiling). Workers end reports with `LEARNINGS:`; the orchestrator appends them to the plan's `## Learnings`, passes them to later tasks, and uses them for the memory promotion decision.
 
 ## DAG Panel
 

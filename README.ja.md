@@ -67,8 +67,10 @@ update は同じ command をもう一度実行します。Antigravity の文書�
 | --- | --- | --- | --- |
 | Skills | `/pota:pota-plan`, `/pota:pota-work`, `/pota:pota-review`, `/pota:pota-memory` | `$pota-plan`, `$pota-work`, `$pota-review`, `$pota-memory`, `$dag` | `/pota-plan`, `/pota-work`, `/pota-review`, `/pota-memory`, `/dag` |
 | Hooks | SessionStart, UserPromptSubmit, PostToolUse, Stop, SubagentStop | 同じ 5 つ(`/hooks` で承認した後) | SessionStart, PreInvocation(prompt context), PostToolUse, Stop。SubagentStop なし |
-| Agents `explorer`, `worker` | あり | なし | なし |
+| Agents `explorer`, `worker` | あり(plugin agents `pota:explorer`, `pota:worker`) | role files(`skills/pota-work/roles/`)を orchestrator が dispatch prompt の先頭に入れる(Codex plugin は agent を登録できないため) | あり(plugin の `agents/`) |
 | DAG パネル | mod pane。mod コマンド `/dag` で開く | MCP App(`pota-dag` server)。`$dag` で開く | MCP App(`pota-dag` server)。`/dag` で開く |
+
+Antigravity の `invoke_subagent` での agent 名と Codex の role file 方式は、まだ実際の session で実行していません。確認したのは `agy plugin validate` が agent 2 つを処理することだけです。
 
 ### Coming from the npm install (1.x)
 
@@ -166,7 +168,7 @@ Pota は Claude-family と Codex-family models にのみ model-specific adjustme
 harness は対象 repository root に次の files を作成して維持します。
 
 - `MEMORY.md`: persistent domain knowledge の短い index。`## Domain Knowledge` の下に note ごとに 1 行(`- [<name>](docs/memory/<name>.md): <summary>`)を置き、repository の `## Policy` も含みます。
-- `docs/memory/*.md`: domain ごとの詳細 knowledge。各 note は H1 の下に 1 行の `Summary:`(120 文字以内)を置き、index と hook がそれを表示します。
+- `docs/memory/*.md`: domain ごとの詳細 knowledge。各 note は H1 の下に 1 行の `Summary:`(120 文字以内)を置き、index と hook がそれを表示します。 note は `Summary:` の後に任意の `Paths:` 行を置けます。
 - `~/.pota/projects/<project-id>/worktrees/<worktree-id>/state.json`: 中断復旧と scoped stop gate に使う user-home の project/worktree 別 active goal/task/evidence 状態。project working tree は runtime state を所有しません。
 - `PLAN.md`: work plans の短い index。`## Active Plans` と `## Completed Plans` の下に plan ごとに 200 文字以内の 1 行を置きます。planning rules は `PLAN.md` ではなく `pota-plan` skill にあります。
 - `docs/plan/*.md`: detailed execution plans。
@@ -222,6 +224,10 @@ Pota は data を `POTA_HOME`(既定 `~/.pota`)の下に置き、すべての ho
 - main model チェック: セッションの main model が stronger tier 未満の場合、`SessionStart` は `Pota main model:` 行と 1 回の通知を追加します。このとき計画・トリアージと最終レビューは stronger tier 以上に委任して記録する必要があり(レビューは `goal assign … --kind review`)、記録がなければ `triage-plan` の完了と `goal finish` は拒否されます。回避は `--allow-main-model <reason>` です。model 値がない、または認識できない場合は動作しません。`POTA_MAIN_MODEL_GATE=0` で無効にできます。
 - model ceiling: アカウントで上位 tier を使えない、または使わない場合(サブスクリプション、組織ポリシー、usage credits)は `POTA_MODEL_CEILING=stronger`(または `balanced`。`opus` や `sonnet` などの model 名も可)を設定するか、`~/.pota/config.json` に `"modelCeiling": "stronger"` を書きます。環境変数が優先され、`config.json` はすべての hook と CLI 呼び出しが同じ値を読む場所です。設定すると `SessionStart` が `Pota model ceiling:` 行を追加し、ceiling より上の tier は ceiling tier の model を使い、Heavy 設計ゲートはその model を通し、main model チェックは ceiling 適用後の stronger tier を基準にします。設定がなければ動作は変わらず、無効な値は ceiling なしとして通知されます。
 - 要求ブリーフとステアリング: Light・Heavy Path の計画は `## Request Brief`(元の要求、解釈した成果、スコープ、過去記録の参照(`Prior records`、`pota plan steering`)、前提、暗黙の要件、未解決の質問、ステアリング記録)を持ち、埋めるまでは `--allow-no-request-brief <reason>` を渡さない限り `triage-plan` の完了が拒否されます。ユーザーの訂正・追加・方向転換は `goal steer --kind <correction|addition|redirect> --reason <text>` で、task が変わる場合は `goal replan --steer <correction|addition|redirect|none> --reason <text>` で記録し、2 回目のステアリングまたは redirect では書き直した `Current request (as of S<n>)` も必要です。
+- Claim receipt: goal が active の間に Stop gate が停止を block したとき(または loop guard が停止を通したとき)、最後の回答が完了や check の通過を主張していれば、hook はその主張を指す 1 文を追加し、agent がユーザーに訂正するか evidence を記録するようにします。停止の判断は変えず、code block、inline code、引用行は無視し、host の `last_assistant_message` field だけを読みます(Claude Code。Codex は documentation 上。Antigravity は渡しません)。`POTA_CLAIM_RECEIPT=0` で無効にします。
+- Memory paths: `docs/memory` の note は `Summary:` 行の下に `Paths: <カンマ区切りのリポジトリ相対 path prefix または glob>` を置けます(最大 8 件。`*` は path の 1 区間、`**` は複数区間)。編集が成功した後、PostToolUse hook は編集した file に path が合う note を一度に最大 3 件、session・note ごとに 1 回通知し、残りは次の編集で通知します。`pota memory check` は不正な項目を `paths-invalid` と報告します。
+- Heavy plan review: Heavy Path では `heavy-design` task も `planReview` evidence を必要とします。より強い tier の別の読み取り専用 reviewer は既定で承認し、repository の file で確認した blocker がある場合だけ差し戻します。再 review は 1 回で、その後は blocker とします。
+- Escalation と learnings: 自分の tier で終えられない worker は final report を `ESCALATE: <reason>` で始め、orchestrator が 1 tier 上へ再 dispatch します(model ceiling で止まる)。worker は report を `LEARNINGS:` で終え、orchestrator はそれを plan の `## Learnings` に追記し、後続 task に渡し、memory promotion の判断に使います。
 
 ## DAG Panel
 
