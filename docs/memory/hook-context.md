@@ -38,7 +38,7 @@ hook 진입점 `scripts/pota-state.mjs`, Antigravity 어댑터 `scripts/pota-sta
 
 | 대상 | 상한 | 강제 지점 |
 | --- | --- | --- |
-| UPS idle (노트 9999개 포함) | 620 | `test/token-efficiency.test.mjs:48`, `test/index-context.test.mjs` "idle UserPromptSubmit … 620" |
+| UPS idle (노트 9999개 포함, 2.6.3부터 결함 판정 문장 포함) | 820 | `test/token-efficiency.test.mjs:48`, `test/index-context.test.mjs` "idle UserPromptSubmit … 620" |
 | UPS active (20 task, 최대 id 포함) | 700 | `test/token-efficiency.test.mjs:73,197` |
 | paused/blocked SessionStart (노트 없음) | 620 | `test/state-recovery-hardening.test.mjs:50,83` |
 | 병렬 active hook / 병렬 줄 | 820 / 160 | `test/goal-dag.test.mjs:256-257` |
