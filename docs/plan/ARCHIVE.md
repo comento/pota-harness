@@ -2,6 +2,7 @@
 
 Older completed plan entries moved from `PLAN.md` by `pota plan index --archive`. Newest first.
 
+- [Claude Code DAG 패널](claude-dag-panel.md): goal task를 wave DAG로 그리는 Claude Code mod(`/dag`, 자동 열림)와 얇은 플러그인 설치 배선.
 - [toolcheck 누락 도구 설치 질문](toolcheck-install-question.md): 누락 도구가 있으면 설치 여부를 한 번 묻도록 정책 표면을 고치고, `toolcheck` 출력에 도구별 제안 명령·자동 설치 불가 사유를 추가했습니다.
 - [Pota 1.1.0 릴리스](release-1.1.0.md): dev→main PR #2를 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.1.0으로 게시해 digest와 격리 설치를 확인했습니다.
 - [편집 후 comment-checker 검사](comment-checker-hook.md): PostToolUse에서 고정 v0.8.2 바이너리(SHA256 검증, SessionStart 분리 다운로드)로 주석을 검사해 block; npm 의존성 없음, 실제 바이너리 smoke 통과.

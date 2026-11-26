@@ -45,6 +45,11 @@ test("model guidance names every addition", async () => {
 });
 
 test("defect triage: plan Quick Path, verification, and all worker bodies pin the no-change exit", async () => {
+  await expectTokens("skills/pota-plan/SKILL.md", ["fix every place that breaks the same rule", "run a short script rather than guess"]);
+  await expectTokens("skills/pota-work/verification.md", ["is not a completed sweep", "write and run a short throwaway script", "instead of bypassing the restriction"]);
+  for (const path of ["claude/agents/worker.md", "agents/worker.md", "skills/pota-work/roles/worker.md"]) {
+    await expectTokens(path, ["fix the ones that break it inside your write scope and report the rest", "write and run a short throwaway script"]);
+  }
   await expectTokens("skills/pota-plan/SKILL.md", ["Defect report or a factual claim in an instruction:", "Contradicted: change nothing and report the evidence.", "a single defect report qualifies", "not a guessed fix"]);
   await expectTokens("skills/pota-work/verification.md", ["when it contradicts them change nothing and report the evidence", "Doubt the claim, not the user's intent or decision"]);
   for (const path of ["claude/agents/worker.md", "agents/worker.md", "skills/pota-work/roles/worker.md"]) {
