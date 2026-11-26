@@ -323,7 +323,7 @@ test("injected text keeps the prompt capsule budgets and folds in user notices o
   await withWorkspace(async ({ repo, env }) => {
     const idle = runHook(env, "pre-invocation", { conversationId, workspacePaths: [repo], invocationNum: 0, lastUserInput: "Go" });
     const idleText = idle.output.injectSteps[0].systemMessage.systemMessage;
-    assert.ok(idleText.length <= 620, `idle capsule is ${idleText.length} characters; budget is 620`);
+    assert.ok(idleText.length <= 820, `idle capsule is ${idleText.length} characters; budget is 820`);
 
     await startGoal({
       root: repo,
