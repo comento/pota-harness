@@ -52,7 +52,7 @@ The decision line is required; the note is optional. When nothing qualifies, do 
 
 ## Defect Investigation
 
-- Reproduce a reported defect with repository tools before fixing it; do not wait for more detail when a local reproduction is possible.
+- Reproduce a reported defect with repository tools before fixing it; do not wait for more detail when a local reproduction is possible. A reproduction shows the behavior, not that it is a defect: check the expected behavior against documented rules and existing tests first, and when it contradicts them change nothing and report the evidence.
 - For unclear or non-reproducible failures, test one hypothesis at a time and close it with a measurement before changing code. Never fix on speculation.
 - Answer feasibility questions with a bounded experiment or measurement instead of an unverified "not possible". Stop and ask only when the experiment would bypass a security policy or mutate external state without approval.
 - After fixing a defect, search the repository for other implementations of the same rule or pattern. Fix them within the assigned scope or record them as follow-up in the plan.
