@@ -9,7 +9,7 @@ Use before non-trivial changes, debugging, or automation, or when asked for plan
 
 ## Re-entry and Required References
 
-On start, compaction, restart, or handoff, restore: optional root `MEMORY.md` → `pota-plan` → active plan → current-task references → plan model guidance. Missing `MEMORY.md` is fine; never invoke another memory service. If a required reference is missing, unreadable, or inconsistent, do not explore, edit, delegate, or complete; report or record a blocker first. State and bound tool evidence are authoritative.
+On start, compaction, restart, or handoff, restore: optional root `MEMORY.md` → `pota-plan` → active plan → current-task references → plan model guidance. Missing `MEMORY.md` is fine; invoke no other memory service. If a required reference is missing, unreadable, or inconsistent, do not explore, edit, delegate, or complete; report or record a blocker first. State and bound tool evidence are authoritative.
 
 ## Runtime Location
 
@@ -32,7 +32,7 @@ Decide from repository evidence without asking; this outranks plugin or agent wo
 
 - **Routine known-target Git/GitHub operation** (status, fetch, checkout, branch, merge, push, PR management): plan/goal-free unless it requires code edits, conflict resolution, destructive recovery, release/deploy, or design.
 - **Consultation, explanation, or plan-only**: no goal.
-- **Quick Path**: all must hold: the requested outcome is clear (a single defect report qualifies); the expected change touches about 3 files or fewer inside existing layers; no Heavy Path signal; no external-state mutation; verification is one or two commands. No `docs/plan` artifact and no repository goal: implement, run one focused check plus the project's normal check, and report. If any criterion fails during work, escalate to Light Path (create plan + goal) before further edits. Defect report or a factual claim in an instruction: before editing, check it against documented rules, tests, logs, or real data. Confirmed: fix, then sweep for the same rule. Contradicted: change nothing and report the evidence. Reproducing shows behavior, not a defect.
+- **Quick Path**: all must hold: the requested outcome is clear (a single defect report qualifies); the expected change touches about 3 files or fewer inside existing layers; no Heavy Path signal; no external-state mutation; verification is one or two commands. No `docs/plan` artifact and no repository goal: implement, run one focused check plus the project's normal check, and report. If any criterion fails during work, escalate to Light Path (create plan + goal) before further edits. Defect report or a factual claim in an instruction: before editing, check it against documented rules, tests, logs, or real data. Confirmed: fix every place that breaks the same rule. Contradicted: change nothing and report the evidence. Reproducing shows behavior, not a defect. Where data decides, run a short script rather than guess.
 - **Light Path** (default): stays inside existing layers, adds no domain model, service class, or abstraction, and has no Heavy signal.
 - **Heavy Path**: any clear signal: new directory, module, or architecture layer; new domain model, service class, or abstraction; security, authentication, authorization, or sessions; external API, message queue, or payment; DB schema or migration; concurrency, transaction boundaries, or cache invalidation; multi-domain refactor; the user asks for extra care ("신중하게", "검토 받고", "설계부터", "꼼꼼히").
 
@@ -41,7 +41,7 @@ Record three triage checkpoints: request (provisional), planning (after explorat
 ## Procedure (Light and Heavy Path)
 
 1. Run `node "<pluginRoot>/scripts/pota.mjs" init --root "<repoRoot>"`. If unavailable, create `MEMORY.md`, `PLAN.md`, `docs/memory`, `docs/plan` and report that Pota needs reinstalling.
-2. Read `MEMORY.md` and `PLAN.md` when present; pick related notes and past plans (`planning-rules.md`). A non-trivial implementation request authorizes the plan and goal even if the user never says "goal".
+2. Read `MEMORY.md` and `PLAN.md` when present; pick related notes and past plans (`planning-rules.md`). A non-trivial implementation request authorizes the plan and goal without the user saying "goal".
 3. Write the initial plan `docs/plan/<topic>.md` from `pota://templates/work-plan.md` plus its `PLAN.md` entry from the request and `MEMORY.md`: outcome, anticipated surfaces, stable roadmap, and `triage-plan` as first active task (investigation scope, toolcheck, Heavy criteria, update condition); mark it `initial: decision-complete for triage; not implementation-ready`.
 4. Before exploration, toolcheck, delegation, or a non-blocking question, call Codex `update_plan` first and then `create_goal` when available (main agent only; record unavailability; never claim unoccurred sync), then start the repository goal:
 
@@ -49,12 +49,12 @@ Record three triage checkpoints: request (provisional), planning (after explorat
 node "<pluginRoot>/scripts/pota.mjs" goal start --root "<repoRoot>" --goal "<objective>" --plan "docs/plan/<topic>.md" --tasks '[{"id":"triage-plan","title":"Run planned triage and finalize the plan","requiredEvidence":["planArtifact","triageDecision"]},{"id":"implement","title":"Implement the finalized plan"},{"id":"verify","title":"Verify and review the result"}]' --criteria "<completion criterion>" --session "<current session_id>"
 ```
 
-   On Antigravity and Codex/ChatGPT Desktop (only when `open_pota_dag` is available; skip on Claude Code), call `open_pota_dag` right after `goal start` to open the Pota DAG panel. Pass `--session` only with an ID the surface exposes; never invent one. Fold new work into an unfinished goal with `goal replan` (resume a paused/blocked goal first), never cancel it; start a separate goal only when the user explicitly switches work. When a hook reports another session owns the goal you continue, run `goal claim --session <id>` with the ID shown.
+   On Antigravity and Codex/ChatGPT Desktop (only when `open_pota_dag` is available; skip on Claude Code), call `open_pota_dag` right after `goal start`. Pass `--session` only with an ID the surface exposes; never invent one. Fold new work into an unfinished goal with `goal replan` (resume a paused/blocked goal first), never cancel it; start a separate goal only when the user explicitly switches work. When a hook reports another session owns the goal you continue, run `goal claim --session <id>` with the ID shown.
 5. Run `triage-plan`: read the picked notes and plans and installed model guidance, run `toolcheck --root "<repoRoot>"`, and explore with focused search and LSP/symbol tools. If tools are missing, ask the user once whether to install them.
 6. Split the whole work into tasks each verifiable with two checks, each with `dependsOn` and `writeScope` in the `--tasks` JSON and named handoff files for cross-task data (`delegation.md`); design the test contract (requirements, invariants, boundaries, failure modes) and dry-run/check modes.
 7. Update the plan with route, checked Heavy signals, tool readiness, delegation, verification commands, stable IDs, and fail-closed required evidence (`planning-rules.md`). Mark it `decision-complete for implementation` and call `update_plan` again.
-8. Only then record bound `planArtifact` and `triageDecision` evidence, complete `triage-plan`, and continue with `pota-work`.
-9. Treat the user-called/main agent as the orchestrator: it plans, assigns, verifies, and records evidence. Implementation edits go to `worker` whenever subagent tools are available; `explorer` does read-only discovery; without subagent tools the main agent takes over and records it.
+8. Then record bound `planArtifact` and `triageDecision` evidence, complete `triage-plan`, and continue with `pota-work`.
+9. The main agent orchestrates: it plans, assigns, verifies, and records evidence. Implementation edits go to `worker` whenever subagent tools are available; `explorer` does read-only discovery; without subagent tools the main agent takes over and records it.
 10. Advance a UI step only after the matching repository task transition succeeds.
 11. Ask the user only when evidence and local checks cannot decide. Use the OS locale for output and artifacts unless asked.
 

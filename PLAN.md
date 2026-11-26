@@ -13,6 +13,7 @@
 
 최신 항목이 위에 오며 계획당 한 줄입니다. `pota plan index --archive`는 오래된 항목을 `docs/plan/ARCHIVE.md`로 옮깁니다.
 
+- [같은 규칙 함께 고치기와 스크립트 활용, Pota 2.6.2 릴리스](docs/plan/same-rule-fix-and-scripts.md): 같은 규칙 위반은 함께 수정, 데이터 판단은 스크립트로.
 - [지시의 사실 전제 확인, Pota 2.6.1 릴리스](docs/plan/verify-premise.md): 리포트·지시의 사실 주장을 규칙·테스트·로그·데이터로 확인.
 - [결함 판정과 가벼운 경로 정리, Pota 2.6.0 릴리스](docs/plan/defect-triage-exits.md): main 모델 게이트 Heavy 한정, 결함 판정 문구, `goal cancel --reason` 출구, foreign 캡슐 완화.
 - [DAG 패널에서 막힌 task 재시도, Pota 2.5.0 릴리스](docs/plan/dag-retry-blocked-task.md): `goal retry`, `pota_dag_action` `retry_task`, 패널 재시도 버튼.
@@ -34,4 +35,3 @@
 - [Pota 1.3.0 릴리스](docs/plan/release-1.3.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.3.0으로 게시해 digest와 격리 설치를 확인했습니다.
 - [DAG 패널 터미널 그래프와 worktree 대응](docs/plan/dag-terminal-graph.md): 터미널 pane에 박스 문자 wave 그래프를 그리고, 패널이 worktree의 goal을 따라가도록 root 결정 규칙을 고쳤습니다.
 - [Pota 1.2.0 릴리스](docs/plan/release-1.2.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.2.0으로 게시해 digest와 격리 설치를 확인했습니다.
-- [Claude Code DAG 패널](docs/plan/claude-dag-panel.md): goal task를 wave DAG로 그리는 Claude Code mod(`/dag`, 자동 열림)와 얇은 플러그인 설치 배선.
