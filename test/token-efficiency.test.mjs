@@ -391,7 +391,7 @@ test("plan and work guidance define the Quick Path and the finish/stats CLI cont
   for (const path of ["skills/pota-plan/SKILL.md"]) {
     const content = await read(path);
     assert.match(content, /Quick Path/, `${path} Quick Path`);
-    assert.match(content, /unambiguous/i, `${path} unambiguous requirements`);
+    assert.match(content, /requested outcome is clear \(a single defect report qualifies/i, `${path} clear requested outcome`);
     assert.match(content, /about 3 files or fewer inside existing layers/i, `${path} file limit`);
     assert.match(content, /no Heavy Path signal/i, `${path} no Heavy signal`);
     assert.match(content, /no external-state mutation/i, `${path} no external-state mutation`);
@@ -556,6 +556,9 @@ test("main-model gate surfaces name the capsule line, the review kind, and the b
     assert.ok((await read(path)).includes("--allow-main-model"), `${path} --allow-main-model`);
   }
   for (const path of readmes) assert.ok((await read(path)).includes("`Pota main model:`"), `${path} capsule line`);
+  for (const path of ["skills/pota-plan/delegation.md", "skills/pota-work/delegation.md", "skills/pota-review/SKILL.md", "templates/work-plan.md", "docs/model-guidance/README.md", "docs/model-guidance/claude.md", "docs/model-guidance/codex.md", ...readmes]) {
+    assert.match(await read(path), /Heavy[ -]Path/, `${path} gate applies only to Heavy Path goals`);
+  }
   for (const path of ["skills/pota-plan/delegation.md", "skills/pota-work/delegation.md", "docs/model-guidance/README.md", ...readmes]) {
     assert.ok((await read(path)).includes("POTA_MAIN_MODEL_GATE=0"), `${path} global off switch`);
   }

@@ -92,6 +92,20 @@ test("cancelling a goal records status cancelled", async () => {
   });
 });
 
+test("goal cancel --reason is accepted and recorded in the history record; without it no reason field exists", async () => {
+  await withTempRoot(async (root) => {
+    await startSimpleGoal(root, { planId: "docs/plan/cancel-reason.md" });
+    const cancel = runGoal(["cancel", "--reason", "triage found no change needed", "--quiet", "--root", root]);
+    assert.equal(cancel.status, 0, cancel.stderr);
+    await startSimpleGoal(root, { planId: "docs/plan/cancel-plain.md" });
+    const plain = runGoal(["cancel", "--quiet", "--root", root]);
+    assert.equal(plain.status, 0, plain.stderr);
+    const records = await readHistoryRecords(root);
+    assert.deepEqual(records.map((record) => [record.status, record.reason]), [["cancelled", "triage found no change needed"], ["cancelled", undefined]]);
+    assert.equal("reason" in records[1], false);
+  });
+});
+
 test("starting over a persisted legacy terminal state records it once with recordedBy start", async () => {
   await withTempRoot(async (root) => {
     const legacy = await startSimpleGoal(root, { planId: "docs/plan/legacy.md" });

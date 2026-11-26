@@ -182,6 +182,7 @@ const goalUsage = [
   "Request Brief: completing a triageDecision task (goal task --status completed, goal finish) needs a filled \"## Request Brief\" in a plan file; bypass with --allow-no-request-brief <reason>.",
   "Steering: goal steer --kind <correction|addition|redirect> --reason <text>; with a plan file, goal replan needs --steer <correction|addition|redirect|none> --reason <text>.",
   "Approval gate: goal gate --task <id> --on|--off [--reason <text>]; activate a gated task with goal task --status active --approve-gate.",
+  "Cancel: goal cancel [--reason <text>] closes the goal and records the reason in the goal history.",
   "Retry: goal retry --task <id> returns a blocked task to pending, clears its dispatch record and receipts, and reactivates a goal that task blocking had blocked.",
   "",
 ].join("\n");
