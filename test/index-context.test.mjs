@@ -15,11 +15,11 @@ const cliLine = `Pota CLI: node ${JSON.stringify(resolve("scripts/pota.mjs"))} g
 const baseline = {
   en: {
     sessionStart: "Pota kernel: root MEMORY.md is optional; read it when present. Before non-trivial work, load pota-plan and restore the active plan and current task. Stop only if active state and its skill, plan, or required task ref is missing, unreadable, or inconsistent.",
-    userPromptSubmit: "Pota kernel: root MEMORY.md is optional; read it when present. For non-trivial implementation or planned-work continuation, load pota-plan and restore/create its plan and task. Known-target Git/GitHub operations stay plan/goal-free unless they require code edits, conflict resolution, destructive recovery, release/deploy, or design. Consultation, explanation, and plan-only requests are also goal-free. Defect report or factual claim: check it against documented rules, tests, logs, or data before editing; contradicted or cause unconfirmed: change nothing, report the evidence. Stop only if active state and its skill, plan, or required task ref is missing, unreadable, or inconsistent.",
+    userPromptSubmit: "Pota kernel: root MEMORY.md is optional; read it when present. For non-trivial implementation or planned-work continuation, load pota-plan and restore/create its plan and task. Known-target Git/GitHub operations stay plan/goal-free unless they require code edits, conflict resolution, destructive recovery, release/deploy, or design. Consultation, explanation, and plan-only requests are also goal-free. Defect report or factual claim: check it against documented rules, tests, logs, or data before editing; contradicted or cause unconfirmed: change nothing, report the evidence. When the request names an end state (merge, release, deploy), carry the work exactly that far; waiting on CI is not a stop: check it and continue. Stop only if active state and its skill, plan, or required task ref is missing, unreadable, or inconsistent.",
   },
   ko: {
     sessionStart: "Pota kernel: 루트 MEMORY.md는 선택 사항이며, 있으면 읽으세요. 중요 작업 전에 pota-plan을 로드하고 active plan과 current task를 복원하세요. active state와 그 skill·plan·required task reference가 없거나 읽을 수 없거나 일치하지 않을 때만 중단하세요.",
-    userPromptSubmit: "Pota kernel: 루트 MEMORY.md는 선택 사항이며, 있으면 읽으세요. 비단순 구현이나 계획된 작업 재개는 pota-plan과 plan/task를 복원·생성하세요. 대상이 확정된 Git/GitHub 상태·fetch·checkout·merge·push·PR 작업은 코드 수정·충돌 해결·파괴적 복구·릴리스/배포·설계가 필요하지 않으면 plan/goal 없이 실행하세요. 상담·설명·계획 전용도 goal 없이 처리하세요. 결함 리포트·사실 주장은 수정 전에 문서화된 규칙·테스트·로그·데이터로 확인하고, 어긋나거나 원인이 확인되지 않으면 바꾸지 말고 근거를 보고하세요. active state와 그 skill·plan·required task reference가 없거나 읽을 수 없거나 일치하지 않을 때만 중단하세요.",
+    userPromptSubmit: "Pota kernel: 루트 MEMORY.md는 선택 사항이며, 있으면 읽으세요. 비단순 구현이나 계획된 작업 재개는 pota-plan과 plan/task를 복원·생성하세요. 대상이 확정된 Git/GitHub 상태·fetch·checkout·merge·push·PR 작업은 코드 수정·충돌 해결·파괴적 복구·릴리스/배포·설계가 필요하지 않으면 plan/goal 없이 실행하세요. 상담·설명·계획 전용도 goal 없이 처리하세요. 결함 리포트·사실 주장은 수정 전에 문서화된 규칙·테스트·로그·데이터로 확인하고, 어긋나거나 원인이 확인되지 않으면 바꾸지 말고 근거를 보고하세요. 요청이 끝 지점(병합·릴리스·배포)을 말하면 정확히 거기까지 진행하세요. CI 대기는 멈출 이유가 아니니 상태를 확인하고 이어가세요. active state와 그 skill·plan·required task reference가 없거나 읽을 수 없거나 일치하지 않을 때만 중단하세요.",
   },
 };
 const kernelBase = {
@@ -244,7 +244,7 @@ test("idle UserPromptSubmit adds one count sentence and stays within 620 charact
     for (const lang of ["en", "ko"]) {
       const context = contextOf(await runHook("user-prompt-submit", root, { lang }));
       assert.equal(context, insertAfterKernel(lang, baseline[lang].userPromptSubmit, sentences[lang]));
-      assert.ok(context.length <= 820, `${lang} idle hook is ${context.length} characters; budget is 820`);
+      assert.ok(context.length <= 940, `${lang} idle hook is ${context.length} characters; budget is 940`);
     }
   });
 });

@@ -24,7 +24,7 @@ Read a reference only when the selected path or situation requires it (Quick and
 - `pota://skills/pota-plan/planning-rules.md`: plan rules, route record, tool readiness, dry-run policy; read when finalizing.
 - `pota://skills/pota-plan/delegation.md`: subagent lifecycle, prompt format, reasoning-effort routing; read before dispatching.
 - `pota://skills/pota-plan/heavy-path.md`: Heavy Path flow, route changes, review gates; read only on a Heavy signal or route change.
-- `pota://skills/pota-plan/request-brief.md`: Request Brief, gap handling, steering (`goal steer`, `goal replan --steer`); read when writing the brief or on user steering.
+- `pota://skills/pota-plan/request-brief.md`: Request Brief, end state, gap handling, steering (`goal steer`, `goal replan --steer`); read when writing the brief or on user steering.
 
 ## Path Selection
 
@@ -51,10 +51,10 @@ node "<pluginRoot>/scripts/pota.mjs" goal start --root "<repoRoot>" --goal "<obj
 
    On Antigravity and Codex/ChatGPT Desktop (only when `open_pota_dag` is available; skip on Claude Code), call `open_pota_dag` right after `goal start`. Pass `--session` only with an ID the surface exposes; never invent one. Fold new work into an unfinished goal with `goal replan` (resume a paused/blocked goal first), never cancel it; start a separate goal only when the user explicitly switches work. When a hook reports another session owns the goal you continue, run `goal claim --session <id>` with the ID shown.
 5. Run `triage-plan`: read the picked notes and plans and installed model guidance, run `toolcheck --root "<repoRoot>"`, and explore with focused search and LSP/symbol tools. If tools are missing, ask the user once whether to install them.
-6. Split the whole work into tasks each verifiable with two checks, each with `dependsOn` and `writeScope` in the `--tasks` JSON and named handoff files for cross-task data (`delegation.md`); design the test contract (requirements, invariants, boundaries, failure modes) and dry-run/check modes.
+6. Split the whole work into tasks each verifiable with two checks, each with `dependsOn` and `writeScope` in the `--tasks` JSON and named handoff files for cross-task data (`delegation.md`); design the test contract (requirements, invariants, boundaries, failure modes) and dry-run/check modes. If the brief's `End state` is past the local check, end the roadmap with a `deliver` task (`request-brief.md`).
 7. Update the plan with route, checked Heavy signals, tool readiness, delegation, verification commands, stable IDs, and fail-closed required evidence (`planning-rules.md`). Mark it `decision-complete for implementation` and call `update_plan` again.
-8. Then record bound `planArtifact` and `triageDecision` evidence, complete `triage-plan`, and continue with `pota-work`.
-9. The main agent orchestrates: it plans, assigns, verifies, and records evidence. Implementation edits go to `worker` whenever subagent tools are available; `explorer` does read-only discovery; without subagent tools the main agent takes over and records it.
+8. Record bound `planArtifact` and `triageDecision` evidence, complete `triage-plan`, and continue with `pota-work`.
+9. The main agent plans, assigns, verifies, and records evidence. Implementation edits go to `worker` whenever subagent tools are available; `explorer` does read-only discovery; without subagent tools the main agent takes over and records it.
 10. Advance a UI step only after the matching repository task transition succeeds.
 11. Ask the user only when evidence and local checks cannot decide. Use the OS locale for output and artifacts unless asked.
 
@@ -63,4 +63,4 @@ Model and reasoning effort: This skill explicitly instructs the effort level for
 ## Completion Criteria
 
 - `PLAN.md` references the plan topic.
-- `docs/plan/<topic>.md` includes goal, memory inputs, model guidance, tool readiness, complexity triage, selected path, agent assignments, module tasks, and two checks per task.
+- `docs/plan/<topic>.md` fills the template's sections, with two checks per task.

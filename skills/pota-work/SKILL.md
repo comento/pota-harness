@@ -39,7 +39,7 @@ node "<pluginRoot>/scripts/pota.mjs" goal stats --root "<repoRoot>"
 
 Read a reference only when the selected path or situation requires it (Quick and Light Path never need `heavy-path.md`):
 
-- `pota://skills/pota-work/verification.md`: timeouts, watch sets, freshness, defect investigation, tool readiness, dry-run policy.
+- `pota://skills/pota-work/verification.md`: timeouts, watch sets, freshness, defect investigation, waiting on CI, end state and closing, dry-run.
 - `pota://skills/pota-work/delegation.md`: subagent lifecycle, parallel tasks, builder prompt, reasoning effort.
 - `pota://skills/pota-work/heavy-path.md`: Heavy gates and route changes; read only on a Heavy route or signal.
 - `pota://skills/pota-work/recovery.md`: failed gates, blocked/paused goals, ownership conflicts, user steering.

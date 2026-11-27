@@ -36,6 +36,17 @@ test("plan Learnings section, worker LEARNINGS report, and promotion input", asy
   await expectTokens("skills/pota-work/verification.md", ["## Learnings"]);
 });
 
+test("end state, waiting, closing, and rule candidates are pinned on every surface", async () => {
+  await expectTokens("templates/work-plan.md", ["- End state:", "- Rule candidates:", "companion artifacts"]);
+  await expectTokens("skills/pota-plan/SKILL.md", ["end the roadmap with a `deliver` task"]);
+  await expectTokens("skills/pota-plan/planning-rules.md", ["ends its roadmap with a `deliver` task requiring `endState` evidence"]);
+  await expectTokens("skills/pota-plan/request-brief.md", ["## End state", '"requiredEvidence":["endState"]', "The work goes exactly that far", "Companion artifacts are implicit requirements too", "is a rule candidate"]);
+  await expectTokens("skills/pota-work/verification.md", ["## Waiting on External State", "take the next step in the same turn", "## End State and Closing", "Show the evidence, not only the verdict", "Promote a rule candidate"]);
+  await expectTokens("skills/pota-work/SKILL.md", ["waiting on CI, end state and closing"]);
+  await expectTokens("skills/pota-review/SKILL.md", ["`End state` was reached and not passed"]);
+  await expectTokens("scripts/pota-goal-policy.mjs", ["Waiting on CI or another external or background job is not a reason to stop: check its state and continue."]);
+});
+
 test("memory notes may carry a Paths line", async () => {
   await expectTokens("skills/pota-memory/SKILL.md", ["Paths:", "paths-invalid"]);
 });

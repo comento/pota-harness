@@ -45,7 +45,8 @@ test("hook context is a compact phase capsule without dropping recovery state", 
       payload: { cwd: root, session_id: "budget-session", prompt: "Implement the fix" },
     });
     const idleContext = idle.hookOutput.hookSpecificOutput.additionalContext;
-    assert.ok(idleContext.length <= 820, `idle hook is ${idleContext.length} characters; budget is 820`);
+    assert.ok(idleContext.length <= 940, `idle hook is ${idleContext.length} characters; budget is 940`);
+    assert.match(idleContext, /carry the work exactly that far; waiting on CI is not a stop: check it and continue\./);
     assert.match(idleContext, /Defect report or factual claim:.*contradicted or cause unconfirmed: change nothing, report the evidence\./);
     assert.match(idleContext, /^Pota kernel: root MEMORY\.md is optional/);
     assert.match(idleContext, /non-trivial implementation.*planned-work continuation.*load pota-plan/i);
