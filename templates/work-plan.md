@@ -21,12 +21,13 @@ Describe the observable result.
 
 - Original request: <the user's request, verbatim>
 - Interpreted outcome: <what must be true when the work is complete>
+- End state: <the last step the request asks for: local change | commit | push | PR | merge to <branch> | tag/release | deploy | local install; go exactly that far>
 - Scope: <what this plan changes>
 - Non-scope: <what it deliberately leaves alone>
 - Prior records: <consulted plans, memory notes, and past steering, with the recurring follow-ups found | none: reason>
 - Assumptions:
   - A1 (evidence|inferred|confirmed): <assumption and its source>
-- Implicit requirements: <security, data, and rollback items the request did not state | none: reason>
+- Implicit requirements: <security, data, and rollback items, and companion artifacts (API docs, changelog, PR body, memory notes) the request did not state | none: reason>
 - Open questions: <questions that change the outcome and are hard to reverse | none>
 - Steering log: <one sub-bullet per user steering: "S<n> (correction|addition|redirect): original text -> changed assumption or task">
 - Current request (as of S0): <the currently valid request in one paragraph>
@@ -182,6 +183,7 @@ Append-only. One line per non-obvious fact a later task or the next goal would h
 - Surface integration:
 - Goal final review evidence record:
 - Memory promotion: <docs/memory/<domain>.md | none: reason>
+- Rule candidates: <user corrections worth a standing rule, with the proposed home | none>
 - Verification pass count:
 - Blocker after two failed passes:
 

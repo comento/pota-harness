@@ -9,7 +9,7 @@ export const STEERING_SCHEMA_VERSION = 1;
 export const STEER_KINDS = ["correction", "addition", "redirect"];
 export const REPLAN_STEER_VALUES = [...STEER_KINDS, "none"];
 export const REASON_MAX_LENGTH = 500;
-export const REQUEST_BRIEF_LABELS = ["Original request", "Interpreted outcome", "Prior records", "Assumptions", "Implicit requirements"];
+export const REQUEST_BRIEF_LABELS = ["Original request", "Interpreted outcome", "End state", "Prior records", "Assumptions", "Implicit requirements"];
 const PLAN_FILE_MAX_BYTES = 512 * 1024;
 
 export function steeringPath(root = process.cwd()) {

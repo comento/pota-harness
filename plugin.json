@@ -2,7 +2,7 @@
   "$schema": "https://antigravity.google/schemas/v1/plugin.json",
   "name": "pota",
   "displayName": "Pota Harness",
-  "version": "2.6.3",
+  "version": "2.6.4",
   "description": "Memory, planning, tool readiness, and two-gate verification harness for agent work.",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [

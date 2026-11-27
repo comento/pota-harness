@@ -25,6 +25,7 @@ When subagent tools are available, each agent may recursively delegate bounded r
 2. Read `MEMORY.md` when present and relevant `docs/memory/*.md`; continue when repository memory is absent.
 3. Check changed files, tool readiness evidence, and evidence paths. Inspect test, fixture, and verification-command diffs and reject any weakening without a recorded plan reason. For defect fixes, confirm the same-rule sweep was performed and its result recorded.
    - Confirm the plan's Evidence has a filled `Memory promotion:` line (`docs/memory/<domain>.md` or `none: <reason>`) and that `node "<pluginRoot>/scripts/pota.mjs" memory check --root "<repoRoot>"` and `plan check --root "<repoRoot>"` exit 0. A `none: <reason>` decision is acceptable: do not create a note or demand one; flag a missing or placeholder line, or a named note that does not exist.
+   - Confirm the plan's `End state` was reached and not passed: a `deliver` task has fresh `endState` evidence that reads the outside state, and no step the request asked for is left to the user. Confirm every companion artifact under `Implicit requirements` is updated or reported as not done, that user-visible changes show their evidence in the report, and that `Rule candidates` lists the user's corrections worth a standing rule or `none`.
 4. Delegate independent review when it materially improves speed or quality and the current tool policy allows it.
    - Use `explorer` for read-only impact analysis, pattern checks, and independent diff inspection.
    - Use `worker` for scoped verification command re-runs or QA artifact capture.
@@ -52,6 +53,7 @@ CONTEXT: docs/plan/<topic>.md, MEMORY.md, relevant docs/memory notes, changed fi
 - Dry-run or check evidence is present when required, or the plan records why no dry-run exists.
 - Failed gates followed the bounded loop policy and did not continue past two verification passes without a recorded blocker.
 - Review evidence exists in `docs/plan/<topic>.md`.
+- The stated end state is reached, companion artifacts are closed, and the report shows the evidence for user-visible changes.
 - The plan records its `Memory promotion:` decision, and `memory check` and `plan check` pass.
 - Goal-level final review evidence is stored as a successful structured evidence record before the goal is marked `completed`.
 - The next agent can understand verification without rereading the full conversation.
