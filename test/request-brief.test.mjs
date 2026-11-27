@@ -27,6 +27,7 @@ const filledBrief = (extra = "") => `# Plan
 
 - Original request: "make it better"
 - Interpreted outcome: faster startup
+- End state: local change
 - Prior records: none: no related plans
 - Scope: scripts
 - Non-scope: docs
@@ -52,7 +53,7 @@ test("completing a triageDecision task is rejected without a filled Request Brie
     await assert.rejects(
       setTaskStatus({ root, taskId: "triage-plan", status: "completed" }),
       (error) => {
-        for (const label of ["Original request", "Interpreted outcome", "Prior records", "Assumptions", "Implicit requirements"]) assert.match(error.message, new RegExp(label));
+        for (const label of ["Original request", "Interpreted outcome", "End state", "Prior records", "Assumptions", "Implicit requirements"]) assert.match(error.message, new RegExp(label));
         assert.match(error.message, /--allow-no-request-brief <reason>/);
         return true;
       },
@@ -86,6 +87,7 @@ test("placeholders, fenced fake sections, and empty sub-lists do not count as fi
 
 - Original request: <user's words>
 - Interpreted outcome: <what is true when done>
+- End state: <the last step>
 - Prior records: <plans, notes, past steering | none: reason>
 - Assumptions:
   - A1 (evidence|inferred|confirmed): <assumption and source>
@@ -96,7 +98,7 @@ test("placeholders, fenced fake sections, and empty sub-lists do not count as fi
     await startTriageGoal(root);
     await recordTriage(root);
     await assert.rejects(setTaskStatus({ root, taskId: "triage-plan", status: "completed" }), (error) => {
-      for (const label of ["Original request", "Interpreted outcome", "Prior records", "Assumptions", "Implicit requirements"]) assert.match(error.message, new RegExp(label));
+      for (const label of ["Original request", "Interpreted outcome", "End state", "Prior records", "Assumptions", "Implicit requirements"]) assert.match(error.message, new RegExp(label));
       return true;
     });
     await writePlan(root, `# Plan\n\n\`\`\`markdown\n${filledBrief()}\`\`\`\n`);

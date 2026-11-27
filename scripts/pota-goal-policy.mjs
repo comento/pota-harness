@@ -20,6 +20,7 @@ export function isGoalOwnedBySession(state, sessionId) {
   return state.goal.ownerSessionId === sessionId;
 }
 
+const WAITING = " Waiting on CI or another external or background job is not a reason to stop: check its state and continue.";
 const TRIAGE_EXIT = " If triage shows no change is needed or the request cannot be decided, report why and close it with goal cancel --reason <text>.";
 
 export function evaluateStop(state, { subagent = false, agentId } = {}) {
@@ -52,12 +53,12 @@ export function evaluateStop(state, { subagent = false, agentId } = {}) {
     const list = active.map((item) => `${item.id} (${clip(item.title, 40)})`).join(", ");
     return {
       block: true,
-      reason: `Pota goal "${state.goal.title}" is active with parallel tasks ${list}. Collect or continue each one; record successful evidence before marking a task complete.${TRIAGE_EXIT}${effortWarning(active)}`,
+      reason: `Pota goal "${state.goal.title}" is active with parallel tasks ${list}. Collect or continue each one; record successful evidence before marking a task complete.${WAITING}${TRIAGE_EXIT}${effortWarning(active)}`,
     };
   }
   return {
     block: true,
-    reason: `Pota goal "${state.goal.title}" is active. Continue current task ${task.id} (${task.title}); its status is ${task.status}. Record a successful evidence record before marking it complete.${TRIAGE_EXIT}${effortWarning(active)}`,
+    reason: `Pota goal "${state.goal.title}" is active. Continue current task ${task.id} (${task.title}); its status is ${task.status}. Record a successful evidence record before marking it complete.${WAITING}${TRIAGE_EXIT}${effortWarning(active)}`,
   };
 }
 

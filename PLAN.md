@@ -4,6 +4,8 @@
 
 ## Active Plans
 
+- [end-state-delivery](docs/plan/end-state-delivery.md): 요청한 끝 지점까지 가기와 닫기 규칙, Pota 2.6.4 릴리스
+
 
 ## Superseded Plans
 

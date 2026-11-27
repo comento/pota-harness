@@ -9,7 +9,7 @@ const readJson = async (path) => JSON.parse(await readFile(resolve(root, path), 
 test("package and the three host manifests expose the same version", async () => {
   const packageJson = await readJson("package.json");
 
-  assert.equal(packageJson.version, "2.6.3");
+  assert.equal(packageJson.version, "2.6.4");
   for (const path of [".claude-plugin/plugin.json", ".codex-plugin/plugin.json", "plugin.json"]) {
     assert.equal((await readJson(path)).version, packageJson.version, `${path} version`);
   }
@@ -182,7 +182,7 @@ test("request brief and steering surfaces name the template section, the command
   assert.match(template, /^## Request Brief$/m);
   assert.ok(template.indexOf("## Goal") < template.indexOf("## Request Brief") && template.indexOf("## Request Brief") < template.indexOf("## Whole Work"));
   const brief = template.split(/^## Request Brief$/m)[1].split(/^## /m)[0];
-  for (const label of ["Original request", "Interpreted outcome", "Scope", "Non-scope", "Assumptions", "Prior records", "Implicit requirements", "Open questions", "Steering log", "Current request (as of S0)"]) {
+  for (const label of ["Original request", "Interpreted outcome", "End state", "Scope", "Non-scope", "Assumptions", "Prior records", "Implicit requirements", "Open questions", "Steering log", "Current request (as of S0)"]) {
     assert.ok(brief.includes(`- ${label}:`), `template ${label}`);
   }
   assert.ok(brief.indexOf("- Prior records:") < brief.indexOf("- Assumptions:"), "Prior records before Assumptions");

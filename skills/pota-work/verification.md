@@ -45,6 +45,7 @@ Decide once per goal, before `goal finish`, whether the goal produced repository
 The decision line is required; the note is optional. When nothing qualifies, do not create a note; record `none: <reason>`.
 
 - Promote: non-obvious constraints or invariants the next task would have to rediscover, decisions with their rejected alternatives, recurring failures and their fixes, and verification recipes.
+- Promote a rule candidate: a correction the user had to make in this goal that would apply to later work (a steering that recurred, or one that states a standing rule). Record it under `Rule candidates` in `## Evidence` and name it in the final report with the proposed home; write `docs/memory` yourself and leave project instruction files to the user's word.
 - Read the plan's `## Learnings` as input to this decision and promote only entries that also apply to the next goal.
 - Do not promote: what the code or tests already state, details that apply only to this task, or a restatement of the plan.
 - When promoting, write or update `docs/memory/<domain>.md` with its `Summary:` line (`pota-memory`), then run `node "<pluginRoot>/scripts/pota.mjs" memory index --root "<repoRoot>"` and `memory check --root "<repoRoot>"`.
@@ -57,6 +58,18 @@ The decision line is required; the note is optional. When nothing qualifies, do 
 - Answer feasibility questions with a bounded experiment or measurement instead of an unverified "not possible". Stop and ask only when the experiment would bypass a security policy or mutate external state without approval.
 - After fixing a defect, search the repository for other implementations of the same rule or pattern. Fix the ones that break the same rule in the same change, also when the report names only one of them; outside the assigned write scope, record them as follow-up instead. Reporting a found violation without fixing or recording it is not a completed sweep.
 - When data decides a question (logs, records, a pattern across many files, a reproduction), write and run a short throwaway script rather than read by hand or guess, and quote its output as the evidence. Keep the script out of the repository unless the task asks for a tool or the same query will be needed again; then build it as a small tool where the project keeps tools and report it. Where project instructions restrict a data source to a named tool, use that tool instead of bypassing the restriction; when the tool is missing, build it unless project instructions forbid creating tools, and otherwise report the blocker.
+
+## Waiting on External State
+
+- CI, a deploy, a migration, an indexing job, or a background worker that the next step depends on is part of the task, not a place to end the turn. Wait with the host's means (a bounded watch command such as `gh pr checks <n> --watch`, a background command, or the host's PR status tool), read the result, and take the next step in the same turn.
+- Do not hand the wait to the user ("I'll continue once CI passes") while steps the request asked for remain. End the turn only when the wait needs the user (an approval, a credential, a manual action) or exceeds what the host can wait for; then say exactly what is pending and what you will do next.
+- A failed external check is a failed gate: read the failing output, fix, and rerun within the loop budget.
+
+## End State and Closing
+
+- The plan's `End state` decides where the work ends. With a `deliver` task, complete it only after `endState` evidence that reads the outside state (merged commit, tag, deployed or installed version), then `goal finish` with the same reading. Go no further than the stated end state.
+- Before completing the last task, walk the plan's `Implicit requirements`: every companion artifact listed there (API documentation, changelog, PR body, memory notes) is updated or reported as not done with the reason.
+- Show the evidence, not only the verdict. When the change is visible to the user (a screen, an API response, a sent message, a generated file), the final report carries the evidence itself: the screenshot or file sent to the user, the quoted command output, or the URL to open. When the user asked to check before anything goes out, stop at a state they can open (a local server, a draft) and give them how to reach it.
 
 ## Two Verification Gates
 
