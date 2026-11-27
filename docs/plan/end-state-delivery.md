@@ -74,6 +74,7 @@
 
 ## Evidence
 
+- Release: comento/pota-harness#49(dev), comento/pota-harness#50(main) 병합, 태그 `v2.6.4`, main을 dev에 병합, 로컬 설치본 2.6.3 → 2.6.4.
 - Tests: `npm run check`(implement의 `surfaceIntegration`), 집중 테스트 9개 파일(`moduleAcceptance`).
 - End state: `deliver`의 `endState` 증거(태그 `v2.6.4`가 origin/main에 있고 설치본이 2.6.4).
 - Memory promotion: `docs/memory/goal-state.md`, `docs/memory/policy-surfaces.md`, `docs/memory/hook-context.md`
@@ -83,4 +84,4 @@
 
 - [x] Planned
 - [x] Implemented
-- [ ] Goal completed, or an explicit paused/blocked/cancelled reason was recorded
+- [x] Goal completed, or an explicit paused/blocked/cancelled reason was recorded

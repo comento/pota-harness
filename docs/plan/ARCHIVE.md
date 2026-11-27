@@ -2,6 +2,7 @@
 
 Older completed plan entries moved from `PLAN.md` by `pota plan index --archive`. Newest first.
 
+- [DAG 패널 터미널 그래프와 worktree 대응](dag-terminal-graph.md): 터미널 pane에 박스 문자 wave 그래프를 그리고, 패널이 worktree의 goal을 따라가도록 root 결정 규칙을 고쳤습니다.
 - [Pota 1.2.0 릴리스](release-1.2.0.md): dev·main PR을 CI 통과 후 병합하고 exact main tarball을 npm `latest` 1.2.0으로 게시해 digest와 격리 설치를 확인했습니다.
 - [Claude Code DAG 패널](claude-dag-panel.md): goal task를 wave DAG로 그리는 Claude Code mod(`/dag`, 자동 열림)와 얇은 플러그인 설치 배선.
 - [toolcheck 누락 도구 설치 질문](toolcheck-install-question.md): 누락 도구가 있으면 설치 여부를 한 번 묻도록 정책 표면을 고치고, `toolcheck` 출력에 도구별 제안 명령·자동 설치 불가 사유를 추가했습니다.
